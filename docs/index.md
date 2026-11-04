@@ -18,4 +18,4 @@ python -m mkdocs build --strict
 python -m mkdocs serve
 ```
 
-Открой адрес из вывода `mkdocs serve`. GitHub проверяет сборку в каждом PR и публикует сайт после обновления `master`.
+Открой адрес из вывода `mkdocs serve`. GitHub запускает сборку для PR, готовых к ревью. Новый коммит отменяет предыдущую сборку того же PR. GitHub публикует сайт после обновления `master`.
