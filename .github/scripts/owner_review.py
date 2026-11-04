@@ -139,11 +139,16 @@ def approve(event, read_api, app_api):
             "target_url": comment_url,
         },
     )
+    return sha
 
 
-def post_feedback(event, api, *, outcome, reason, app_failed, run_url):
+def post_feedback(event, api, *, outcome, merge_outcome, reason, app_failed, run_url):
     if outcome == "success":
         result = "**Ревью принято.** Статус `owner-review` выставлен для проверенного коммита."
+        if merge_outcome == "success":
+            result += " GitHub выполнит squash, когда пройдут обязательные проверки и будут закрыты обсуждения."
+        elif merge_outcome == "failure":
+            result += " Запрос автослияния завершился ошибкой. Подробности есть в журнале запуска."
     elif reason:
         result = f"**Ревью не принято.** {reason}"
     elif app_failed:
@@ -168,12 +173,15 @@ def main():
             validate(event, read_api)
         elif args.action == "approve":
             app_api = partial(github_request, token=os.environ["OWNER_REVIEW_WRITE_TOKEN"])
-            approve(event, read_api, app_api)
+            sha = approve(event, read_api, app_api)
+            with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+                print(f"reviewed_sha={sha}", file=stream)
         else:
             post_feedback(
                 event,
                 read_api,
                 outcome=os.environ["REVIEW_OUTCOME"],
+                merge_outcome=os.environ["MERGE_OUTCOME"],
                 reason=os.environ["REVIEW_ERROR"],
                 app_failed=os.environ["APP_OUTCOME"] == "failure",
                 run_url=f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
