@@ -1,30 +1,37 @@
 import copy
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 from owner_review import ReviewRejected, approve, validate
 
 
 SHA = "a" * 40
-CHECKED = """- [x] Проверены весь diff и соответствие требованиям.
-- [x] Проверены границы модулей, интерфейсы и потоки данных.
-- [x] Проверена обработка ошибок.
-- [x] Проверены результаты тестов."""
+TEMPLATE = Path(__file__).resolve().parents[1] / "pull_request_template.md"
 
 
 class OwnerReviewTest(unittest.TestCase):
     def setUp(self):
+        self.checked_body = (
+            TEMPLATE.read_text(encoding="utf-8")
+            .replace("<полный HEAD SHA>", SHA)
+            .replace("- [ ] ", "- [x] ")
+        )
         self.comment = {
             "id": 10,
             "user": {"id": 1},
-            "body": f"/reviewed {SHA}\r\n\r\n{CHECKED}",
+            "body": f"/reviewed {SHA}",
             "updated_at": "2026-11-04T10:00:00Z",
             "html_url": "https://github.com/aequicor/Heartbeat-v2/pull/2#issuecomment-10",
         }
         self.event = {
             "action": "created",
             "repository": {"id": 5, "owner": {"id": 1, "type": "User"}},
-            "issue": {"number": 2, "pull_request": {"url": "https://example.org"}},
+            "issue": {
+                "number": 2,
+                "pull_request": {"url": "https://example.org"},
+                "body": self.checked_body,
+            },
             "comment": copy.deepcopy(self.comment),
         }
         self.pr = {
@@ -32,6 +39,7 @@ class OwnerReviewTest(unittest.TestCase):
             "draft": False,
             "base": {"repo": {"id": 5}, "ref": "master"},
             "head": {"sha": SHA},
+            "body": self.checked_body,
         }
         self.api = Mock(side_effect=self.response)
         self.app_api = Mock(side_effect=self.response)
@@ -89,8 +97,26 @@ class OwnerReviewTest(unittest.TestCase):
         self.api.assert_not_called()
 
     def test_rejects_incomplete_checklist(self):
-        self.event["comment"]["body"] = self.event["comment"]["body"].replace("[x]", "[ ]", 1)
+        self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
         with self.assertRaisesRegex(ReviewRejected, "checklist"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
+
+    def test_checklist_must_be_complete_before_the_comment(self):
+        self.event["issue"]["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
+        with self.assertRaisesRegex(ReviewRejected, "checklist"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
+
+    def test_rejects_checklist_for_previous_head(self):
+        self.pr["body"] = self.checked_body.replace(SHA, "b" * 40, 1)
+        with self.assertRaisesRegex(ReviewRejected, "current head"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
+
+    def test_rejects_extra_lines_in_the_command_comment(self):
+        self.event["comment"]["body"] += "\n- [x] All items reviewed."
+        with self.assertRaisesRegex(ReviewRejected, "one line"):
             validate(self.event, self.api)
         self.api.assert_not_called()
 
@@ -124,6 +150,17 @@ class OwnerReviewTest(unittest.TestCase):
 
         self.app_api.side_effect = response_with_push
         with self.assertRaisesRegex(ReviewRejected, "stale"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_called_once()
+
+    def test_unchecking_during_approval_cannot_publish_status(self):
+        def response_with_unchecked_item(path, payload=None):
+            if path == "/pulls/2/reviews":
+                self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
+            return self.response(path, payload)
+
+        self.app_api.side_effect = response_with_unchecked_item
+        with self.assertRaisesRegex(ReviewRejected, "checklist"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_called_once()
 

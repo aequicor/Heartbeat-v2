@@ -17,6 +17,7 @@ CHECKLIST = (
     "Проверены результаты тестов.",
 )
 COMMAND = re.compile(r"/reviewed ([0-9a-f]{7,40})", re.ASCII)
+CHECKLIST_MARKER = "<!-- owner-review-head: "
 
 
 class ReviewRejected(Exception):
@@ -24,14 +25,23 @@ class ReviewRejected(Exception):
 
 
 def reviewed_sha(body):
-    lines = [line.strip() for line in body.splitlines() if line.strip()]
-    match = COMMAND.fullmatch(lines[0]) if lines else None
+    match = COMMAND.fullmatch(body.strip())
     if not match:
-        raise ReviewRejected("Expected /reviewed followed by at least 7 hex digits of the head SHA.")
-    checklist = [f"- [x] {item}" for item in CHECKLIST]
-    if lines[1:] != checklist:
-        raise ReviewRejected("Complete the four checklist lines in the template order.")
+        raise ReviewRejected("Post one line with /reviewed and at least 7 hex digits of the head SHA.")
     return match.group(1)
+
+
+def validate_checklist(body, sha):
+    lines = [line.rstrip() for line in (body or "").splitlines() if line.strip()]
+    markers = [line for line in lines if line.startswith(CHECKLIST_MARKER)]
+    marker = f"{CHECKLIST_MARKER}{sha} -->"
+    if markers != [marker]:
+        raise ReviewRejected("Prepare the checklist in the PR description for the current head.")
+
+    start = lines.index(marker) + 1
+    checked_items = [f"- [x] {item}" for item in CHECKLIST]
+    if lines[start : start + len(checked_items)] != checked_items:
+        raise ReviewRejected("Complete all four checklist items in the PR description.")
 
 
 def github_request(path, payload=None, *, token):
@@ -84,6 +94,8 @@ def validate(event, api):
         raise ReviewRejected("The review SHA is stale. Review the current head.")
     if submitted_sha != sha and api(f"/commits/{submitted_sha}")["sha"] != sha:
         raise ReviewRejected("The short SHA does not resolve to the current head. Use the full SHA.")
+    validate_checklist(issue.get("body"), sha)
+    validate_checklist(pr.get("body"), sha)
 
     return pr_path, sha
 
