@@ -1,0 +1,44 @@
+name: Owner review
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  approve:
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      github.event.issue.pull_request &&
+      github.event.comment.user.id == github.event.repository.owner.id &&
+      startsWith(github.event.comment.body, '/reviewed')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: owner-review
+    concurrency:
+      group: owner-review-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      # issue_comment runs from the default branch. Never check out the PR.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Validate the owner comment and current PR
+        run: python .github/scripts/owner_review.py validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Create a repository-scoped review token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.OWNER_REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.OWNER_REVIEW_APP_PRIVATE_KEY }}
+      - name: Approve and publish the status for the reviewed SHA
+        run: python .github/scripts/owner_review.py approve
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}

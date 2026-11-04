@@ -1,0 +1,24 @@
+site_name: Документация Heartbeat
+site_url: https://aequicor.github.io/Heartbeat-v2/
+repo_url: https://github.com/aequicor/Heartbeat-v2
+repo_name: aequicor/Heartbeat-v2
+edit_uri: edit/master/docs/
+theme:
+  name: mkdocs
+  locale: ru
+plugins:
+  - search:
+      lang: [ru]
+nav:
+  - Главная: index.md
+  - Архитектура: specs/architecture.md
+  - Выпуск: specs/releases.md
+  - Работа агента: specs/agent-workflow.md
+exclude_docs: |
+  /AGENTS.md
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    anchors: warn
+    unrecognized_links: warn
