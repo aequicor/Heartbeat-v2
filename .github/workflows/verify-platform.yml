@@ -31,7 +31,7 @@ jobs:
             task: :platform:linux:linkDebugExecutableLinuxX64
             executable: platform/linux/build/bin/linuxX64/debugExecutable/heartbeat.kexe
           - platform: macOS ARM64
-            runner: macos-26
+            runner: macos-15
             task: :platform:macos:linkDebugExecutableMacosArm64
             executable: platform/macos/build/bin/macosArm64/debugExecutable/heartbeat.kexe
           - platform: Android Emulator
@@ -52,7 +52,11 @@ jobs:
       - name: Read Xcode build version
         id: xcode
         if: runner.os == 'macOS'
-        run: xcodebuild -version | awk '/^Build version / {print "build=" $3}' >> "$GITHUB_OUTPUT"
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version | awk '/^Build version / {print "build=" $3}' >> "$GITHUB_OUTPUT"
       - name: Cache Kotlin/Native toolchain
         if: matrix.executable != ''
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -90,14 +94,23 @@ jobs:
           sudo chmod a+rw /dev/kvm
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" platform-tools "$SYSTEM_IMAGE"
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/heartbeat-android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name heartbeat --package "$SYSTEM_IMAGE"
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx heartbeat
+          adb start-server
           "$ANDROID_HOME/emulator/emulator" -avd heartbeat -port 5554 \
             -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader &
           emulator_pid=$!
           trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
 
-          timeout 180 adb wait-for-device
-          timeout 240 bash -c 'until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do sleep 2; done'
+          timeout 240 bash -c '
+            until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" == 1 ]]; do
+              kill -0 "$1" || exit 1
+              sleep 2
+            done
+          ' bash "$emulator_pid"
           adb install platform/android/build/outputs/apk/debug/android-debug.apk
           adb shell am start -W -n "$APP_ID/.MainActivity"
           pid=$(adb shell pidof -s "$APP_ID" | tr -d '\r')
@@ -108,10 +121,11 @@ jobs:
   ios:
     if: github.event.label.name == 'verify-platform'
     name: iOS Simulator ARM64
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 15
     env:
       APP_ID: io.github.aequicor.heartbeat
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
