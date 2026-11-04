@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/worktree_gate.py\"",
+            "commandWindows": "python \"$(git rev-parse --show-toplevel)/.codex/hooks/worktree_gate.py\"",
+            "timeout": 90,
+            "statusMessage": "Проверяю допуск к worktree"
+          }
+        ]
+      }
+    ]
+  }
+}
