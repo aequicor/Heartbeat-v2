@@ -3,10 +3,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from owner_review import ReviewRejected, approve, validate
+from owner_review import ReviewRejected, approve, post_feedback, validate
 
 
 SHA = "a" * 40
+REPOSITORY_URL = "https://github.com/aequicor/Heartbeat-v2"
+PR_URL = f"{REPOSITORY_URL}/pull/2"
 TEMPLATE = Path(__file__).resolve().parents[1] / "pull_request_template.md"
 
 
@@ -27,7 +29,7 @@ class OwnerReviewTest(unittest.TestCase):
         }
         self.event = {
             "action": "created",
-            "repository": {"id": 5, "owner": {"id": 1, "type": "User"}},
+            "repository": {"id": 5, "owner": {"id": 1, "type": "User"}, "html_url": REPOSITORY_URL},
             "issue": {
                 "number": 2,
                 "pull_request": {"url": "https://example.org"},
@@ -36,6 +38,7 @@ class OwnerReviewTest(unittest.TestCase):
             "comment": copy.deepcopy(self.comment),
         }
         self.pr = {
+            "html_url": PR_URL,
             "state": "open",
             "draft": False,
             "base": {"repo": {"id": 5}, "ref": "master"},
@@ -73,9 +76,38 @@ class OwnerReviewTest(unittest.TestCase):
 
     def test_rejects_sha_shorter_than_seven_digits(self):
         self.event["comment"]["body"] = self.comment["body"].replace(SHA, SHA[:6], 1)
-        with self.assertRaisesRegex(ReviewRejected, "at least 7"):
+        with self.assertRaisesRegex(ReviewRejected, "не менее 7"):
             validate(self.event, self.api)
         self.api.assert_not_called()
+
+    def test_accepts_short_sha_link_to_the_current_pr_commit(self):
+        self.comment["body"] = f"/reviewed [{SHA[:7]}]({PR_URL}/commits/{SHA})"
+        self.event["comment"]["body"] = self.comment["body"]
+        self.assertEqual(validate(self.event, self.api), ("/pulls/2", SHA))
+
+    def test_accepts_direct_links_and_the_revied_spelling(self):
+        for body in (
+            f"/reviewed {PR_URL}/commits/{SHA}",
+            f"/reviewed {REPOSITORY_URL}/commit/{SHA}",
+            f"/revied [{SHA[:7]}]({PR_URL}/commits/{SHA})",
+        ):
+            with self.subTest(body=body):
+                self.comment["body"] = body
+                self.event["comment"]["body"] = body
+                self.assertEqual(validate(self.event, self.api), ("/pulls/2", SHA))
+
+    def test_rejects_link_to_another_commit_or_repository(self):
+        for body in (
+            f"/reviewed [{SHA[:7]}]({PR_URL}/commits/{'b' * 40})",
+            f"/reviewed https://github.com/other/repo/commit/{SHA}",
+            f"/reviewed {REPOSITORY_URL}/pull/3/commits/{SHA}",
+        ):
+            with self.subTest(body=body):
+                self.comment["body"] = body
+                self.event["comment"]["body"] = body
+                with self.assertRaisesRegex(ReviewRejected, "Ссылка должна вести на текущий коммит"):
+                    approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
 
     def test_rejects_short_sha_resolved_to_another_commit(self):
         self.comment["body"] = self.comment["body"].replace(SHA, SHA[:7], 1)
@@ -87,19 +119,19 @@ class OwnerReviewTest(unittest.TestCase):
             return self.response(path)
 
         self.api.side_effect = response_with_other_commit
-        with self.assertRaisesRegex(ReviewRejected, "does not resolve"):
+        with self.assertRaisesRegex(ReviewRejected, "Короткий SHA неоднозначен"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
     def test_rejects_non_owner(self):
         self.event["comment"]["user"]["id"] = 7
-        with self.assertRaisesRegex(ReviewRejected, "repository owner"):
+        with self.assertRaisesRegex(ReviewRejected, "владелец репозитория"):
             validate(self.event, self.api)
         self.api.assert_not_called()
 
     def test_rejects_incomplete_checklist(self):
         self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
-        with self.assertRaisesRegex(ReviewRejected, "checklist"):
+        with self.assertRaisesRegex(ReviewRejected, "Пунктов без отметки"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
@@ -109,54 +141,54 @@ class OwnerReviewTest(unittest.TestCase):
         for body in (empty_body, following_section):
             with self.subTest(body=body):
                 self.pr["body"] = body
-                with self.assertRaisesRegex(ReviewRejected, "keep REVIEW CHECKLIST last"):
+                with self.assertRaisesRegex(ReviewRejected, "последний раздел REVIEW CHECKLIST"):
                     approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
     def test_rejects_changed_checklist_after_the_comment(self):
         self.pr["body"] = self.checked_body.replace("01:00 UTC", "02:00 UTC")
-        with self.assertRaisesRegex(ReviewRejected, "checklist changed after the comment"):
+        with self.assertRaisesRegex(ReviewRejected, "Чек-лист изменился"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
     def test_checklist_must_be_complete_before_the_comment(self):
         self.event["issue"]["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
-        with self.assertRaisesRegex(ReviewRejected, "checklist"):
+        with self.assertRaisesRegex(ReviewRejected, "Пунктов без отметки"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
     def test_rejects_checklist_for_previous_head(self):
         self.pr["body"] = self.checked_body.replace(SHA, "b" * 40, 1)
-        with self.assertRaisesRegex(ReviewRejected, "current head"):
+        with self.assertRaisesRegex(ReviewRejected, "owner-review-head"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
     def test_rejects_extra_lines_in_the_command_comment(self):
         self.event["comment"]["body"] += "\n- [x] All items reviewed."
-        with self.assertRaisesRegex(ReviewRejected, "one line"):
+        with self.assertRaisesRegex(ReviewRejected, "одну строку"):
             validate(self.event, self.api)
         self.api.assert_not_called()
 
     def test_rejects_edit(self):
         self.comment["updated_at"] = "2026-11-04T10:01:00Z"
-        with self.assertRaisesRegex(ReviewRejected, "comment changed"):
+        with self.assertRaisesRegex(ReviewRejected, "Комментарий изменился"):
             validate(self.event, self.api)
 
     def test_rejects_draft_or_closed_pr(self):
         for state, draft in (("open", True), ("closed", False)):
             with self.subTest(state=state, draft=draft):
                 self.pr.update(state=state, draft=draft)
-                with self.assertRaisesRegex(ReviewRejected, "ready for review"):
+                with self.assertRaisesRegex(ReviewRejected, "Ready for review"):
                     validate(self.event, self.api)
 
     def test_rejects_wrong_target(self):
         self.pr["base"]["ref"] = "other"
-        with self.assertRaisesRegex(ReviewRejected, "target"):
+        with self.assertRaisesRegex(ReviewRejected, "PR в master"):
             validate(self.event, self.api)
 
     def test_rejects_stale_sha(self):
         self.pr["head"]["sha"] = "b" * 40
-        with self.assertRaisesRegex(ReviewRejected, "stale"):
+        with self.assertRaisesRegex(ReviewRejected, "SHA устарел"):
             validate(self.event, self.api)
 
     def test_push_during_approval_cannot_publish_status(self):
@@ -166,7 +198,7 @@ class OwnerReviewTest(unittest.TestCase):
             return self.response(path, payload)
 
         self.app_api.side_effect = response_with_push
-        with self.assertRaisesRegex(ReviewRejected, "stale"):
+        with self.assertRaisesRegex(ReviewRejected, "SHA устарел"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_called_once()
 
@@ -177,9 +209,28 @@ class OwnerReviewTest(unittest.TestCase):
             return self.response(path, payload)
 
         self.app_api.side_effect = response_with_unchecked_item
-        with self.assertRaisesRegex(ReviewRejected, "checklist"):
+        with self.assertRaisesRegex(ReviewRejected, "Пунктов без отметки"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_called_once()
+
+    def test_feedback_reports_result_and_links_to_the_command_and_run(self):
+        run_url = f"{REPOSITORY_URL}/actions/runs/42"
+        cases = (
+            ("success", "", False, "Ревью принято"),
+            ("skipped", "SHA устарел.", False, "SHA устарел."),
+            ("skipped", "", True, "токен приложения"),
+            ("failure", "", False, "Подробности есть в журнале запуска"),
+        )
+        for outcome, reason, app_failed, expected in cases:
+            with self.subTest(outcome=outcome, reason=reason):
+                api = Mock()
+                post_feedback(self.event, api, outcome=outcome, reason=reason, app_failed=app_failed, run_url=run_url)
+                api.assert_called_once()
+                path, payload = api.call_args.args
+                self.assertEqual(path, "/issues/2/comments")
+                self.assertIn(expected, payload["body"])
+                self.assertIn(self.comment["html_url"], payload["body"])
+                self.assertIn(run_url, payload["body"])
 
 
 if __name__ == "__main__":
