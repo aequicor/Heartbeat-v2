@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: read
 
 jobs:
@@ -29,6 +30,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
       - name: Validate the owner comment and current PR
+        id: validate
         run: python .github/scripts/owner_review.py validate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,7 +41,16 @@ jobs:
           client-id: ${{ vars.OWNER_REVIEW_APP_CLIENT_ID }}
           private-key: ${{ secrets.OWNER_REVIEW_APP_PRIVATE_KEY }}
       - name: Approve and publish the status for the reviewed SHA
+        id: publish
         run: python .github/scripts/owner_review.py approve
         env:
           GH_TOKEN: ${{ github.token }}
           OWNER_REVIEW_WRITE_TOKEN: ${{ steps.app.outputs.token }}
+      - name: Reply with the review result
+        if: ${{ !cancelled() }}
+        run: python .github/scripts/owner_review.py feedback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_OUTCOME: ${{ steps.publish.outcome }}
+          REVIEW_ERROR: ${{ steps.validate.outputs.error || steps.publish.outputs.error }}
+          APP_OUTCOME: ${{ steps.app.outcome }}
