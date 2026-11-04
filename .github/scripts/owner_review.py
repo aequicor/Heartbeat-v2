@@ -10,14 +10,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-CHECKLIST = (
-    "Проверены весь diff и соответствие требованиям.",
-    "Проверены границы модулей, интерфейсы и потоки данных.",
-    "Проверена обработка ошибок.",
-    "Проверены результаты тестов.",
-)
 COMMAND = re.compile(r"/reviewed ([0-9a-f]{7,40})", re.ASCII)
+CHECKLIST_HEADING = "## REVIEW CHECKLIST"
 CHECKLIST_MARKER = "<!-- owner-review-head: "
+CHECKED_ITEM = re.compile(r"- \[[xX]\] (\S.*)")
 
 
 class ReviewRejected(Exception):
@@ -33,15 +29,18 @@ def reviewed_sha(body):
 
 def validate_checklist(body, sha):
     lines = [line.rstrip() for line in (body or "").splitlines() if line.strip()]
-    markers = [line for line in lines if line.startswith(CHECKLIST_MARKER)]
+    if lines.count(CHECKLIST_HEADING) != 1:
+        raise ReviewRejected("Add one final REVIEW CHECKLIST section to the PR description.")
+
+    start = lines.index(CHECKLIST_HEADING) + 1
     marker = f"{CHECKLIST_MARKER}{sha} -->"
-    if markers != [marker]:
+    if lines[start : start + 1] != [marker]:
         raise ReviewRejected("Prepare the checklist in the PR description for the current head.")
 
-    start = lines.index(marker) + 1
-    checked_items = [f"- [x] {item}" for item in CHECKLIST]
-    if lines[start : start + len(checked_items)] != checked_items:
-        raise ReviewRejected("Complete all four checklist items in the PR description.")
+    items = [CHECKED_ITEM.fullmatch(line) for line in lines[start + 1 :]]
+    if not items or not all(items):
+        raise ReviewRejected("Complete every checklist item and keep REVIEW CHECKLIST last.")
+    return [item.group(1) for item in items]
 
 
 def github_request(path, payload=None, *, token):
@@ -94,8 +93,10 @@ def validate(event, api):
         raise ReviewRejected("The review SHA is stale. Review the current head.")
     if submitted_sha != sha and api(f"/commits/{submitted_sha}")["sha"] != sha:
         raise ReviewRejected("The short SHA does not resolve to the current head. Use the full SHA.")
-    validate_checklist(issue.get("body"), sha)
-    validate_checklist(pr.get("body"), sha)
+    submitted_items = validate_checklist(issue.get("body"), sha)
+    current_items = validate_checklist(pr.get("body"), sha)
+    if current_items != submitted_items:
+        raise ReviewRejected("The checklist changed after the comment. Review it and comment again.")
 
     return pr_path, sha
 

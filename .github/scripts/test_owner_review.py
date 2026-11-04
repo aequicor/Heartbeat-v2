@@ -14,8 +14,9 @@ class OwnerReviewTest(unittest.TestCase):
     def setUp(self):
         self.checked_body = (
             TEMPLATE.read_text(encoding="utf-8")
-            .replace("<полный HEAD SHA>", SHA)
-            .replace("- [ ] ", "- [x] ")
+            .replace("<полный HEAD SHA>", SHA).rstrip()
+            + "\n\n- [x] В расписании beta указан запуск в 01:00 UTC."
+            + "\n- [x] Комментарий с коротким SHA отклоняется при незаполненном чек-листе."
         )
         self.comment = {
             "id": 10,
@@ -99,6 +100,22 @@ class OwnerReviewTest(unittest.TestCase):
     def test_rejects_incomplete_checklist(self):
         self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
         with self.assertRaisesRegex(ReviewRejected, "checklist"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
+
+    def test_rejects_empty_checklist_or_following_section(self):
+        empty_body = self.checked_body.split("\n\n- [x]", 1)[0]
+        following_section = self.checked_body + "\n\n## Дополнительный раздел\n"
+        for body in (empty_body, following_section):
+            with self.subTest(body=body):
+                self.pr["body"] = body
+                with self.assertRaisesRegex(ReviewRejected, "keep REVIEW CHECKLIST last"):
+                    approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
+
+    def test_rejects_changed_checklist_after_the_comment(self):
+        self.pr["body"] = self.checked_body.replace("01:00 UTC", "02:00 UTC")
+        with self.assertRaisesRegex(ReviewRejected, "checklist changed after the comment"):
             approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
 
