@@ -47,11 +47,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OWNER_REVIEW_WRITE_TOKEN: ${{ steps.app.outputs.token }}
+      - name: Request squash merge for the reviewed SHA
+        id: merge
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_PROMPT_DISABLED: '1'
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REVIEWED_SHA: ${{ steps.publish.outputs.reviewed_sha }}
+        run: |
+          test -n "$REVIEWED_SHA"
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$REVIEWED_SHA"
       - name: Reply with the review result
         if: ${{ !cancelled() }}
         run: python .github/scripts/owner_review.py feedback
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEW_OUTCOME: ${{ steps.publish.outcome }}
+          MERGE_OUTCOME: ${{ steps.merge.outcome }}
           REVIEW_ERROR: ${{ steps.validate.outputs.error || steps.publish.outputs.error }}
           APP_OUTCOME: ${{ steps.app.outcome }}

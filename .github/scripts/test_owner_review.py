@@ -58,7 +58,7 @@ class OwnerReviewTest(unittest.TestCase):
         }[path]
 
     def test_approves_and_posts_status_on_reviewed_commit(self):
-        approve(self.event, self.api, self.app_api)
+        self.assertEqual(approve(self.event, self.api, self.app_api), SHA)
         review = self.app_api.call_args_list[0].args
         self.assertEqual(review[0], "/pulls/2/reviews")
         self.assertEqual(review[1]["commit_id"], SHA)
@@ -216,15 +216,24 @@ class OwnerReviewTest(unittest.TestCase):
     def test_feedback_reports_result_and_links_to_the_command_and_run(self):
         run_url = f"{REPOSITORY_URL}/actions/runs/42"
         cases = (
-            ("success", "", False, "Ревью принято"),
-            ("skipped", "SHA устарел.", False, "SHA устарел."),
-            ("skipped", "", True, "токен приложения"),
-            ("failure", "", False, "Подробности есть в журнале запуска"),
+            ("success", "success", "", False, "GitHub выполнит squash"),
+            ("success", "failure", "", False, "Запрос автослияния завершился ошибкой"),
+            ("skipped", "skipped", "SHA устарел.", False, "SHA устарел."),
+            ("skipped", "skipped", "", True, "токен приложения"),
+            ("failure", "skipped", "", False, "Подробности есть в журнале запуска"),
         )
-        for outcome, reason, app_failed, expected in cases:
+        for outcome, merge_outcome, reason, app_failed, expected in cases:
             with self.subTest(outcome=outcome, reason=reason):
                 api = Mock()
-                post_feedback(self.event, api, outcome=outcome, reason=reason, app_failed=app_failed, run_url=run_url)
+                post_feedback(
+                    self.event,
+                    api,
+                    outcome=outcome,
+                    merge_outcome=merge_outcome,
+                    reason=reason,
+                    app_failed=app_failed,
+                    run_url=run_url,
+                )
                 api.assert_called_once()
                 path, payload = api.call_args.args
                 self.assertEqual(path, "/issues/2/comments")
