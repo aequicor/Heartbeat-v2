@@ -1,0 +1,153 @@
+name: Verify platform entry points
+
+on:
+  pull_request:
+    branches: [master]
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-platform-${{ github.event.pull_request.number }}-${{ github.event.label.name }}
+  cancel-in-progress: true
+
+jobs:
+  gradle:
+    if: github.event.label.name == 'verify-platform'
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows x64
+            runner: windows-2025
+            task: :platform:windows:linkDebugExecutableMingwX64
+            executable: platform/windows/build/bin/mingwX64/debugExecutable/heartbeat.exe
+          - platform: Linux x64
+            runner: ubuntu-24.04
+            task: :platform:linux:linkDebugExecutableLinuxX64
+            executable: platform/linux/build/bin/linuxX64/debugExecutable/heartbeat.kexe
+          - platform: macOS ARM64
+            runner: macos-26
+            task: :platform:macos:linkDebugExecutableMacosArm64
+            executable: platform/macos/build/bin/macosArm64/debugExecutable/heartbeat.kexe
+          - platform: Android Emulator
+            runner: ubuntu-24.04
+            task: :platform:android:assembleDebug
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          cache-read-only: false
+      - name: Read Xcode build version
+        id: xcode
+        if: runner.os == 'macOS'
+        run: xcodebuild -version | awk '/^Build version / {print "build=" $3}' >> "$GITHUB_OUTPUT"
+      - name: Cache Kotlin/Native toolchain
+        if: matrix.executable != ''
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('build.gradle.kts') }}
+      - name: Build entry point
+        shell: pwsh
+        env:
+          GRADLE_TASK: ${{ matrix.task }}
+          GRADLE_WRAPPER: ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }}
+        run: |
+          & $env:GRADLE_WRAPPER $env:GRADLE_TASK --no-daemon
+          exit $LASTEXITCODE
+      - name: Launch desktop executable
+        if: matrix.executable != ''
+        shell: pwsh
+        env:
+          EXECUTABLE: ${{ matrix.executable }}
+        run: |
+          $output = & "./$env:EXECUTABLE"
+          $exitCode = $LASTEXITCODE
+          $output
+          if ($exitCode -ne 0 -or ($output -join [Environment]::NewLine) -cne 'Heartbeat started') {
+            throw "Unexpected startup output or exit code ($exitCode)"
+          }
+      - name: Launch Android app
+        if: matrix.platform == 'Android Emulator'
+        shell: bash
+        env:
+          ANDROID_SERIAL: emulator-5554
+          APP_ID: io.github.aequicor.heartbeat
+          SYSTEM_IMAGE: system-images;android-36;google_apis;x86_64
+        run: |
+          sudo chmod a+rw /dev/kvm
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$SYSTEM_IMAGE"
+          printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name heartbeat --package "$SYSTEM_IMAGE"
+          "$ANDROID_HOME/emulator/emulator" -avd heartbeat -port 5554 \
+            -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
+
+          timeout 180 adb wait-for-device
+          timeout 240 bash -c 'until [[ "$(adb shell getprop sys.boot_completed | tr -d "\r")" == 1 ]]; do sleep 2; done'
+          adb install platform/android/build/outputs/apk/debug/android-debug.apk
+          adb shell am start -W -n "$APP_ID/.MainActivity"
+          pid=$(adb shell pidof -s "$APP_ID" | tr -d '\r')
+          test -n "$pid"
+          adb logcat --pid="$pid" -d -s Heartbeat:I | grep -F 'Heartbeat started'
+          adb shell pidof -s "$APP_ID"
+
+  ios:
+    if: github.event.label.name == 'verify-platform'
+    name: iOS Simulator ARM64
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      APP_ID: io.github.aequicor.heartbeat
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Read Xcode build version
+        id: xcode
+        run: xcodebuild -version | awk '/^Build version / {print "build=" $3}' >> "$GITHUB_OUTPUT"
+      - name: Cache Xcode compilation results
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: build/ios-cache
+          key: xcode-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('platform/ios/**') }}
+          restore-keys: xcode-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-
+      - name: Build iOS app
+        run: |
+          xcodebuild -project platform/ios/Heartbeat.xcodeproj -scheme Heartbeat \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO COMPILATION_CACHE_ENABLE_CACHING=YES \
+            "COMPILATION_CACHE_CAS_PATH=$PWD/build/ios-cache" build
+      - name: Launch iOS app
+        shell: bash
+        run: |
+          simulator=$(xcrun simctl list devices available --json |
+            jq -er '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')
+          xcrun simctl bootstatus "$simulator" -b
+          xcrun simctl install "$simulator" build/ios/Build/Products/Debug-iphonesimulator/Heartbeat.app
+          launched=$(xcrun simctl launch "$simulator" "$APP_ID")
+          echo "$launched"
+          pid=${launched##*: }
+          predicate="subsystem == \"$APP_ID\" AND eventMessage == \"Heartbeat started\""
+          for attempt in {1..15}; do
+            if xcrun simctl spawn "$simulator" log show --last 2m --style compact --predicate "$predicate" |
+                grep -F 'Heartbeat started'; then
+              kill -0 "$pid"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Heartbeat startup marker was missing from the simulator log'
+          exit 1
