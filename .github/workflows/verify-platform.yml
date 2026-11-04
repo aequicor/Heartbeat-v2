@@ -88,7 +88,8 @@ jobs:
           SYSTEM_IMAGE: system-images;android-36;google_apis;x86_64
         run: |
           sudo chmod a+rw /dev/kvm
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$SYSTEM_IMAGE"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" platform-tools "$SYSTEM_IMAGE"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
           printf 'no\n' | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name heartbeat --package "$SYSTEM_IMAGE"
           "$ANDROID_HOME/emulator/emulator" -avd heartbeat -port 5554 \
             -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader &
