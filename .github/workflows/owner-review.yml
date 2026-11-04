@@ -41,4 +41,5 @@ jobs:
       - name: Approve and publish the status for the reviewed SHA
         run: python .github/scripts/owner_review.py approve
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          OWNER_REVIEW_WRITE_TOKEN: ${{ steps.app.outputs.token }}

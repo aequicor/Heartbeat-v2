@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+from functools import partial
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -15,7 +16,7 @@ CHECKLIST = (
     "Проверена обработка ошибок.",
     "Проверены результаты тестов.",
 )
-COMMAND = re.compile(r"/reviewed ([0-9a-f]{40})", re.ASCII)
+COMMAND = re.compile(r"/reviewed ([0-9a-f]{7,40})", re.ASCII)
 
 
 class ReviewRejected(Exception):
@@ -26,20 +27,20 @@ def reviewed_sha(body):
     lines = [line.strip() for line in body.splitlines() if line.strip()]
     match = COMMAND.fullmatch(lines[0]) if lines else None
     if not match:
-        raise ReviewRejected("Expected /reviewed followed by the full head SHA.")
+        raise ReviewRejected("Expected /reviewed followed by at least 7 hex digits of the head SHA.")
     checklist = [f"- [x] {item}" for item in CHECKLIST]
     if lines[1:] != checklist:
         raise ReviewRejected("Complete the four checklist lines in the template order.")
     return match.group(1)
 
 
-def github_request(path, payload=None):
+def github_request(path, payload=None, *, token):
     request = Request(
         f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}{path}",
         data=None if payload is None else json.dumps(payload).encode("utf-8"),
         headers={
             "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
@@ -63,7 +64,7 @@ def validate(event, api):
     if owner["type"] != "User" or comment["user"]["id"] != owner["id"]:
         raise ReviewRejected("Only the repository owner can attest to a review.")
 
-    sha = reviewed_sha(comment["body"])
+    submitted_sha = reviewed_sha(comment["body"])
     pr_path = f"/pulls/{issue['number']}"
     current_comment = api(f"/issues/comments/{comment['id']}")
     if (
@@ -78,16 +79,19 @@ def validate(event, api):
         raise ReviewRejected("The pull request must target this repository's master.")
     if pr["state"] != "open" or pr["draft"]:
         raise ReviewRejected("The pull request must be open and ready for review.")
-    if pr["head"]["sha"] != sha:
+    sha = pr["head"]["sha"]
+    if not sha.startswith(submitted_sha):
         raise ReviewRejected("The review SHA is stale. Review the current head.")
+    if submitted_sha != sha and api(f"/commits/{submitted_sha}")["sha"] != sha:
+        raise ReviewRejected("The short SHA does not resolve to the current head. Use the full SHA.")
 
     return pr_path, sha
 
 
-def approve(event, api):
-    pr_path, sha = validate(event, api)
+def approve(event, read_api, app_api):
+    pr_path, sha = validate(event, read_api)
     comment_url = event["comment"]["html_url"]
-    review = api(
+    review = app_api(
         f"{pr_path}/reviews",
         {"event": "APPROVE", "commit_id": sha, "body": f"Owner attestation: {comment_url}"},
     )
@@ -95,8 +99,10 @@ def approve(event, api):
         raise ReviewRejected("GitHub did not record the approval for the reviewed SHA.")
 
     # A push during approval must never receive a status on its new head.
-    validate(event, api)
-    api(
+    _, current_sha = validate(event, read_api)
+    if current_sha != sha:
+        raise ReviewRejected("The head changed during approval. Review the current head.")
+    app_api(
         f"/statuses/{sha}",
         {
             "state": "success",
@@ -112,12 +118,14 @@ def main():
     parser.add_argument("action", choices=("validate", "approve"))
     args = parser.parse_args()
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+    read_api = partial(github_request, token=os.environ["GH_TOKEN"])
 
     try:
         if args.action == "validate":
-            validate(event, github_request)
+            validate(event, read_api)
         else:
-            approve(event, github_request)
+            app_api = partial(github_request, token=os.environ["OWNER_REVIEW_WRITE_TOKEN"])
+            approve(event, read_api, app_api)
     except ReviewRejected as error:
         parser.exit(1, f"{error}\n")
 

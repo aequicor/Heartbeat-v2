@@ -34,23 +34,53 @@ class OwnerReviewTest(unittest.TestCase):
             "head": {"sha": SHA},
         }
         self.api = Mock(side_effect=self.response)
+        self.app_api = Mock(side_effect=self.response)
 
     def response(self, path, payload=None):
         return {
             "/issues/comments/10": self.comment,
             "/pulls/2": self.pr,
+            f"/commits/{SHA[:7]}": {"sha": SHA},
             "/pulls/2/reviews": {"state": "APPROVED", "commit_id": SHA},
             f"/statuses/{SHA}": {},
         }[path]
 
     def test_approves_and_posts_status_on_reviewed_commit(self):
-        approve(self.event, self.api)
-        review = self.api.call_args_list[2].args
+        approve(self.event, self.api, self.app_api)
+        review = self.app_api.call_args_list[0].args
         self.assertEqual(review[0], "/pulls/2/reviews")
         self.assertEqual(review[1]["commit_id"], SHA)
-        status = self.api.call_args.args
+        status = self.app_api.call_args.args
         self.assertEqual(status[0], f"/statuses/{SHA}")
         self.assertEqual(status[1]["context"], "owner-review")
+
+    def test_short_sha_uses_full_head_for_approval_and_status(self):
+        self.comment["body"] = self.comment["body"].replace(SHA, SHA[:7], 1)
+        self.event["comment"]["body"] = self.comment["body"]
+        approve(self.event, self.api, self.app_api)
+        self.api.assert_any_call(f"/commits/{SHA[:7]}")
+        self.assertEqual(self.app_api.call_args_list[0].args[1]["commit_id"], SHA)
+        self.assertEqual(self.app_api.call_args.args[0], f"/statuses/{SHA}")
+
+    def test_rejects_sha_shorter_than_seven_digits(self):
+        self.event["comment"]["body"] = self.comment["body"].replace(SHA, SHA[:6], 1)
+        with self.assertRaisesRegex(ReviewRejected, "at least 7"):
+            validate(self.event, self.api)
+        self.api.assert_not_called()
+
+    def test_rejects_short_sha_resolved_to_another_commit(self):
+        self.comment["body"] = self.comment["body"].replace(SHA, SHA[:7], 1)
+        self.event["comment"]["body"] = self.comment["body"]
+
+        def response_with_other_commit(path):
+            if path == f"/commits/{SHA[:7]}":
+                return {"sha": SHA[:7] + "b" * 33}
+            return self.response(path)
+
+        self.api.side_effect = response_with_other_commit
+        with self.assertRaisesRegex(ReviewRejected, "does not resolve"):
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_not_called()
 
     def test_rejects_non_owner(self):
         self.event["comment"]["user"]["id"] = 7
@@ -92,10 +122,10 @@ class OwnerReviewTest(unittest.TestCase):
                 self.pr["head"]["sha"] = "b" * 40
             return self.response(path, payload)
 
-        self.api.side_effect = response_with_push
+        self.app_api.side_effect = response_with_push
         with self.assertRaisesRegex(ReviewRejected, "stale"):
-            approve(self.event, self.api)
-        self.assertFalse(any(call.args[0].startswith("/statuses/") for call in self.api.call_args_list))
+            approve(self.event, self.api, self.app_api)
+        self.app_api.assert_called_once()
 
 
 if __name__ == "__main__":
