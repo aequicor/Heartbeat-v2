@@ -11,7 +11,10 @@ from urllib.request import Request, urlopen
 
 
 COMMAND = re.compile(
-    r"/reviewed (?:([0-9a-f]{7,40})|\[([0-9a-f]{7,40})\]\((https://github\.com/[^()\s]+)\))",
+    r"/(?:reviewed|revied) (?:"
+    r"(?P<sha>[0-9a-f]{7,40})"
+    r"|\[(?P<linked_sha>[0-9a-f]{7,40})\]\((?P<link>https://github\.com/[^()\s]+)\)"
+    r"|(?P<url>https://github\.com/[^()\s]+/(?P<url_sha>[0-9a-f]{40})))",
     re.ASCII,
 )
 CHECKLIST_HEADING = "## REVIEW CHECKLIST"
@@ -26,9 +29,9 @@ class ReviewRejected(Exception):
 def parse_command(body):
     match = COMMAND.fullmatch(body.strip())
     if not match:
-        raise ReviewRejected("Оставьте одну строку `/reviewed <SHA>`. Укажите не менее 7 символов SHA.")
-    plain_sha, linked_sha, url = match.groups()
-    return plain_sha or linked_sha, url
+        raise ReviewRejected("Оставьте одну строку `/reviewed <SHA>`. Укажите не менее 7 символов SHA или ссылку на коммит.")
+    sha = match["sha"] or match["linked_sha"] or match["url_sha"]
+    return sha, match["link"] or match["url"]
 
 
 def validate_checklist(body, sha):

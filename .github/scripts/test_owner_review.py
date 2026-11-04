@@ -85,14 +85,26 @@ class OwnerReviewTest(unittest.TestCase):
         self.event["comment"]["body"] = self.comment["body"]
         self.assertEqual(validate(self.event, self.api), ("/pulls/2", SHA))
 
-    def test_rejects_link_to_another_commit_or_repository(self):
-        for url in (
-            f"{PR_URL}/commits/{'b' * 40}",
-            f"https://github.com/other/repo/commit/{SHA}",
+    def test_accepts_direct_links_and_the_revied_spelling(self):
+        for body in (
+            f"/reviewed {PR_URL}/commits/{SHA}",
+            f"/reviewed {REPOSITORY_URL}/commit/{SHA}",
+            f"/revied [{SHA[:7]}]({PR_URL}/commits/{SHA})",
         ):
-            with self.subTest(url=url):
-                self.comment["body"] = f"/reviewed [{SHA[:7]}]({url})"
-                self.event["comment"]["body"] = self.comment["body"]
+            with self.subTest(body=body):
+                self.comment["body"] = body
+                self.event["comment"]["body"] = body
+                self.assertEqual(validate(self.event, self.api), ("/pulls/2", SHA))
+
+    def test_rejects_link_to_another_commit_or_repository(self):
+        for body in (
+            f"/reviewed [{SHA[:7]}]({PR_URL}/commits/{'b' * 40})",
+            f"/reviewed https://github.com/other/repo/commit/{SHA}",
+            f"/reviewed {REPOSITORY_URL}/pull/3/commits/{SHA}",
+        ):
+            with self.subTest(body=body):
+                self.comment["body"] = body
+                self.event["comment"]["body"] = body
                 with self.assertRaisesRegex(ReviewRejected, "Ссылка должна вести на текущий коммит"):
                     approve(self.event, self.api, self.app_api)
         self.app_api.assert_not_called()
