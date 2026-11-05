@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import sys
 from functools import partial
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -71,6 +72,25 @@ def github_request(path, payload=None, *, token):
         raise ReviewRejected(f"Запрос к GitHub API завершился ошибкой HTTP {error.code}.") from error
     except URLError as error:
         raise ReviewRejected("GitHub API недоступен. Повторите команду позже.") from error
+
+
+# GitHub reaction contents are limited to the emoji below. ✅ and ❌ are not reactions,
+# so the outcome is signalled with 👍 (+1) for success and 👎 (-1) for rejection.
+REACTION_ACK = "eyes"
+REACTION_SUCCESS = "+1"
+REACTION_FAILURE = "-1"
+
+
+def react(api, comment_id, content):
+    """Add a reaction without letting a failed call block the review."""
+    try:
+        api(f"/issues/comments/{comment_id}/reactions", {"content": content})
+    except ReviewRejected as error:
+        print(f"Reaction {content} was not added: {error}", file=sys.stderr)
+
+
+def acknowledge(event, api):
+    react(api, event["comment"]["id"], REACTION_ACK)
 
 
 def validate(event, api):
@@ -159,17 +179,20 @@ def post_feedback(event, api, *, outcome, merge_outcome, reason, app_failed, run
     command_url = event["comment"]["html_url"]
     body = f"{result}\n\n[Команда]({command_url}) · [Журнал проверки]({run_url})"
     api(f"/issues/{event['issue']['number']}/comments", {"body": body})
+    react(api, event["comment"]["id"], REACTION_SUCCESS if outcome == "success" else REACTION_FAILURE)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("validate", "approve", "feedback"))
+    parser.add_argument("action", choices=("validate", "approve", "feedback", "acknowledge"))
     args = parser.parse_args()
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     read_api = partial(github_request, token=os.environ["GH_TOKEN"])
 
     try:
-        if args.action == "validate":
+        if args.action == "acknowledge":
+            acknowledge(event, read_api)
+        elif args.action == "validate":
             validate(event, read_api)
         elif args.action == "approve":
             app_api = partial(github_request, token=os.environ["OWNER_REVIEW_WRITE_TOKEN"])
