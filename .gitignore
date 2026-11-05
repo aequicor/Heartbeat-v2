@@ -33,9 +33,21 @@ xcuserdata/
 /.codex/visualizations/
 /.codex/worktrees/
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Local temporary files
+/tmp/
+/.tmp/
+
 # Documentation and OS metadata
 /site/
-/.venv/
-__pycache__/
 .DS_Store
 Thumbs.db

@@ -22,6 +22,12 @@
 
 [Порядок работы агента](../docs/specs/agent-workflow.md)
 
+## Сборка и выпуск
+
+1. `docs.yml` собирает `docs-build` для готового к ревью PR и публикует Pages после push в `master`. Возврат PR в draft отменяет текущую сборку.
+2. Метка `verify-platform` на PR запускает сборку и запуск точек входа на Windows, Linux, macOS, Android и iOS. Без метки этот workflow не выполняется.
+3. Каналы `alpha`, `beta` и `release` описаны в [спецификации выпуска](../docs/specs/releases.md). При изменении конвейера обнови затронутые требования `HB-REL-*` и проверь соответствующий канал.
+
 ## Настройка GitHub владельцем
 
 1. Установи отдельный GitHub App только в этот репозиторий. Выдай ему разрешения **Pull requests**, **Commit statuses** и **Contents** на запись. Разрешение **Contents** нужно для squash-слияния через App. Webhook для App отключи. В **Settings → Environments → owner-review** разреши развёртывания только из ветки `master`. Добавь переменную `OWNER_REVIEW_APP_CLIENT_ID` и секрет `OWNER_REVIEW_APP_PRIVATE_KEY` в это окружение.

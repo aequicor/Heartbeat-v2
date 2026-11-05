@@ -1,0 +1,105 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		484200000000000000000001 /* HeartbeatApp.swift in Sources */ = {
+			isa = PBXBuildFile;
+			fileRef = 484200000000000000000002 /* HeartbeatApp.swift */;
+		};
+		484200000000000000000002 /* HeartbeatApp.swift */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.swift;
+			path = HeartbeatApp.swift;
+			sourceTree = "<group>";
+		};
+		484200000000000000000003 /* Heartbeat.app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			path = Heartbeat.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		484200000000000000000004 /* Main group */ = {
+			isa = PBXGroup;
+			children = (
+				484200000000000000000002 /* HeartbeatApp.swift */,
+				484200000000000000000005 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		484200000000000000000005 /* Products */ = {
+			isa = PBXGroup;
+			children = (484200000000000000000003 /* Heartbeat.app */);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		484200000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (484200000000000000000001 /* HeartbeatApp.swift in Sources */);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		484200000000000000000007 /* Heartbeat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 484200000000000000000009 /* Target configurations */;
+			buildPhases = (484200000000000000000006 /* Sources */);
+			buildRules = ();
+			dependencies = ();
+			name = Heartbeat;
+			productName = Heartbeat;
+			productReference = 484200000000000000000003 /* Heartbeat.app */;
+			productType = "com.apple.product-type.application";
+		};
+		484200000000000000000008 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 48420000000000000000000A /* Project configurations */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			knownRegions = (en, Base);
+			mainGroup = 484200000000000000000004 /* Main group */;
+			productRefGroup = 484200000000000000000005 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (484200000000000000000007 /* Heartbeat */);
+		};
+		484200000000000000000009 /* Target configurations */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (48420000000000000000000B /* Debug */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		48420000000000000000000A /* Project configurations */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (48420000000000000000000C /* Debug */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		48420000000000000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.aequicor.heartbeat;
+				PRODUCT_NAME = Heartbeat;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		48420000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+	};
+	rootObject = 484200000000000000000008 /* Project object */;
+}
