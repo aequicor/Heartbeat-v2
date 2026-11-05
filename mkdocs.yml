@@ -14,6 +14,7 @@ nav:
   - Архитектура: specs/architecture.md
   - Выпуск: specs/releases.md
   - Работа агента: specs/agent-workflow.md
+  - Выполнение задач: specs/agent-execution-policy.md
 exclude_docs: |
   /AGENTS.md
 validation:
