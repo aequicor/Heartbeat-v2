@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from owner_review import ReviewRejected, approve, post_feedback, validate
+from owner_review import ReviewRejected, acknowledge, approve, post_feedback, validate
 
 
 SHA = "a" * 40
@@ -64,6 +64,7 @@ class OwnerReviewTest(unittest.TestCase):
             f"/commits/{SHA[:7]}": {"sha": SHA},
             "/pulls/2/reviews": {"state": "APPROVED", "commit_id": SHA},
             f"/statuses/{SHA}": {},
+            "/issues/comments/10/reactions": {},
         }[path]
 
     def test_approves_and_posts_status_on_reviewed_commit(self):
@@ -262,13 +263,13 @@ class OwnerReviewTest(unittest.TestCase):
     def test_feedback_reports_result_and_links_to_the_command_and_run(self):
         run_url = f"{REPOSITORY_URL}/actions/runs/42"
         cases = (
-            ("success", "success", "", False, "GitHub выполнит squash"),
-            ("success", "failure", "", False, "Запрос автослияния завершился ошибкой"),
-            ("skipped", "skipped", "SHA устарел.", False, "SHA устарел."),
-            ("skipped", "skipped", "", True, "токен приложения"),
-            ("failure", "skipped", "", False, "Подробности есть в журнале запуска"),
+            ("success", "success", "", False, "GitHub выполнит squash", "+1"),
+            ("success", "failure", "", False, "Запрос автослияния завершился ошибкой", "+1"),
+            ("skipped", "skipped", "SHA устарел.", False, "SHA устарел.", "-1"),
+            ("skipped", "skipped", "", True, "токен приложения", "-1"),
+            ("failure", "skipped", "", False, "Подробности есть в журнале запуска", "-1"),
         )
-        for outcome, merge_outcome, reason, app_failed, expected in cases:
+        for outcome, merge_outcome, reason, app_failed, expected, reaction in cases:
             with self.subTest(outcome=outcome, reason=reason):
                 api = Mock()
                 post_feedback(
@@ -280,12 +281,29 @@ class OwnerReviewTest(unittest.TestCase):
                     app_failed=app_failed,
                     run_url=run_url,
                 )
-                api.assert_called_once()
-                path, payload = api.call_args.args
+                self.assertEqual(len(api.call_args_list), 2)
+                path, payload = api.call_args_list[0].args
                 self.assertEqual(path, "/issues/2/comments")
                 self.assertIn(expected, payload["body"])
                 self.assertIn(self.comment["html_url"], payload["body"])
                 self.assertIn(run_url, payload["body"])
+                reaction_path, reaction_payload = api.call_args_list[1].args
+                self.assertEqual(reaction_path, "/issues/comments/10/reactions")
+                self.assertEqual(reaction_payload, {"content": reaction})
+
+    def test_acknowledge_reacts_with_eyes(self):
+        acknowledge(self.event, self.api)
+        self.api.assert_called_once_with("/issues/comments/10/reactions", {"content": "eyes"})
+
+    def test_failed_reaction_does_not_block_feedback(self):
+        def fail_reaction(path, payload=None):
+            if path.endswith("/reactions"):
+                raise ReviewRejected("Запрос к GitHub API завершился ошибкой HTTP 403.")
+            return {}
+
+        api = Mock(side_effect=fail_reaction)
+        post_feedback(self.event, api, outcome="success", merge_outcome="success", reason="", app_failed=False, run_url="u")
+        self.assertEqual(len(api.call_args_list), 2)
 
 
 if __name__ == "__main__":
