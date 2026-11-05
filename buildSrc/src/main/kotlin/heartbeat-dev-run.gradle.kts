@@ -76,22 +76,23 @@ class DevRuns(private val project: Project) {
     }
 
     private fun registerEntryPoint(entry: EntryPoint) {
-        val mismatch = "${entry.taskName} runs only on ${entry.label}. " +
-                "Current host is $hostOs/$hostArch. Use runDev on a supported host."
         project.tasks.register(entry.taskName) {
             group = "dev"
             description = "Build and run the desktop app for ${entry.label}"
             if (matchesHost(entry)) {
                 dependsOn("${entry.module}:${entry.runTask}")
             } else {
-                doFirst { throw GradleException(mismatch) }
+                doFirst {
+                    throw GradleException(
+                        "${entry.taskName} runs only on ${entry.label}. " +
+                            "Current host is $hostOs/$hostArch. Use runDev on a supported host.",
+                    )
+                }
             }
         }
     }
 
     private fun registerRunDev() {
-        val mismatch = "No desktop entry point for $hostOs/$hostArch. " +
-                "Supported hosts: ${entryPoints.joinToString { it.label }}."
         project.tasks.register("runDev") {
             group = "dev"
             description = "Build and run the desktop app for the current OS"
@@ -99,11 +100,22 @@ class DevRuns(private val project: Project) {
             if (current != null) {
                 dependsOn(current.taskName)
             } else {
-                doFirst { throw GradleException(mismatch) }
+                doFirst {
+                    throw GradleException(
+                        "No desktop entry point for $hostOs/$hostArch. " +
+                            "Supported hosts: ${entryPoints.joinToString { it.label }}.",
+                    )
+                }
             }
         }
     }
 
+    /**
+     * Checks whether [entry] targets the current host.
+     *
+     * @param entry entry point to check.
+     * @return `true` when the host OS name and architecture match [entry].
+     */
     private fun matchesHost(entry: EntryPoint): Boolean =
         hostOs.startsWith(entry.osPrefix) && hostArch in entry.archs
 }
