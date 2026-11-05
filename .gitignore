@@ -1,8 +1,9 @@
 # Gradle and Kotlin Multiplatform
-.gradle/
-.kotlin/
-.konan/
-build/
+# **/ задаёт явное совпадение на любой глубине, включая buildSrc и platform/<os>.
+**/.gradle/
+**/.kotlin/
+**/.konan/
+**/build/
 
 # Android SDK and native build intermediates
 local.properties
@@ -10,7 +11,7 @@ local.properties
 .externalNativeBuild/
 
 # IDE metadata
-.idea/
+**/.idea/
 *.iml
 DerivedData/
 xcuserdata/
