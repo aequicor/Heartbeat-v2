@@ -20,6 +20,9 @@ COMMAND = re.compile(
 CHECKLIST_HEADING = "## REVIEW CHECKLIST"
 CHECKLIST_MARKER = "<!-- owner-review-head: "
 TASK_ITEM = re.compile(r"- \[([ xX])\] (\S.*)")
+COMMIT_GROUP = re.compile(
+    r"\*\*\[([0-9a-f]{7,40})\]\((https://github\.com/[^()\s]+/commit/([0-9a-f]{40}))\)\*\* — \S.*"
+)
 
 
 class ReviewRejected(Exception):
@@ -34,7 +37,7 @@ def parse_command(body):
     return sha, match["link"] or match["url"]
 
 
-def validate_checklist(body, sha):
+def validate_checklist(body, sha, repository_url):
     lines = [line.rstrip() for line in (body or "").splitlines() if line.strip()]
     if lines.count(CHECKLIST_HEADING) != 1:
         raise ReviewRejected("Добавьте в конец описания PR один раздел REVIEW CHECKLIST.")
@@ -44,13 +47,36 @@ def validate_checklist(body, sha):
     if lines[start : start + 1] != [marker]:
         raise ReviewRejected("Обновите маркер `owner-review-head` в описании PR до полного SHA текущего HEAD.")
 
-    items = [TASK_ITEM.fullmatch(line) for line in lines[start + 1 :]]
-    if not items or not all(items):
-        raise ReviewRejected("Поместите непустой список с галочками в последний раздел REVIEW CHECKLIST.")
-    unchecked_count = sum(item.group(1) == " " for item in items)
+    format_error = "Поместите непустой список с галочками или группы коммитов с пунктами в последний раздел REVIEW CHECKLIST."
+    entries = []
+    commits = set()
+    needs_item = False
+    unchecked_count = 0
+    for line in lines[start + 1 :]:
+        item = TASK_ITEM.fullmatch(line)
+        if item:
+            entries.append(f"- [x] {item[2]}")
+            unchecked_count += item[1] == " "
+            needs_item = False
+            continue
+
+        group = COMMIT_GROUP.fullmatch(line)
+        if not group or needs_item or (entries and not commits):
+            raise ReviewRejected(format_error)
+        label, url, commit = group.groups()
+        if not commit.startswith(label) or url != f"{repository_url}/commit/{commit}":
+            raise ReviewRejected("Укажите в заголовке группы SHA и ссылку на тот же коммит этого репозитория.")
+        if commit in commits:
+            raise ReviewRejected(f"Объедините проверки коммита `{label}` в одну группу.")
+        commits.add(commit)
+        entries.append(line)
+        needs_item = True
+
+    if not entries or needs_item:
+        raise ReviewRejected(format_error)
     if unchecked_count:
         raise ReviewRejected(f"Отметьте все пункты в REVIEW CHECKLIST. Пунктов без отметки — {unchecked_count}.")
-    return [item.group(2) for item in items]
+    return entries
 
 
 def github_request(path, payload=None, *, token):
@@ -108,9 +134,9 @@ def validate(event, api):
         raise ReviewRejected("Ссылка должна вести на текущий коммит этого PR. Можно указать SHA обычным текстом.")
     if submitted_sha != sha and api(f"/commits/{submitted_sha}")["sha"] != sha:
         raise ReviewRejected(f"Короткий SHA неоднозначен. Укажите полный SHA `{sha}`.")
-    submitted_items = validate_checklist(issue.get("body"), sha)
-    current_items = validate_checklist(pr.get("body"), sha)
-    if current_items != submitted_items:
+    submitted_checklist = validate_checklist(issue.get("body"), sha, repository["html_url"])
+    current_checklist = validate_checklist(pr.get("body"), sha, repository["html_url"])
+    if current_checklist != submitted_checklist:
         raise ReviewRejected("Чек-лист изменился после команды. Проверьте его и отправьте новый комментарий.")
 
     return pr_path, sha
