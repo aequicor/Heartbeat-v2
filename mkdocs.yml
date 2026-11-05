@@ -11,10 +11,13 @@ plugins:
       lang: [ru]
 nav:
   - Главная: index.md
+  - Окружение и запуск: setup.md
   - Архитектура: specs/architecture.md
   - Выпуск: specs/releases.md
   - Работа агента: specs/agent-workflow.md
-  - Выполнение задач: specs/agent-execution-policy.md
+  - Выполнение задач: specs/agent-tool-usage-policy.md
+  - Принципы принятия решений: specs/decision-principles.md
+  - Runtime Learning: specs/runtime-learning.md
 exclude_docs: |
   /AGENTS.md
 validation:

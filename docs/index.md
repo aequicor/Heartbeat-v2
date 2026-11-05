@@ -2,6 +2,7 @@
 
 Heartbeat — KMP AI Studio для кодинга и исследований в проектах. Приложение рассчитано на Android, iOS, Linux, Windows и macOS. Расширение Chromium использует Kotlin/Wasm.
 
+- [Окружение и первый запуск](setup.md) описывает требования, подготовку окружения и запуск dev-версии.
 - [Архитектура](specs/architecture.md) описывает платформы и запуск приложения.
 - [Выпуск](specs/releases.md) описывает каналы `alpha`, `beta` и `release`.
 - [Работа агента](specs/agent-workflow.md) описывает путь от задачи до ручного ревью.
