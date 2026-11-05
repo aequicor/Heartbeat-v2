@@ -1,3 +1,40 @@
+# Gradle and Kotlin Multiplatform
+.gradle/
+.kotlin/
+.konan/
+build/
+
+# Android SDK and native build intermediates
+local.properties
+.cxx/
+.externalNativeBuild/
+
+# IDE metadata
+.idea/
+*.iml
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Local Codex runtime data
+/.codex/auth.json
+/.codex/.codex-global-state.json*
+/.codex/*.sqlite*
+/.codex/session_index.jsonl*
+/.codex/archived_sessions/
+/.codex/attachments/
+/.codex/cache/
+/.codex/log/
+/.codex/logs/
+/.codex/sessions/
+/.codex/tmp/
+/.codex/.tmp/
+/.codex/visualizations/
+/.codex/worktrees/
+
+# Documentation and OS metadata
 /site/
 /.venv/
 __pycache__/
+.DS_Store
+Thumbs.db
