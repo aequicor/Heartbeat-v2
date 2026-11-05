@@ -163,14 +163,10 @@ def validate(event, api):
 
 
 def approve(event, read_api, app_api):
-    pr_path, sha = validate(event, read_api)
+    # The App publishes only the required status. Pull request comments belong to
+    # GitHub Actions, so the conversation keeps a single bot author.
+    _, sha = validate(event, read_api)
     comment_url = event["comment"]["html_url"]
-    review = app_api(
-        f"{pr_path}/reviews",
-        {"event": "APPROVE", "commit_id": sha, "body": f"Owner attestation: {comment_url}"},
-    )
-    if review["state"] != "APPROVED" or review["commit_id"] != sha:
-        raise ReviewRejected("GitHub не записал одобрение для указанного SHA. Проверьте журнал запуска.")
 
     # A push during approval must never receive a status on its new head.
     _, current_sha = validate(event, read_api)

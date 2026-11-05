@@ -62,26 +62,22 @@ class OwnerReviewTest(unittest.TestCase):
             "/issues/comments/10": self.comment,
             "/pulls/2": self.pr,
             f"/commits/{SHA[:7]}": {"sha": SHA},
-            "/pulls/2/reviews": {"state": "APPROVED", "commit_id": SHA},
             f"/statuses/{SHA}": {},
             "/issues/comments/10/reactions": {},
         }[path]
 
     def test_approves_and_posts_status_on_reviewed_commit(self):
         self.assertEqual(approve(self.event, self.api, self.app_api), SHA)
-        review = self.app_api.call_args_list[0].args
-        self.assertEqual(review[0], "/pulls/2/reviews")
-        self.assertEqual(review[1]["commit_id"], SHA)
         status = self.app_api.call_args.args
         self.assertEqual(status[0], f"/statuses/{SHA}")
         self.assertEqual(status[1]["context"], "owner-review")
+        self.assertEqual(self.app_api.call_count, 1)
 
-    def test_short_sha_uses_full_head_for_approval_and_status(self):
+    def test_short_sha_uses_full_head_for_status(self):
         self.comment["body"] = self.comment["body"].replace(SHA, SHA[:7], 1)
         self.event["comment"]["body"] = self.comment["body"]
         approve(self.event, self.api, self.app_api)
         self.api.assert_any_call(f"/commits/{SHA[:7]}")
-        self.assertEqual(self.app_api.call_args_list[0].args[1]["commit_id"], SHA)
         self.assertEqual(self.app_api.call_args.args[0], f"/statuses/{SHA}")
 
     def test_rejects_sha_shorter_than_seven_digits(self):
@@ -239,26 +235,36 @@ class OwnerReviewTest(unittest.TestCase):
             validate(self.event, self.api)
 
     def test_push_during_approval_cannot_publish_status(self):
-        def response_with_push(path, payload=None):
-            if path == "/pulls/2/reviews":
-                self.pr["head"]["sha"] = "b" * 40
-            return self.response(path, payload)
+        response = self.api.side_effect
+        reads = []
 
-        self.app_api.side_effect = response_with_push
+        def response_with_push(path, payload=None):
+            if path == "/pulls/2":
+                reads.append(path)
+                if len(reads) == 2:
+                    self.pr["head"]["sha"] = "b" * 40
+            return response(path, payload)
+
+        self.api.side_effect = response_with_push
         with self.assertRaisesRegex(ReviewRejected, "SHA устарел"):
             approve(self.event, self.api, self.app_api)
-        self.app_api.assert_called_once()
+        self.app_api.assert_not_called()
 
     def test_unchecking_during_approval_cannot_publish_status(self):
-        def response_with_unchecked_item(path, payload=None):
-            if path == "/pulls/2/reviews":
-                self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
-            return self.response(path, payload)
+        response = self.api.side_effect
+        reads = []
 
-        self.app_api.side_effect = response_with_unchecked_item
+        def response_with_unchecked_item(path, payload=None):
+            if path == "/pulls/2":
+                reads.append(path)
+                if len(reads) == 2:
+                    self.pr["body"] = self.checked_body.replace("- [x] ", "- [ ] ", 1)
+            return response(path, payload)
+
+        self.api.side_effect = response_with_unchecked_item
         with self.assertRaisesRegex(ReviewRejected, "Пунктов без отметки"):
             approve(self.event, self.api, self.app_api)
-        self.app_api.assert_called_once()
+        self.app_api.assert_not_called()
 
     def test_feedback_reports_result_and_links_to_the_command_and_run(self):
         run_url = f"{REPOSITORY_URL}/actions/runs/42"
