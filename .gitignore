@@ -42,6 +42,10 @@ __pycache__/
 .venv/
 venv/
 
+# Local temporary files
+/tmp/
+/.tmp/
+
 # Documentation and OS metadata
 /site/
 .DS_Store
