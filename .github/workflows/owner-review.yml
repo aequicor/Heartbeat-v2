@@ -6,8 +6,10 @@ on:
 
 permissions:
   contents: read
+  # The review result is a comment on a pull request. For pull request resources the
+  # issue comment endpoints require the pull requests permission, not the issues one.
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   approve:
@@ -30,6 +32,10 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
           sparse-checkout: .github/scripts
+      - name: Acknowledge the review command
+        run: python .github/scripts/owner_review.py acknowledge
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Validate the owner comment and current PR
         id: validate
         run: python .github/scripts/owner_review.py validate
