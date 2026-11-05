@@ -8,15 +8,16 @@ description: >
   CValuesRef, memScoped, nativeHeap), callbacks via staticCFunction, StableRef, @CName and
   @ObjCName export, shared/static library building (.so/.dylib/.dll plus the generated
   *_api.h symbols gateway), framework header generation, @Throws and
-  suspend->completion-handler mapping, and the runtime trampolines that cross the boundary.
-  Use when writing or reviewing Kotlin/Native interop code on Windows, Linux, macOS, or iOS,
-  platform.* imports, cinterop .def files, native callbacks or function pointers, or
-  diagnosing crashes, leaks, and "InvalidMutabilityException"/"Symbol not found" errors at
-  the native boundary.
+  suspend->completion-handler mapping, the runtime trampolines that cross the boundary, and
+  memory/CPU management (the tracing GC, native-vs-GC heaps, coroutine dispatchers, and
+  thread affinity). Use when writing or reviewing Kotlin/Native interop code on Windows,
+  Linux, macOS, or iOS, platform.* imports, cinterop .def files, native callbacks or
+  function pointers, or diagnosing crashes, leaks, GC pauses, and
+  "InvalidMutabilityException"/"Symbol not found" errors at the native boundary.
 license: Apache-2.0
 metadata:
   author: Heartbeat
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Kotlin/Native Interop — The Bidirectional Bridge
@@ -266,6 +267,42 @@ export only when the task or build already uses it.
   missing symbol can crash at launch even if never called — wrap conditional class usage
   in a Swift/ObjC availability check.
 
+## Memory and CPU management
+
+### Memory
+
+- **New memory manager (default, stable).** Objects live in one shared heap reachable from
+  any thread — there is no freezing and no `InvalidMutabilityException`. The legacy
+  `Worker`/`TransferMode`/`.freeze()` model is gone; use coroutines and plain shared state.
+- **Tracing GC.** A concurrent mark-and-sweep collector runs on a separate thread; the mark
+  phase is parallelized across app/GC threads, so pauses are short but consume CPU. Force a
+  cycle with `kotlin.native.internal.GC.collect()`; watch it via
+  `-Xruntime-logs=gc=info` (stderr) and check leaks with `GC.lastGCInfo()`.
+- **Tuning knobs** (`gradle.properties`): `kotlin.native.binary.gc=pmcs` (fallback parallel
+  mark) or `=noop` (disable — tests/short-lived programs only), `gcMarkSingleThreaded=true`,
+  `pagedAllocator=false`, `latin1Strings=true`.
+- **Two heaps at the boundary.** Kotlin objects live on the GC heap; native buffers live on
+  the native heap (`memScoped`/`nativeHeap`). Never let a pointer to one outlive the other's
+  lifetime (see Direction 1).
+- **Ownership contract.** `StableRef` (Kotlin side) and `kref_*` +
+  `DisposeStablePointer`/`DisposeString` (C gateway) are what let native code hold Kotlin
+  objects; release exactly once or the GC can never reclaim them.
+- **ObjC ARC.** Kotlin's GC cooperates with Objective-C ARC; wrap tight loops that create
+  many autoreleased ObjC objects in `autoreleasepool { }`.
+
+### CPU and threads
+
+- **Coroutines, not Worker.** Use `Dispatchers.Default` (background pool) and
+  `Dispatchers.Main` (UI thread); `newSingleThreadContext`/`newFixedThreadPoolContext` give
+  explicit pools. UI on iOS/Android must run on the main thread (`Dispatchers.Main`).
+- **Thread affinity across the bridge.** A native callback runs on the *caller's* native
+  thread; the trampoline attaches that thread to the runtime but does not move the work —
+  hop to `Dispatchers.Main`/`Default` explicitly when the callee must run elsewhere.
+- **Don't block the UI thread.** A long/blocking native call or `GC.collect()` on the main
+  thread stalls rendering; offload to a background dispatcher and switch back.
+- **Per-thread state.** Use `@ThreadLocal` (`kotlin.native.concurrent`) for thread-local
+  objects; a plain `object` singleton is shared across threads.
+
 ## Invariants and pitfalls (check these first when debugging)
 
 1. `staticCFunction` lambda capturing state → compile error. Use `StableRef` for state.
@@ -285,6 +322,11 @@ export only when the task or build already uses it.
     toolchain.
 13. C holds a `kref_*` handle and never calls `DisposeStablePointer`/`DisposeString` → the
     Kotlin object leaks; release exactly once.
+14. `.freeze()`/`Worker`/`TransferMode` are gone in the new MM — use coroutines and
+    shared-heap state.
+15. A native callback runs on the caller's thread; marshal to `Dispatchers.Main`/`Default`
+    instead of assuming the current thread.
+16. Long native calls or `GC.collect()` on the main/UI thread → UI hitches; offload first.
 
 ## Workflow
 
@@ -298,6 +340,6 @@ export only when the task or build already uses it.
    and `StableRef` for callbacks/state; on Windows generate the import lib or LoadLibrary.
 5. Outbound to ObjC/Swift (Apple only): declare the `framework` binary, apply
    `@ObjCName`/`@Throws`/`@HiddenFromObjC` where the API needs shaping, verify the header.
-6. For each crossing, state the ownership: memory lifetime (scope vs heap) and object
-   lifetime (`StableRef` dispose / `DisposeStablePointer` site). Then write the smallest
-   compile-and-run check.
+6. For each crossing, state the ownership: memory lifetime (GC heap vs native heap), object
+   lifetime (`StableRef` dispose / `DisposeStablePointer` site), and thread (which
+   dispatcher/thread runs each side). Then write the smallest compile-and-run check.
