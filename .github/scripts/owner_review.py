@@ -24,6 +24,29 @@ TASK_ITEM = re.compile(r"- \[([ xX])\] (\S.*)")
 COMMIT_GROUP = re.compile(
     r"\*\*\[([0-9a-f]{7,40})\]\((https://github\.com/[^()\s]+/commit/([0-9a-f]{40}))\)\*\* — \S.*"
 )
+CONVERSATIONS_QUERY = """query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 1) {
+            nodes {
+              url
+            }
+          }
+        }
+      }
+    }
+  }
+}"""
 
 
 class ReviewRejected(Exception):
@@ -80,17 +103,7 @@ def validate_checklist(body, sha, repository_url):
     return entries
 
 
-def github_request(path, payload=None, *, token):
-    request = Request(
-        f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}{path}",
-        data=None if payload is None else json.dumps(payload).encode("utf-8"),
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
+def send(request):
     try:
         with urlopen(request, timeout=15) as response:
             return json.load(response)
@@ -98,6 +111,83 @@ def github_request(path, payload=None, *, token):
         raise ReviewRejected(f"Запрос к GitHub API завершился ошибкой HTTP {error.code}.") from error
     except URLError as error:
         raise ReviewRejected("GitHub API недоступен. Повторите команду позже.") from error
+
+
+def headers(token):
+    return {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def github_request(path, payload=None, *, token):
+    return send(
+        Request(
+            f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}{path}",
+            data=None if payload is None else json.dumps(payload).encode("utf-8"),
+            headers=headers(token),
+        )
+    )
+
+
+def github_graphql(query, variables, *, token):
+    url = os.environ.get("GITHUB_GRAPHQL_URL") or f"{os.environ['GITHUB_API_URL']}/graphql"
+    payload = send(
+        Request(
+            url,
+            data=json.dumps({"query": query, "variables": variables}).encode("utf-8"),
+            headers=headers(token),
+        )
+    )
+    if payload.get("errors"):
+        raise ReviewRejected("GitHub API отклонил запрос GraphQL.")
+    return payload["data"]
+
+
+def unresolved_threads(graphql, number):
+    """Return review conversations that GitHub still counts as open."""
+    owner, _, name = os.environ["GITHUB_REPOSITORY"].partition("/")
+    threads = []
+    cursor = None
+    while True:
+        data = graphql(
+            CONVERSATIONS_QUERY,
+            {"owner": owner, "name": name, "number": number, "after": cursor},
+        )
+        page = data["repository"]["pullRequest"]["reviewThreads"]
+        threads.extend(thread for thread in page["nodes"] if not thread["isResolved"])
+        cursor = page["pageInfo"]["endCursor"]
+        if not page["pageInfo"]["hasNextPage"] or not cursor:
+            return threads
+
+
+def describe_threads(threads):
+    def label(thread):
+        where = thread.get("path") or "PR"
+        if thread.get("line"):
+            where = f"{where}:{thread['line']}"
+        comments = thread["comments"]["nodes"]
+        text = f"[`{where}`]({comments[0]['url']})" if comments else f"`{where}`"
+        return f"{text} (устаревшее)" if thread["isOutdated"] else text
+
+    shown = ", ".join(label(thread) for thread in threads[:5])
+    note = f"Незакрытых обсуждений — {len(threads)}. Закройте их: {shown}"
+    if len(threads) > 5:
+        note += f" и ещё {len(threads) - 5}"
+    return f"{note}."
+
+
+def conversation_summary(graphql, number):
+    """Describe open conversations without blocking the review result."""
+    try:
+        threads = unresolved_threads(graphql, number)
+    except ReviewRejected as error:
+        print(f"Conversation check was skipped: {error}", file=sys.stderr)
+        return ""
+    return describe_threads(threads) if threads else ""
+
 
 
 # GitHub reaction contents are limited to the emoji below. ✅ and ❌ are not reactions,
@@ -184,10 +274,16 @@ def approve(event, read_api, app_api):
     return sha
 
 
-def post_feedback(event, api, *, outcome, merge_outcome, reason, app_failed, run_url):
+def post_feedback(event, api, *, outcome, merge_outcome, reason, app_failed, run_url, conversations=""):
     if outcome == "success":
         result = "**Ревью принято.** Статус `owner-review` выставлен для проверенного коммита."
-        if merge_outcome == "success":
+        if conversations:
+            result += f" {conversations}"
+            if merge_outcome == "success":
+                result += " GitHub выполнит squash после закрытия обсуждений."
+            else:
+                result += " Автослияние не запрошено. Включите его или выполните слияние после закрытия обсуждений."
+        elif merge_outcome == "success":
             result += " GitHub выполнит squash, когда пройдут обязательные проверки и будут закрыты обсуждения."
         elif merge_outcome == "failure":
             result += " Запрос автослияния завершился ошибкой. Подробности есть в журнале запуска."
@@ -210,6 +306,7 @@ def main():
     args = parser.parse_args()
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     read_api = partial(github_request, token=os.environ["GH_TOKEN"])
+    read_graphql = partial(github_graphql, token=os.environ["GH_TOKEN"])
 
     try:
         if args.action == "acknowledge":
@@ -231,6 +328,7 @@ def main():
                 app_failed=os.environ["APP_OUTCOME"] == "failure",
                 run_url=f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}"
                 f"/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+                conversations=conversation_summary(read_graphql, event["issue"]["number"]),
             )
     except ReviewRejected as error:
         if args.action != "feedback" and (output := os.environ.get("GITHUB_OUTPUT")):

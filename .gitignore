@@ -49,5 +49,8 @@ venv/
 
 # Documentation and OS metadata
 /site/
+/.venv/
+/.scratch/
+__pycache__/
 .DS_Store
 Thumbs.db

@@ -1,18 +1,51 @@
 import copy
+import os
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from owner_review import ReviewRejected, acknowledge, approve, post_feedback, validate
+from owner_review import (
+    ReviewRejected,
+    acknowledge,
+    approve,
+    conversation_summary,
+    post_feedback,
+    unresolved_threads,
+    validate,
+)
 
 
 SHA = "a" * 40
 EARLIER_SHA = "b" * 40
 REPOSITORY_URL = "https://github.com/aequicor/Heartbeat-v2"
 PR_URL = f"{REPOSITORY_URL}/pull/2"
+REPOSITORY_ENV = {"GITHUB_REPOSITORY": "aequicor/Heartbeat-v2"}
 TEMPLATE = Path(__file__).resolve().parents[1] / "pull_request_template.md"
 EARLIER_GROUP = f"**[{EARLIER_SHA[:7]}]({REPOSITORY_URL}/commit/{EARLIER_SHA})** — Расписание"
 HEAD_GROUP = f"**[{SHA[:7]}]({REPOSITORY_URL}/commit/{SHA})** — Проверка ревью"
+
+
+def conversation(path=".github/workflows/verify-platform.yml", line=7, *, resolved=False, outdated=False):
+    return {
+        "isResolved": resolved,
+        "isOutdated": outdated,
+        "path": path,
+        "line": line,
+        "comments": {"nodes": [{"url": f"{PR_URL}#discussion_r1"}]},
+    }
+
+
+def conversations_page(nodes, next_page=False):
+    return {
+        "repository": {
+            "pullRequest": {
+                "reviewThreads": {
+                    "pageInfo": {"hasNextPage": next_page, "endCursor": "cursor" if next_page else None},
+                    "nodes": nodes,
+                }
+            }
+        }
+    }
 
 
 class OwnerReviewTest(unittest.TestCase):
@@ -310,6 +343,73 @@ class OwnerReviewTest(unittest.TestCase):
         api = Mock(side_effect=fail_reaction)
         post_feedback(self.event, api, outcome="success", merge_outcome="success", reason="", app_failed=False, run_url="u")
         self.assertEqual(len(api.call_args_list), 2)
+
+    @patch.dict(os.environ, REPOSITORY_ENV)
+    def test_unresolved_threads_skip_closed_conversations_and_follow_pages(self):
+        graphql = Mock(
+            side_effect=[
+                conversations_page([conversation(), conversation(path="docs/setup.md", resolved=True)], next_page=True),
+                conversations_page([conversation(path="platform/ios/Heartbeat.xcodeproj/project.pbxproj", outdated=True)]),
+            ]
+        )
+        threads = unresolved_threads(graphql, 2)
+        self.assertEqual(
+            [thread["path"] for thread in threads],
+            [".github/workflows/verify-platform.yml", "platform/ios/Heartbeat.xcodeproj/project.pbxproj"],
+        )
+        self.assertEqual(graphql.call_count, 2)
+
+    @patch.dict(os.environ, REPOSITORY_ENV)
+    def test_conversation_summary_names_threads_and_outdated_ones(self):
+        graphql = Mock(side_effect=[conversations_page([conversation(outdated=True)])])
+        summary = conversation_summary(graphql, 2)
+        self.assertIn("Незакрытых обсуждений — 1.", summary)
+        self.assertIn("verify-platform.yml:7", summary)
+        self.assertIn(f"{PR_URL}#discussion_r1", summary)
+        self.assertIn("(устаревшее)", summary)
+
+    @patch.dict(os.environ, REPOSITORY_ENV)
+    def test_conversation_summary_lists_at_most_five_threads(self):
+        graphql = Mock(side_effect=[conversations_page([conversation(path=f"file{i}.md") for i in range(7)])])
+        summary = conversation_summary(graphql, 2)
+        self.assertIn("Незакрытых обсуждений — 7.", summary)
+        self.assertIn("и ещё 2", summary)
+        self.assertEqual(summary.count("#discussion_r1"), 5)
+
+    @patch.dict(os.environ, REPOSITORY_ENV)
+    def test_conversation_summary_is_empty_when_all_conversations_are_closed(self):
+        graphql = Mock(side_effect=[conversations_page([conversation(resolved=True)])])
+        self.assertEqual(conversation_summary(graphql, 2), "")
+
+    @patch.dict(os.environ, REPOSITORY_ENV)
+    def test_conversation_check_does_not_block_the_review(self):
+        graphql = Mock(side_effect=ReviewRejected("GitHub API недоступен. Повторите команду позже."))
+        self.assertEqual(conversation_summary(graphql, 2), "")
+
+    def test_feedback_reports_open_conversations_after_approval(self):
+        note = "Незакрытых обсуждений — 1. Закройте их: [`a.md:1`](url)."
+        cases = (
+            ("success", "выполнит squash после закрытия обсуждений"),
+            ("failure", "Автослияние не запрошено"),
+        )
+        for merge_outcome, expected in cases:
+            with self.subTest(merge_outcome=merge_outcome):
+                api = Mock()
+                post_feedback(
+                    self.event,
+                    api,
+                    outcome="success",
+                    merge_outcome=merge_outcome,
+                    reason="",
+                    app_failed=False,
+                    run_url="u",
+                    conversations=note,
+                )
+                body = api.call_args_list[0].args[1]["body"]
+                self.assertIn("Ревью принято", body)
+                self.assertIn(note, body)
+                self.assertIn(expected, body)
+                self.assertNotIn("завершился ошибкой", body)
 
 
 if __name__ == "__main__":
