@@ -6,8 +6,10 @@ on:
 
 permissions:
   contents: read
+  # The review result is a comment on a pull request. For pull request resources the
+  # issue comment endpoints require the pull requests permission, not the issues one.
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 jobs:
   approve:
