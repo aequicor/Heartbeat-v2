@@ -1,5 +1,8 @@
 name: Verify platform entry points
 
+# This workflow compiles and launches every platform entry point, so it is not
+# required on pull requests. It runs only on demand: when the `verify-platform`
+# label is added to a pull request, and never otherwise.
 on:
   pull_request:
     branches: [master]
@@ -8,6 +11,8 @@ on:
 permissions:
   contents: read
 
+# One run per pull request and label. Adding the label again cancels the
+# previous run of the same pull request instead of queueing a duplicate.
 concurrency:
   group: verify-platform-${{ github.event.pull_request.number }}-${{ github.event.label.name }}
   cancel-in-progress: true
