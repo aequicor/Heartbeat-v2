@@ -1,0 +1,3 @@
+headers = math_bridge.h
+headerFilter = math_bridge.h
+package = sample.nativebridge
