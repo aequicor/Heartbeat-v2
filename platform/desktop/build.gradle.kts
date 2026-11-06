@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
+import org.gradle.api.GradleException
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -23,6 +24,8 @@ compose.desktop {
         mainClass = "io.github.aequicor.heartbeat.MainKt"
 
         nativeDistributions {
+            // Windows is packaged by Inno Setup (packageInnoSetup), not by the
+            // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Heartbeat"
             packageVersion = desktopVersion
@@ -30,17 +33,18 @@ compose.desktop {
     }
 }
 
-val iscc = providers.environmentVariable("ISCC").orNull
-    ?: providers.environmentVariable("INNO_SETUP_HOME").orNull?.let { "$it/ISCC.exe" }
-    ?: listOfNotNull(
-        providers.environmentVariable("LOCALAPPDATA").orNull
-            ?.let { "$it/Programs/Inno Setup 6/ISCC.exe" },
-        providers.environmentVariable("ProgramFiles(x86)").orNull
-            ?.let { "$it/Inno Setup 6/ISCC.exe" },
-        providers.environmentVariable("ProgramFiles").orNull
-            ?.let { "$it/Inno Setup 6/ISCC.exe" },
-    ).firstOrNull { File(it).isFile }
-    ?: "ISCC.exe"
+// Resolve the Inno Setup compiler (ISCC.exe) from explicit environment paths,
+// standard install directories, or finally PATH.
+val isccCandidates = listOfNotNull(
+    providers.environmentVariable("ISCC").orNull,
+    providers.environmentVariable("INNO_SETUP_HOME").orNull?.let { "$it/ISCC.exe" },
+    providers.environmentVariable("LOCALAPPDATA").orNull
+        ?.let { "$it/Programs/Inno Setup 6/ISCC.exe" },
+    providers.environmentVariable("ProgramFiles(x86)").orNull
+        ?.let { "$it/Inno Setup 6/ISCC.exe" },
+    providers.environmentVariable("ProgramFiles").orNull
+        ?.let { "$it/Inno Setup 6/ISCC.exe" },
+).filter { File(it).isFile }
 
 val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/Heartbeat")
 val installerDir = layout.buildDirectory.dir("compose/binaries/main/innosetup")
@@ -51,7 +55,7 @@ val packageInnoSetup = tasks.register<Exec>("packageInnoSetup") {
     dependsOn("createDistributable")
     onlyIf { isWindows }
     workingDir = projectDir
-    executable = iscc
+    executable = isccCandidates.firstOrNull() ?: "ISCC.exe"
     args(
         "/DAppVersion=$desktopVersion",
         "/DSourceDir=${appImageDir.get().asFile.absolutePath}",
@@ -64,6 +68,16 @@ val packageInnoSetup = tasks.register<Exec>("packageInnoSetup") {
             "Application image is missing: $image. Run createDistributable first."
         }
         installerDir.get().asFile.mkdirs()
+        if (isccCandidates.isEmpty() &&
+            System.getenv("PATH").orEmpty().split(File.pathSeparator)
+                .filter { it.isNotEmpty() }
+                .none { File(it, "ISCC.exe").isFile }
+        ) {
+            throw GradleException(
+                "Inno Setup 6.3 or newer is required to build the Windows installer. " +
+                    "Set ISCC or INNO_SETUP_HOME, or add ISCC.exe to PATH.",
+            )
+        }
     }
 }
 

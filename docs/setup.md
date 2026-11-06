@@ -45,8 +45,8 @@ Desktop-приложение работает на JVM и использует C
 
 Установщик текущей ОС собирает `gradlew :platform:desktop:packageDistributionForCurrentOS`.
 На Windows это установщик Inno Setup: `Heartbeat-<версия>-setup.exe` в
-`platform/desktop/build/compose/binaries/main/innosetup`. Нужен Inno Setup 6; компилятор `ISCC.exe`
-ищется в `ISCC`, `INNO_SETUP_HOME` или стандартном каталоге установки. Образ приложения с
+`platform/desktop/build/compose/binaries/main/innosetup`. Нужен Inno Setup 6.3 или новее; компилятор
+`ISCC.exe` ищется в `ISCC`, `INNO_SETUP_HOME`, стандартном каталоге установки или в `PATH`. Образ приложения с
 `Heartbeat.exe` собирает `gradlew :platform:desktop:createDistributable`.
 
 ## Шаг 5. Запусти приложение на Android

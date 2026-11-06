@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #error AppVersion is not defined
 #endif
 
 #ifndef SourceDir
@@ -18,7 +18,7 @@ AppId={{6DB8F558-591F-45BD-A896-4F57C84EEE0F}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={userpf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
