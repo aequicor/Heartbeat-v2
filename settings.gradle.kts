@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Heartbeat"
-include(":platform:android", ":platform:windows", ":platform:linux", ":platform:macos")
+include(":platform:android", ":platform:desktop")
