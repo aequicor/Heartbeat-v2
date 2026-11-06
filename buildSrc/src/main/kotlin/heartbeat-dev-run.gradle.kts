@@ -49,7 +49,7 @@ class DevRuns(private val project: Project) {
             osPrefix = "windows",
             archs = setOf("amd64", "x86_64"),
             module = ":platform:desktop",
-            runTask = "run",
+            runTask = "runDistributable",
             label = "Windows x64",
         ),
         EntryPoint(
@@ -57,7 +57,7 @@ class DevRuns(private val project: Project) {
             osPrefix = "linux",
             archs = setOf("amd64", "x86_64"),
             module = ":platform:desktop",
-            runTask = "run",
+            runTask = "runDistributable",
             label = "Linux x64",
         ),
         EntryPoint(
@@ -65,7 +65,7 @@ class DevRuns(private val project: Project) {
             osPrefix = "mac",
             archs = setOf("aarch64"),
             module = ":platform:desktop",
-            runTask = "run",
+            runTask = "runDistributable",
             label = "macOS ARM64",
         ),
     )
