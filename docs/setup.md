@@ -41,8 +41,13 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 | `runDevMacos` | macOS ARM64 |
 
 Desktop-приложение работает на JVM и использует Compose Multiplatform. Первый запуск скачивает
-зависимости Compose и Gradle; нужна сеть. Установщик текущей ОС собирает
-`gradlew :platform:desktop:packageDistributionForCurrentOS`.
+зависимости Compose и Gradle; нужна сеть.
+
+Установщик текущей ОС собирает `gradlew :platform:desktop:packageDistributionForCurrentOS`.
+На Windows это установщик Inno Setup: `Heartbeat-<версия>-setup.exe` в
+`platform/desktop/build/compose/binaries/main/innosetup`. Нужен Inno Setup 6; компилятор `ISCC.exe`
+ищется в `ISCC`, `INNO_SETUP_HOME` или стандартном каталоге установки. Образ приложения с
+`Heartbeat.exe` собирает `gradlew :platform:desktop:createDistributable`.
 
 ## Шаг 5. Запусти приложение на Android
 
