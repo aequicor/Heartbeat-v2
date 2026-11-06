@@ -23,7 +23,7 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 - **Tools → SDK Manager**: установлены SDK Platform 36 и Platform-Tools.
 - **Settings → Build, Execution, Deployment → Build Tools → Gradle**: Gradle JDK — `Embedded JDK
   (JetBrains Runtime 21)`, дистрибутив — из `gradle-wrapper.properties`. Обёртка скачает
-  Gradle 9.5.1.
+  Gradle 9.8.2.
 
 ## Шаг 4. Запусти desktop-приложение
 
