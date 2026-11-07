@@ -18,4 +18,7 @@ internal object HbComponentStates {
 
     /** Border of a focused or invalid field and of a focused button. */
     val focusedBorderWidth = 2.dp
+
+    /** Content overlay of a pressed button: lightens the container without a second palette. */
+    const val PRESSED_OVERLAY_ALPHA = 0.12f
 }

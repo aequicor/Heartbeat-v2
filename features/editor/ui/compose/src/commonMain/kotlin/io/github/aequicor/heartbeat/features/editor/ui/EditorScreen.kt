@@ -28,12 +28,14 @@ fun EditorScreen(
         HbTextField(
             value = state.title,
             onValueChange = { store.dispatch(EditorAction.TitleChanged(it)) },
+            label = "Заголовок",
             placeholder = "Заголовок",
             enabled = fieldsEnabled,
         )
         HbTextField(
             value = state.content,
             onValueChange = { store.dispatch(EditorAction.ContentChanged(it)) },
+            label = "Содержимое",
             placeholder = "Содержимое",
             enabled = fieldsEnabled,
             singleLine = false,
