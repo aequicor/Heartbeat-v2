@@ -19,6 +19,7 @@ include(":di:api")
 include(":core:platform-api", ":core:network", ":core:database", ":core:filesystem")
 include(
     ":designsystem:foundation",
+    ":designsystem:patterns",
     ":designsystem:compose:theme",
     ":designsystem:compose:resources",
     ":designsystem:compose:components",

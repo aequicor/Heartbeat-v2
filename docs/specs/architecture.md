@@ -593,6 +593,14 @@ designsystem/
 │       ├── HbGeometry.kt
 │       └── HbLayout.kt
 │
+├── patterns/
+│   └── src/commonMain/kotlin/
+│       ├── HbSessionRow.kt
+│       ├── HbMessage.kt
+│       ├── HbToolActivity.kt
+│       ├── HbApprovalRequest.kt
+│       └── HbUsageDisplay.kt
+│
 ├── compose/
 │   ├── theme/
 │   │   ├── HbTheme.kt
@@ -627,6 +635,7 @@ designsystem/
 - Публичный API Design System имеет префикс `Hb`: компоненты (`HbButton`, `HbTextField`, `HbDialog`), токены и тема (`HbColors`, `HbTheme`).
 - `foundation` хранит портативную схему и значения токенов: цвета sRGB, логические размеры, масштабируемую типографику, длительности, кривые и идентификаторы иконок. Модуль не импортирует Compose и не содержит типов `Color`, `Dp`, `TextStyle`, объектов навигации, DI и клиентов среды исполнения.
 - `compose` разрешает портативные токены в типы Compose; `theme` и `resources` внутри него Compose-ориентированы.
+- `patterns` содержит продуктовые паттерны Heartbeat: строку сессии, сообщение, активность инструмента, запрос подтверждения и отображение расхода. Паттерны получают модели представления и callbacks, а бизнес-правила остаются в feature store.
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
 - Фичи могут использовать Design System через свои UI-модули.
