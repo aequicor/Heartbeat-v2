@@ -860,7 +860,7 @@ plugins {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation(projects.features.editor.api)
+        implementation(project(":features:editor:api"))
         implementation(libs.kotlinx.coroutines.core)
     }
 }
@@ -876,7 +876,7 @@ plugins {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation(projects.features.editor.api)
+        implementation(project(":features:editor:api"))
         implementation(libs.decompose)
     }
 }
@@ -891,9 +891,9 @@ plugins {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation(projects.features.editor.api)
+        implementation(project(":features:editor:api"))
         implementation(
-            projects.designsystem.compose.components
+            project(":designsystem:compose:components")
         )
     }
 }
