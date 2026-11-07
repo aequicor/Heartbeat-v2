@@ -8,16 +8,16 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 // Enforces the rules from docs/specs/architecture.md ("Запрещённые зависимости"):
 // declared project and module dependencies, resolved compile/runtime graphs of the
 // universal `impl` modules (JVM, Android and Kotlin/Native), and source-level checks
-// for imports and Store naming. The task runs as part of `build` and `check`.
+// for forbidden imports. The naming standard is checked by the Konsist tests in
+// `:architecture-tests`, which this task runs. The task runs as part of `build` and `check`.
 
 val violations = sortedSetOf<String>()
 
 private val importPattern = Regex("""(?m)^\s*import\s+([\w.]+)""")
-private val declarationPattern = Regex("""\b(?:class|interface|object)\s+([A-Z]\w*)""")
 
 val checkTask = tasks.register("architectureCheck") {
     group = "verification"
-    description = "Checks module dependencies, classpaths and naming against the architecture rules."
+    description = "Checks module dependencies, classpaths and imports against the architecture rules."
     doLast {
         violations.clear()
         rootProject.subprojects.forEach(::checkProject)
@@ -109,11 +109,6 @@ private fun checkSources(project: Project) {
         val relativePath = file.relativeTo(project.projectDir).path
         importPattern.findAll(text).forEach { match ->
             ArchitectureRules.forbiddenImport(project.path, match.groupValues[1])?.let { rule ->
-                report(project.path, relativePath, rule)
-            }
-        }
-        declarationPattern.findAll(text).forEach { match ->
-            ArchitectureRules.namingViolation(project.path, match.groupValues[1])?.let { rule ->
                 report(project.path, relativePath, rule)
             }
         }

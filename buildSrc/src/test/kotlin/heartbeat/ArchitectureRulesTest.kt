@@ -102,41 +102,6 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun featuresMustUseStoreNaming() {
-        assertEquals(
-            "features must name the state holder <Feature>Store, not EditorController",
-            ArchitectureRules.namingViolation(":features:editor:api", "EditorController"),
-        )
-        assertEquals(
-            "features must name the state holder <Feature>Store, not EditorViewModel",
-            ArchitectureRules.namingViolation(":features:editor:impl", "EditorViewModel"),
-        )
-    }
-
-    @Test
-    fun apiStoreContractMustMatchFeatureName() {
-        assertEquals(
-            "api Store contract must start with Editor: NoteStore",
-            ArchitectureRules.namingViolation(":features:editor:api", "NoteStore"),
-        )
-    }
-
-    @Test
-    fun implStoreImplementationMustStartWithDefault() {
-        assertEquals(
-            "impl Store implementation must start with Default: EditorStore",
-            ArchitectureRules.namingViolation(":features:editor:impl", "EditorStore"),
-        )
-    }
-
-    @Test
-    fun storeNamingAllowsValidNames() {
-        assertNull(ArchitectureRules.namingViolation(":features:editor:api", "EditorStore"))
-        assertNull(ArchitectureRules.namingViolation(":features:editor:api", "EditorStoreFactory"))
-        assertNull(ArchitectureRules.namingViolation(":features:editor:impl", "DefaultEditorStore"))
-    }
-
-    @Test
     fun classpathConfigurationSelectionCoversJvmAndroidAndNative() {
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmRuntimeClasspath", true))
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmCompileClasspath", true))

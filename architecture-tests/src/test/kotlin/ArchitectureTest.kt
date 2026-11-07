@@ -1,17 +1,28 @@
 import com.lemonappdev.konsist.api.Konsist
 import com.lemonappdev.konsist.api.architecture.KoArchitectureCreator.assertArchitecture
 import com.lemonappdev.konsist.api.architecture.Layer
+import com.lemonappdev.konsist.api.declaration.KoBaseDeclaration
+import com.lemonappdev.konsist.api.declaration.KoClassDeclaration
+import com.lemonappdev.konsist.api.declaration.KoFileDeclaration
+import com.lemonappdev.konsist.api.declaration.KoFunctionDeclaration
+import com.lemonappdev.konsist.api.declaration.KoInterfaceDeclaration
+import com.lemonappdev.konsist.api.declaration.KoObjectDeclaration
+import com.lemonappdev.konsist.api.provider.KoAnnotationProvider
+import com.lemonappdev.konsist.api.provider.KoNameProvider
+import com.lemonappdev.konsist.api.provider.modifier.KoVisibilityModifierProvider
 import com.lemonappdev.konsist.api.verify.assertTrue
+import org.junit.Assert
 import org.junit.Test
 
 /**
  * Konsist architecture tests for the feature-first structure from
  * `docs/specs/architecture.md`.
  *
- * They read production sources of every feature module. Module-level dependency
- * direction and framework bans stay in the `heartbeat-architecture-check` Gradle
- * gate; these tests add the source-level checks that Gradle cannot express:
- * contract/implementation matching and intra-module layer direction.
+ * They read production sources of every feature and Design System module.
+ * Module-level dependency direction and framework bans stay in the
+ * `heartbeat-architecture-check` Gradle gate; these tests add the source-level
+ * checks that Gradle cannot express: the naming standard, contract/implementation
+ * matching and intra-module layer direction.
  */
 class ArchitectureTest {
 
@@ -20,16 +31,63 @@ class ArchitectureTest {
     private val featurePrefix = "$rootPackage.features"
 
     /** Production sources of all feature modules; the test runs with workingDir = repo root. */
-    private val scope = Konsist.scopeFromProduction(moduleName = ":features..").also {
+    private val featureScope = Konsist.scopeFromProduction(moduleName = ":features..").also {
         require(it.files.isNotEmpty()) { "No production Kotlin files found in features" }
+    }
+
+    /** Production sources of the Design System modules. */
+    private val designSystemScope = Konsist.scopeFromProduction(moduleName = ":designsystem..").also {
+        require(it.files.isNotEmpty()) { "No production Kotlin files found in the designsystem" }
     }
 
     /** Matches `...features.<any feature>.<role>` and its subpackages. */
     private fun rolePattern(role: String): String = "$featurePrefix..$role.."
 
     @Test
+    fun declarationsFollowNamingStandard() {
+        Assert.assertEquals(listOf<String>(), namingViolations(featureScope.files))
+    }
+
+    @Test
+    fun designSystemApiUsesHbPrefix() {
+        Assert.assertEquals(listOf<String>(), namingViolations(designSystemScope.files))
+    }
+
+    @Test
+    fun apiContractsArePublic() {
+        val violations = featureScope.files
+            .filter { file -> file.packagee?.name?.endsWith(".api") == true }
+            .flatMap { file ->
+                file.declarations(includeNested = false, includeLocal = false)
+                    .filter { it.kind() != DeclarationKind.OTHER }
+                    .filterNot { it.isExplicitlyPublic() }
+                    .map { "${file.projectPath}: api contract must be public: ${it.nameOrNull()}" }
+            }
+
+        Assert.assertEquals(listOf<String>(), violations)
+    }
+
+    @Test
+    fun nestedActionAndEffectMembersAreNotContracts() {
+        val actionFile = featureScope.files.single { it.projectPath.endsWith("EditorAction.kt") }
+        val apiPackage = "$featurePrefix.editor.api"
+        val nested = actionFile.classes(includeNested = true, includeLocal = false)
+            .map { it.name }
+            .filter { it != "EditorAction" }
+
+        Assert.assertTrue("Nested action members are parsed: $nested", "TitleChanged" in nested)
+        nested.forEach { name ->
+            Assert.assertNotNull(
+                "Nested $name must not pass the api contract rule",
+                NamingRules.violation(apiPackage, DeclarationKind.CLASS, name),
+            )
+        }
+        Assert.assertEquals(listOf<String>(), namingViolations(listOf(actionFile)))
+    }
+
+    @Test
     fun defaultImplementationImplementsSameNamedContract() {
-        scope.classesAndObjects(includeNested = false, includeLocal = false)
+        featureScope.classesAndObjects(includeNested = false, includeLocal = false)
             .filter { it.name.startsWith("Default") }
             .assertTrue { implementation ->
                 implementation.parentInterfaces(indirectParents = true).any { parent ->
@@ -42,7 +100,7 @@ class ArchitectureTest {
 
     @Test
     fun featureLayersFollowImportDirection() {
-        scope.assertArchitecture {
+        featureScope.assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domain = Layer("Domain", rolePattern("domain"))
             val data = Layer("Data", rolePattern("data"))
@@ -60,4 +118,46 @@ class ArchitectureTest {
             ui.dependsOn(api)
         }
     }
+
+    private fun namingViolations(files: List<KoFileDeclaration>): List<String> =
+        files.flatMap { file ->
+            file.declarations(includeNested = false, includeLocal = false).mapNotNull { declaration ->
+                // Imports and the package directive are declarations for Konsist too.
+                val kind = declaration.kind()
+                if (kind == DeclarationKind.OTHER) return@mapNotNull null
+                val name = declaration.nameOrNull() ?: return@mapNotNull null
+                NamingRules.violation(
+                    packageName = file.packagee?.name.orEmpty(),
+                    declarationKind = kind,
+                    declarationName = name,
+                    isPublic = declaration.isPublicOrDefault(),
+                    annotations = declaration.annotationNames(),
+                )?.let { "${file.projectPath}: $it" }
+            }
+        }
+
+    private fun KoBaseDeclaration.kind(): DeclarationKind = when (this) {
+        is KoInterfaceDeclaration -> DeclarationKind.INTERFACE
+        is KoObjectDeclaration -> DeclarationKind.OBJECT
+        is KoClassDeclaration -> DeclarationKind.CLASS
+        is KoFunctionDeclaration -> DeclarationKind.FUNCTION
+        else -> DeclarationKind.OTHER
+    }
+
+    private fun KoBaseDeclaration.nameOrNull(): String? = (this as? KoNameProvider)?.name
+
+    private fun KoBaseDeclaration.annotationNames(): List<String> = when (this) {
+        is KoAnnotationProvider -> annotations.map { it.name }
+        else -> listOf()
+    }
+
+    private fun KoBaseDeclaration.isPublicOrDefault(): Boolean = when (this) {
+        is KoVisibilityModifierProvider ->
+            !hasInternalModifier && !hasPrivateModifier && !hasProtectedModifier
+
+        else -> true
+    }
+
+    private fun KoBaseDeclaration.isExplicitlyPublic(): Boolean =
+        (this as? KoVisibilityModifierProvider)?.hasPublicModifier == true
 }

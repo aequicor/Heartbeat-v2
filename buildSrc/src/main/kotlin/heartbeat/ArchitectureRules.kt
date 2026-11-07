@@ -1,10 +1,12 @@
 package heartbeat
 
 /**
- * Dependency, naming and import rules from docs/specs/architecture.md.
+ * Dependency and import rules from docs/specs/architecture.md.
  *
  * The functions are pure so the rules stay unit-testable; the Gradle task only
- * feeds them declared dependencies, resolved classpaths and source declarations.
+ * feeds them declared dependencies, resolved classpaths and source imports.
+ * Naming and package-role conventions live in the Konsist tests in
+ * `:architecture-tests`, which have the Kotlin PSI at hand.
  */
 object ArchitectureRules {
 
@@ -112,28 +114,6 @@ object ArchitectureRules {
             "universal modules must not import UI frameworks: $importPath"
         } else {
             null
-        }
-    }
-
-    fun namingViolation(modulePath: String, declarationName: String): String? {
-        if (!isFeature(modulePath)) {
-            return null
-        }
-        if (declarationName.endsWith("Controller") || declarationName.endsWith("ViewModel")) {
-            return "features must name the state holder <Feature>Store, not $declarationName"
-        }
-        val featureName = pathSegments(modulePath).getOrNull(1) ?: return null
-        val expectedPrefix = featureName.replaceFirstChar { it.uppercaseChar() }
-        val isStoreType = declarationName.endsWith("Store") ||
-            declarationName.endsWith("StoreFactory")
-        return when {
-            isStoreType && isApi(modulePath) && !declarationName.startsWith(expectedPrefix) ->
-                "api Store contract must start with $expectedPrefix: $declarationName"
-
-            isStoreType && isImpl(modulePath) && !declarationName.startsWith("Default") ->
-                "impl Store implementation must start with Default: $declarationName"
-
-            else -> null
         }
     }
 }

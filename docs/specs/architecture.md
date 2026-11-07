@@ -587,9 +587,9 @@ designsystem/
 │   ├── theme/
 │   │   ├── HbTheme.kt
 │   │   ├── HbColors.kt
-│   │   ├── Typography.kt
-│   │   ├── Shapes.kt
-│   │   └── Spacing.kt
+│   │   ├── HbTypography.kt
+│   │   ├── HbShapes.kt
+│   │   └── HbSpacing.kt
 │   │
 │   ├── resources/
 │   │   └── src/commonMain/composeResources/
@@ -960,12 +960,14 @@ CI должен отклонять изменения, нарушающие за
 - Metro contributions должны быть доступны конечным графам.
 - Внутри `impl` должны соблюдаться границы Domain/Data/Presentation.
 - Запрещённые импорты Decompose, Compose и платформенных UI API в универсальных модулях контролируются правилом detekt `ForbiddenImport` и собственной проверкой исходников.
-- Именование Store (`<Feature>Store`, `Default<Feature>Store`, `<Feature>StoreFactory`) и запрет `Controller`/`ViewModel` в фичах контролируются архитектурной проверкой; её правила покрыты unit-тестами в `buildSrc`.
+- Имена архитектурных ролей и пакеты их размещения контролируются Konsist-тестами `:architecture-tests`; правила покрыты unit-тестами `NamingRulesTest`.
+- Соответствие имени файла основному объявлению контролирует правило detekt `MatchingDeclarationName`, имена классов — `ClassNaming`.
 
-Проверка разделена на три уровня:
+Проверка разделена на четыре уровня:
 
 - **Gradle (`heartbeat-architecture-check`).** Направления объявленных project-зависимостей, запрещённые фреймворки в `api`/`impl` и разрешённые compile/runtime/klib-графы JVM, Android и Kotlin/Native, включая транзитивное появление Decompose в `impl`. Правила покрыты unit-тестами в `buildSrc`.
-- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: каждая реализация `Default<Contract>` обязана реализовать одноимённый интерфейс `Contract`; пакеты-роли фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`) соблюдают направление импортов. Задача `architectureCheck` запускает `:architecture-tests:test`.
+- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: стандарт именования ролей и размещение по пакетам, публичность контрактов `api`, соответствие `Default<Contract>` одноимённому интерфейсу `Contract`, направление импортов пакетов-ролей фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`). Задача `architectureCheck` запускает `:architecture-tests:test`.
+- **detekt.** Синтаксические соглашения: `MatchingDeclarationName` (имя файла), `ClassNaming` (имена классов), `ForbiddenImport` (запрещённые фреймворки). Запускается задачей `detektAll` и пре-пуш хуком.
 - **explicit API (`heartbeat-kmp-api`).** Модули `features/*/api`, `shell:api` и `di:api` компилируются в explicit API mode: публичные объявления указывают видимость, публичные свойства и функции — тип.
 
 ## Соглашения по именованию
@@ -987,9 +989,43 @@ CI должен отклонять изменения, нарушающие за
 | `designsystem` | UI Kit по технологиям |
 | `core` | Универсальная техническая инфраструктура |
 | `buildSrc` | Precompiled-плагины соглашений сборки |
-| `<Feature>Store` | Публичный контракт состояния фичи в `api` |
-| `Default<Feature>Store` | Реализация Store в `impl` |
-| `<Feature>StoreFactory` | Фабрика Store для Presentation-адаптеров |
+
+### Имена архитектурных ролей
+
+Роль объявления определяется его пакетом внутри фичи, имя — ролью.
+
+| Архитектурная роль | Пакет фичи | Правило | Пример |
+| --- | --- | --- | --- |
+| UseCase | `domain.usecase` | `*UseCase` | `LoadNoteUseCase` |
+| Контракт Repository | `domain.repository` | `*Repository`, без префикса `Default` | `EditorRepository` |
+| Реализация Repository | `data.repository` | `*Repository`; реализация по умолчанию — `Default*Repository` | `DefaultEditorRepository`, `SqlDelightNoteRepository` |
+| DataSource | `data.datasource` | `*DataSource` | `EditorDataSource` |
+| DTO | `data.datasource`, `data.dto` | `*Dto` | `NoteDto` |
+| Mapper-класс | `data.mapper` | `*Mapper` | `NoteMapper` |
+| Mapper-функция | `data.mapper`, `presentation` | `to*()` | `toNote()`, `toDto()` |
+| Store | `api` | `<Feature>Store` | `EditorStore` |
+| Реализация Store | `presentation` | `Default<Feature>Store` | `DefaultEditorStore` |
+| Фабрика Store | `api` | `<Feature>StoreFactory` | `EditorStoreFactory` |
+| Component | `component` | `<Feature>Component` | `EditorComponent` |
+| Реализация Component | `component` | `Default<Feature>Component` | `DefaultEditorComponent` |
+| Фабрика Component | `component` | `<Feature>ComponentFactory` | `EditorComponentFactory` |
+| State | `api` | `<Feature>State` | `EditorState` |
+| Action | `api` | `<Feature>Action` | `EditorAction` |
+| Effect | `api` | `<Feature>Effect` | `EditorEffect` |
+| Привязка Metro | `di` | `Default*` | `DefaultEditorStoreFactory` |
+| Compose-экран | `ui` | `*Screen` | `EditorScreen` |
+| Design System | `designsystem` | `Hb*` для публичного API | `HbButton`, `HbTypography` |
+
+Правила не ограничивают пакет `domain.model`, а также `core` и `platform`.
+
+Исключения:
+
+- Доменные модели в `domain.model` называются по предметной области: `Note`.
+- Вложенные объявления `Action` и `Effect` называются по интенту, а не по роли: `EditorAction.TitleChanged`, `EditorEffect.Saved`.
+- `Default` означает реализацию по умолчанию, а не обязательный префикс: специализированная реализация называется по технологии — `SqlDelightNoteRepository`.
+- Маппер может быть набором top-level extension-функций в файле `NoteMappers.kt`; отдельный класс `*Mapper` нужен, только когда у преобразования есть состояние.
+
+Видимость: `public` для внешних контрактов, `internal` для деталей реализации, `private` для локальных вспомогательных объявлений. Контракты `api`-модулей компилируются в explicit API mode, и их публичность проверяется в `architectureCheck`. Типы, которые видит финальный граф Metro, остаются `public`, поэтому видимость деталей `impl` определяет ревью.
 
 ### Результирующий стандарт фичи
 
@@ -1034,7 +1070,7 @@ features/<feature>/
 | HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен выполнять архитектурные проверки. | Согласованная архитектура от 7 ноября 2026 | Запустить тесты модулей и архитектурные проверки в CI. |
 | HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
 | HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
-| HB-ARCH-028 | Публичный API Design System должен иметь префикс `Hb`: кастомные UI-компоненты, токены и тема, например `HbButton`, `HbTextField`, `HbColors`, `HbTheme`. | Запрос владельца от 7 ноября 2026 | Проверить имена композаблов, токенов и темы в `designsystem/compose` и их использование в фичах. |
+| HB-ARCH-028 | Публичный API Design System должен иметь префикс `Hb`: кастомные UI-компоненты, токены и тема, например `HbButton`, `HbTextField`, `HbTypography`, `HbShapes`, `HbSpacing`, `HbColors`, `HbTheme`. | Запрос владельца от 7 ноября 2026 | Konsist-тест `designSystemApiUsesHbPrefix` проверяет публичные объявления `designsystem`; композаблы, токены и тема используются в фичах. |
 | HB-ARCH-029 | Пока данные загружаются, Store не должен принимать правки, которые может перезаписать завершающаяся загрузка. | Код-ревью PR #20 от 7 ноября 2026 | Тест: правка до завершения загрузки игнорируется, после загрузки состояние соответствует загруженным данным. |
 | HB-ARCH-030 | Store должен отражать ошибку операции в UI State и сбрасывать признак выполнения при успехе, ошибке и отмене; отмена не должна трактоваться как ошибка. | Код-ревью PR #20 от 7 ноября 2026 | Тесты: ошибка сохранения выставляет поле ошибки и снимает признак сохранения; повторный Save до запуска coroutine выполняется один раз. |
 | HB-ARCH-031 | Presentation-адаптер не должен создавать платформенный UI-диспетчер; диспетчер передаёт платформенный host или фабрика lifecycle scope. | Код-ревью PR #20 от 7 ноября 2026 | Проверить сигнатуру фабрики компонента и отсутствие `Dispatchers.Main` в универсальном адаптере; тест уничтожения компонента отменяет scope. |
@@ -1042,8 +1078,10 @@ features/<feature>/
 | HB-ARCH-033 | Публичный контракт состояния фичи должен называться `<Feature>Store`, реализация — `Default<Feature>Store`, фабрика — `<Feature>StoreFactory`; Store, State, Action и Effect размещаются в `features/<feature>/api`, реализация Store — в `features/<feature>/impl`; Store не зависит от Compose, Decompose, BLoC, AndroidX ViewModel и платформенных UI API. | Запрос владельца от 7 ноября 2026 | Сверить имена типов и модули размещения; архитектурная проверка подтверждает отсутствие UI-фреймворков в зависимостях `impl`, `api` проверяется ревью. |
 | HB-ARCH-034 | Ошибка загрузки должна отражаться в UI State и не блокировать Store навсегда; должна быть доступна повторная загрузка, а отмена не должна считаться ошибкой. | Второе код-ревью PR #20 от 7 ноября 2026 | Тесты: ошибка загрузки выставляет `loadError` и снимает `isLoading`; `Reload` загружает данные; правка после ошибки игнорируется. |
 | HB-ARCH-035 | `Save` должен фиксировать снимок состояния в момент действия, а правки во время сохранения не должны теряться. | Второе код-ревью PR #20 от 7 ноября 2026 | Тест: правка во время сохранения игнорируется, сохраняется и остаётся в состоянии именно снимок на момент `Save`. |
-| HB-ARCH-036 | Архитектурная проверка должна анализировать объявленные зависимости, разрешённые compile/runtime графы JVM, Android и Kotlin/Native, явно сообщать о неразрешимой конфигурации и проверять исходники универсальных модулей на запрещённые импорты и именование Store. | Второе код-ревью PR #20 от 7 ноября 2026 | Негативные сценарии для импорта Compose и имени `Controller` падают; unit-тесты правил в `buildSrc`; `gradlew build` выполняет `architectureCheck`. |
+| HB-ARCH-036 | Архитектурная проверка должна анализировать объявленные зависимости, разрешённые compile/runtime графы JVM, Android и Kotlin/Native, явно сообщать о неразрешимой конфигурации и проверять исходники универсальных модулей на запрещённые импорты. | Второе код-ревью PR #20 от 7 ноября 2026 | Негативный сценарий для импорта Compose падает; unit-тесты правил в `buildSrc`; `gradlew build` выполняет `architectureCheck`. |
 | HB-ARCH-037 | Konsist-тесты в модуле `:architecture-tests` должны проверять, что каждая реализация `Default<Contract>` реализует одноимённый интерфейс `Contract`, и что пакеты-роли фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`) соблюдают направление импортов; тесты должны выполняться в задаче `architectureCheck`. | Запрос владельца от 7 ноября 2026 | `gradlew architectureCheck` выполняет `:architecture-tests:test`; негативный сценарий с реализацией без контракта или запрещённым импортом между ролями падает. |
 | HB-ARCH-038 | Модули `features/*/api`, `shell:api` и `di:api` должны компилироваться в explicit API mode (`explicitApi()`): публичные объявления указывают видимость, публичные свойства и функции — тип. | Запрос владельца от 7 ноября 2026 | Сборка api-модулей в strict explicit API mode без ошибок; публичное объявление без модификатора не компилируется. |
+| HB-ARCH-039 | Имена и размещение архитектурных ролей фичи должны соответствовать таблице «Имена архитектурных ролей»: роль определяется пакетом, имя — обязательным суффиксом (`UseCase`, `Repository`, `DataSource`, `Dto`, `Mapper`, `Store`, `StoreFactory`, `Component`, `ComponentFactory`, `State`, `Action`, `Effect`, `Screen`); `Default` означает реализацию по умолчанию; доменные модели, вложенные Action/Effect и top-level mapper-функции не подчиняются роли. | Запрос владельца от 7 ноября 2026 | Konsist-тест `declarationsFollowNamingStandard` падает на `LoadNote` в `domain.usecase`; unit-тесты `NamingRulesTest` покрывают позитивный и негативный случай каждого правила. |
+| HB-ARCH-040 | Публичные контракты `features/*/api` должны быть `public`; детали реализации — `internal` или `private`, кроме типов, которые видит финальный граф Metro. | Запрос владельца от 7 ноября 2026 | Konsist-тест `apiContractsArePublic`; explicit API mode api-модулей; ревью видимости типов `impl`. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.
