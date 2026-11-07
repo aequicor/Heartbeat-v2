@@ -2,13 +2,15 @@ import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 // Enforces the module dependency rules from docs/specs/architecture.md
 // ("Запрещённые зависимости"). The task walks declared dependencies of every
-// subproject without resolving configurations, so it stays cheap. It runs as
-// part of `build` and `check` and fails with the list of violations.
+// subproject and, for universal `impl` modules, the resolved runtime classpaths,
+// so a forbidden library cannot arrive transitively through `core` or another
+// module. The check runs as part of `build` and `check`.
 
-val violations = mutableListOf<String>()
+val violations = sortedSetOf<String>()
 
 val checkTask = tasks.register("architectureCheck") {
     group = "verification"
@@ -24,8 +26,18 @@ val checkTask = tasks.register("architectureCheck") {
     }
 }
 
+// `gradlew build` runs the `build` task of every project that has it. The root project
+// applies `base`, so its `build` and `check` tasks always exist; wiring the check to the
+// root lifecycle tasks makes the gate part of a plain `gradlew build`.
 tasks.matching { it.name == "build" || it.name == "check" }.configureEach {
     dependsOn(checkTask)
+}
+
+// A check scoped to one module (`gradlew :features:editor:impl:check`) runs the gate too.
+subprojects.forEach { subproject ->
+    subproject.tasks.matching { it.name == "check" }.configureEach {
+        dependsOn(checkTask)
+    }
 }
 
 private fun checkProject(project: Project) {
@@ -37,6 +49,32 @@ private fun checkProject(project: Project) {
             checkModuleDependency(project, it)
         }
     }
+    checkResolvedDependencies(project)
+}
+
+private fun checkResolvedDependencies(project: Project) {
+    if (!isImpl(project.path)) {
+        return
+    }
+    project.configurations
+        .filter { it.isCanBeResolved && it.name.endsWith("RuntimeClasspath") }
+        .forEach { configuration ->
+            val components = runCatching {
+                configuration.incoming.resolutionResult.allComponents
+            }.getOrNull() ?: return@forEach
+            components.forEach { component ->
+                val id = component.id
+                if (id is ModuleComponentIdentifier &&
+                    forbiddenImplGroups.any { id.group.startsWith(it) }
+                ) {
+                    report(
+                        project.path,
+                        "${id.group}:${id.module}:${id.version}",
+                        "impl must not depend on UI or presentation frameworks transitively",
+                    )
+                }
+            }
+        }
 }
 
 private fun checkProjectDependency(from: Project, to: Project) {
