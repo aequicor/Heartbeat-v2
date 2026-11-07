@@ -591,7 +591,8 @@ designsystem/
 │       ├── HbColorScheme.kt
 │       ├── HbTypography.kt
 │       ├── HbGeometry.kt
-│       └── HbLayout.kt
+│       ├── HbLayout.kt
+│       └── HbWorkspaceLayout.kt
 │
 ├── patterns/
 │   └── src/commonMain/kotlin/
