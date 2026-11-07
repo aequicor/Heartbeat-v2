@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbBadge
+import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
+import io.github.aequicor.heartbeat.designsystem.components.HbCombobox
+import io.github.aequicor.heartbeat.designsystem.components.HbOrientation
+import io.github.aequicor.heartbeat.designsystem.components.HbSelect
+import io.github.aequicor.heartbeat.designsystem.components.HbSplitter
+import io.github.aequicor.heartbeat.designsystem.components.HbSplitterLabels
 import io.github.aequicor.heartbeat.designsystem.components.HbBanner
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
@@ -80,7 +87,7 @@ internal fun CatalogScreen(modifier: Modifier = Modifier) {
         CatalogSection("Навигация и списки") { NavigationAndLists(colors) }
         CatalogSection("Метаданные") { Metadata(colors) }
         CatalogSection("Обратная связь") { Feedback(colors) }
-        CatalogSection("Рабочая область") { Workspace() }
+        CatalogSection("Рабочая область") { Workspace(colors) }
         CatalogSection("Поверхности") { Surfaces(colors) }
     }
 }
@@ -233,6 +240,25 @@ private fun Fields() {
                 errorMessage = "Проверьте адрес и повторите",
             )
         }
+        HbFormField(label = "Модель") {
+            HbSelect(
+                options = listOf("heartbeat-fast", "heartbeat-deep"),
+                selected = "heartbeat-fast",
+                onSelect = {},
+                optionLabel = { it },
+            )
+        }
+        HbFormField(label = "Подключение") {
+            HbCombobox(
+                options = listOf("Локальная среда", "Удалённый сервер"),
+                query = "",
+                placeholder = "Выберите подключение",
+                onQueryChange = {},
+                onSelect = {},
+                optionLabel = { it },
+                noResultsText = "Ничего не найдено",
+            )
+        }
         HbFormField(label = "Поиск") {
             HbSearchField(
                 value = "heartbeat",
@@ -332,6 +358,7 @@ private fun Metadata(colors: HbColors) {
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        HbAvatar(initials = "HB", contentDescription = "Рабочая область")
         HbChip(label = "Выбрано", selected = true)
         HbChip(label = "Тег")
         HbBadge(label = "Готово", tone = HbStatusTone.Success)
@@ -377,7 +404,7 @@ private val SURFACE_WIDTH = 320.dp
 private val SURFACE_HEIGHT = 180.dp
 
 @Composable
-private fun Workspace() {
+private fun Workspace(colors: HbColors) {
     Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
         HbPaneHeader(
             title = "Диалог",
@@ -387,16 +414,36 @@ private fun Workspace() {
         HbToolbar(
             actions = {
                 HbIconButton(contentDescription = "Новый диалог", onClick = {}) {
-                    val colors = HbThemeDefaults.LocalColors.current
+                    val iconColors = HbThemeDefaults.LocalColors.current
                     BasicText(
                         text = "+",
                         style = HbTypography.Label,
-                        color = { colors.text.primary },
+                        color = { iconColors.text.primary },
                     )
                 }
                 HbKeyHint(keys = listOf("Ctrl", "N"))
             },
         )
+        Row(modifier = Modifier.height(96.dp)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(colors.surface.subtle),
+            )
+            HbSplitter(
+                orientation = HbOrientation.Vertical,
+                onResize = {},
+                onReset = null,
+                labels = HbSplitterLabels(narrower = "Уже", wider = "Шире", reset = "Сбросить"),
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(colors.surface.subtle),
+            )
+        }
         HbSnackbar(
             message = "Черновик сохранён",
             actionLabel = "Отменить",
