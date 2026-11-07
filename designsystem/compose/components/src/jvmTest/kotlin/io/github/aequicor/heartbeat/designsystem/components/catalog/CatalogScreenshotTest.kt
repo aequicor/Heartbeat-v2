@@ -6,6 +6,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
+import io.github.aequicor.heartbeat.designsystem.foundation.HbContrastPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -16,8 +17,8 @@ import kotlin.test.assertTrue
  * Renders the catalog to PNG files for review (HB-DS-039, HB-DS-040).
  *
  * The scene is raster and offscreen, so the check runs without a desktop window. The images land in
- * `designsystem/compose/components/build/catalog`; both appearances, a compact width and the
- * 150% text scale are covered, and every image must be a non-empty PNG.
+ * `designsystem/compose/components/build/catalog`; both appearances, a compact width, the 150% text
+ * scale and the high-contrast mapping are covered, and every image must be a non-empty PNG.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class CatalogScreenshotTest {
@@ -38,6 +39,17 @@ class CatalogScreenshotTest {
     }
 
     @Test
+    fun rendersHighContrastCatalog() {
+        renderCatalog(
+            name = "catalog-high-contrast",
+            width = WIDE_WIDTH,
+            height = WIDE_HEIGHT,
+            appearance = HbAppearance.Light,
+            contrast = HbContrastPreference.High,
+        )
+    }
+
+    @Test
     fun rendersLargeTextCatalog() {
         renderCatalog(
             name = "catalog-large-text",
@@ -54,9 +66,14 @@ class CatalogScreenshotTest {
         height: Int,
         appearance: HbAppearance,
         textScale: Float = 1f,
+        contrast: HbContrastPreference = HbContrastPreference.System,
     ) {
         val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
-            HbTheme(appearance = appearance, textScale = textScale) {
+            HbTheme(
+                appearance = appearance,
+                textScale = textScale,
+                contrast = contrast,
+            ) {
                 CatalogScreen()
             }
         }

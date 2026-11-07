@@ -1,9 +1,9 @@
+@file:Suppress("MagicNumber")
+
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -18,7 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -31,8 +33,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
  * Navigation row of the sidebar or rail (HB-DS-009, HB-DS-019). Selection is announced by the
- * `selectable` semantics and marked by a persistent indicator bar, so it is not encoded by the
- * background color alone; keyboard focus draws its own outline over the selected state.
+ * `selectable` semantics and marked by a persistent indicator bar drawn across the row height, so
+ * it is not encoded by the background color alone; keyboard focus draws its own outline over the
+ * selected state. The row uses a minimum height, so a large text scale grows it instead of
+ * clipping the label.
  */
 @Composable
 fun HbNavigationItem(
@@ -57,6 +61,14 @@ fun HbNavigationItem(
             .heightIn(min = navigationRowHeight)
             .clip(HbShapes.Small)
             .background(background)
+            .drawBehind {
+                if (selected) {
+                    drawRect(
+                        color = colors.selection.indicator,
+                        size = Size(indicatorWidth.toPx(), size.height),
+                    )
+                }
+            }
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
             .selectable(
@@ -64,20 +76,19 @@ fun HbNavigationItem(
                 enabled = enabled,
                 role = Role.Tab,
                 onClick = onClick,
+            )
+            .padding(
+                start = indicatorWidth + HbSpacing.S,
+                end = HbSpacing.S,
+                top = HbSpacing.Xxs,
+                bottom = HbSpacing.Xxs,
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .width(indicatorWidth)
-                .fillMaxHeight()
-                .background(if (selected) colors.selection.indicator else Color.Transparent),
-        )
         BasicText(
             text = label,
             style = HbTypography.Label,
             color = { contentColor },
-            modifier = Modifier.padding(horizontal = HbSpacing.S),
         )
     }
 }
