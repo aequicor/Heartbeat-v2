@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package io.github.aequicor.heartbeat.designsystem.patterns.catalog
+package io.github.aequicor.heartbeat.designsystem.catalog
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

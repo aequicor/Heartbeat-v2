@@ -1,6 +1,6 @@
 @file:Suppress("MagicNumber")
 
-package io.github.aequicor.heartbeat.designsystem.patterns.catalog
+package io.github.aequicor.heartbeat.designsystem.catalog
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
@@ -13,17 +13,17 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Renders the workspace scaffold at the compact, medium and expanded widths (HB-DS-031). The image
- * shows which regions survive the fit policy instead of a schematic of the classes.
+ * Renders the adaptive classes at the documented widths (HB-DS-031). The scene is wider than the
+ * widest sample, so the wide class is visible instead of being clipped by the catalog canvas.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-class ScaffoldScreenshotTest {
+class AdaptiveScreenshotTest {
 
     @Test
-    fun rendersWorkspaceScaffolds() {
+    fun rendersAdaptiveWidths() {
         val scene = ImageComposeScene(width = WIDTH, height = HEIGHT, density = Density(1f)) {
             HbTheme(appearance = HbAppearance.Light) {
-                ScaffoldCatalogScreen()
+                AdaptiveCatalogScreen()
             }
         }
 
@@ -32,17 +32,17 @@ class ScaffoldScreenshotTest {
             assertTrue(data != null, "PNG encoding failed")
 
             val directory = File("build/catalog").apply { mkdirs() }
-            val file = File(directory, "patterns-scaffold-light.png")
+            val file = File(directory, "catalog-adaptive-light.png")
             file.writeBytes(data.bytes)
-            assertTrue(file.length() > 0, "Empty scaffold screenshot")
+            assertTrue(file.length() > 0, "Empty adaptive screenshot")
         } finally {
             scene.close()
         }
     }
 
     private companion object {
-        private const val WIDTH = 1400
+        private const val WIDTH = 1800
 
-        private const val HEIGHT = 620
+        private const val HEIGHT = 500
     }
 }

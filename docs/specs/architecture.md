@@ -607,6 +607,13 @@ designsystem/
 │       ├── HbWorkspaceScaffold.kt
 │       └── HbUsageDisplay.kt
 │
+├── catalog/
+│   └── src/jvmMain/kotlin/
+│       ├── HbCatalogEntry.kt
+│       ├── CatalogContent.kt
+│       ├── CatalogFieldSamples.kt
+│       └── CatalogPatternSamples.kt
+│
 ├── compose/
 │   ├── theme/
 │   │   ├── HbTheme.kt
@@ -642,6 +649,7 @@ designsystem/
 - `foundation` хранит портативную схему и значения токенов: цвета sRGB, логические размеры, масштабируемую типографику, длительности, кривые и идентификаторы иконок. Модуль не импортирует Compose и не содержит типов `Color`, `Dp`, `TextStyle`, объектов навигации, DI и клиентов среды исполнения.
 - `compose` разрешает портативные токены в типы Compose; `theme` и `resources` внутри него Compose-ориентированы.
 - `patterns` содержит продуктовые паттерны Heartbeat: строку сессии, сообщение, активность инструмента, запрос подтверждения и отображение расхода. Паттерны получают модели представления и callbacks, а бизнес-правила остаются в feature store.
+- `catalog` содержит исполняемые примеры кита и паттернов: приложение каталога и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:catalog:runCatalog`.
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
 - Фичи могут использовать Design System через свои UI-модули.

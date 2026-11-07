@@ -8,10 +8,4 @@ kotlin {
         implementation(project(":designsystem:compose:theme"))
         implementation(project(":designsystem:compose:components"))
     }
-    sourceSets.jvmTest.dependencies {
-        implementation(project(":designsystem:foundation"))
-        implementation(project(":designsystem:compose:theme"))
-        implementation(project(":designsystem:compose:components"))
-        implementation(compose.desktop.currentOs)
-    }
 }

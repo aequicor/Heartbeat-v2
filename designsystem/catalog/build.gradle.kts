@@ -1,0 +1,32 @@
+plugins {
+    id("heartbeat-compose-designsystem")
+}
+
+kotlin {
+    sourceSets.jvmMain.dependencies {
+        implementation(project(":designsystem:foundation"))
+        implementation(project(":designsystem:compose:theme"))
+        implementation(project(":designsystem:compose:components"))
+        implementation(project(":designsystem:patterns"))
+        implementation(compose.desktop.currentOs)
+    }
+    sourceSets.jvmTest.dependencies {
+        implementation(project(":designsystem:foundation"))
+        implementation(project(":designsystem:compose:theme"))
+        implementation(project(":designsystem:compose:components"))
+        implementation(project(":designsystem:patterns"))
+        implementation(compose.desktop.currentOs)
+    }
+}
+
+// The catalog is a desktop application for review, not a product entry point: it lives in the
+// design system boundary and depends on the published kit and patterns only.
+val jvmRuntimeClasspath = configurations.getByName("jvmRuntimeClasspath")
+
+tasks.register<JavaExec>("runCatalog") {
+    group = "application"
+    description = "Runs the design system catalog in a desktop window."
+    dependsOn(tasks.named("jvmJar"))
+    classpath(tasks.named("jvmJar"), jvmRuntimeClasspath)
+    mainClass.set("io.github.aequicor.heartbeat.designsystem.catalog.HbCatalogEntry")
+}
