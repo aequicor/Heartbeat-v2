@@ -2,10 +2,6 @@
 
 package io.github.aequicor.heartbeat.designsystem.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.snap
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,19 +18,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
-import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
@@ -60,7 +48,6 @@ fun HbDisclosure(
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val rotation = chevronRotation(expanded = expanded)
 
     Column(modifier = modifier) {
         Row(
@@ -103,7 +90,7 @@ fun HbDisclosure(
                     )
                 }
             }
-            DisclosureChevron(color = colors.text.secondary, rotation = rotation)
+            HbChevronGlyph(color = colors.text.secondary, expanded = expanded)
         }
         if (expanded) {
             Box(modifier = Modifier.padding(start = HbSpacing.S, top = HbSpacing.Xs)) {
@@ -112,47 +99,6 @@ fun HbDisclosure(
         }
     }
 }
-
-@Composable
-private fun DisclosureChevron(
-    color: Color,
-    rotation: Float,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier.size(chevronSize).rotate(rotation)) {
-        val stroke = size.minDimension * ChevronStrokeRatio
-        drawLine(
-            color = color,
-            start = Offset(size.width * ChevronStartX, size.height * ChevronStartY),
-            end = Offset(size.width * ChevronMiddleX, size.height * ChevronMiddleY),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * ChevronMiddleX, size.height * ChevronMiddleY),
-            end = Offset(size.width * ChevronEndX, size.height * ChevronStartY),
-            strokeWidth = stroke,
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-private val chevronSize = 12.dp
-
-private const val ChevronStrokeRatio = 0.16f
-
-private const val ChevronStartX = 0.2f
-
-private const val ChevronStartY = 0.38f
-
-private const val ChevronMiddleX = 0.5f
-
-private const val ChevronMiddleY = 0.66f
-
-private const val ChevronEndX = 0.8f
-
-private const val ChevronExpandedDegrees = 180f
 
 private fun Modifier.disclosureSemantics(
     expanded: Boolean,
@@ -165,19 +111,4 @@ private fun Modifier.disclosureSemantics(
         expand { onExpandedChange(true); true }
     }
     stateDescription?.let { this.stateDescription = it }
-}
-
-@Composable
-private fun chevronRotation(expanded: Boolean): Float {
-    val reducedMotion = HbTheme.motion == HbMotionPreference.Reduced
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) ChevronExpandedDegrees else 0f,
-        animationSpec = if (reducedMotion) {
-            snap()
-        } else {
-            tween(durationMillis = HbMotions.Default.ordinaryTransitionMs)
-        },
-        label = "disclosureChevron",
-    )
-    return rotation
 }

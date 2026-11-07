@@ -191,7 +191,13 @@ private fun Icons(colors: HbColors) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
             ) {
-                HbIcon(glyph = glyph, size = 24.dp, tint = colors.text.primary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HbIcon(glyph = glyph, size = 24.dp, tint = colors.text.primary)
+                    HbIcon(glyph = glyph, size = 18.dp, tint = colors.text.primary)
+                }
                 BasicText(
                     text = glyph.name,
                     style = HbTypography.Metadata,
