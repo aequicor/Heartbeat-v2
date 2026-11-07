@@ -12,6 +12,11 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.patterns.HbComposer
+import io.github.aequicor.heartbeat.designsystem.patterns.HbComposerState
+import io.github.aequicor.heartbeat.designsystem.patterns.HbMessageQueue
+import io.github.aequicor.heartbeat.designsystem.patterns.HbQueueItem
+import io.github.aequicor.heartbeat.designsystem.patterns.HbQueueItemState
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbChip
 import io.github.aequicor.heartbeat.designsystem.components.HbLink
@@ -44,6 +49,7 @@ internal fun PatternsCatalogScreen(modifier: Modifier = Modifier) {
         SessionsSection()
         MessagesSection()
         ToolsSection()
+        ComposerSection()
         ApprovalsSection()
         UsageSection()
     }
@@ -197,6 +203,76 @@ private fun UsageSection(modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+@Composable
+private fun ComposerSection(modifier: Modifier = Modifier) {
+    Section(title = "Composer и очередь", modifier = modifier) {
+        Column(
+            modifier = Modifier.width(SECTION_WIDTH),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+        ) {
+            HbComposer(
+                value = "",
+                onValueChange = {},
+                state = HbComposerState.Empty,
+                placeholder = "Напишите сообщение…",
+                label = "Черновик сообщения",
+                sendLabel = "Отправить",
+                stopLabel = "Остановить",
+                modelLabel = "heartbeat-fast",
+            )
+            HbComposer(
+                value = "Проверь журнал сборки",
+                onValueChange = {},
+                state = HbComposerState.Generating,
+                placeholder = "Напишите сообщение…",
+                label = "Черновик сообщения",
+                sendLabel = "Отправить",
+                stopLabel = "Остановить",
+                notice = "Ответ формируется…",
+                modelLabel = "heartbeat-fast",
+            )
+            HbComposer(
+                value = "Повтори прошлый запрос",
+                onValueChange = {},
+                state = HbComposerState.Failed,
+                placeholder = "Напишите сообщение…",
+                label = "Черновик сообщения",
+                sendLabel = "Повторить",
+                stopLabel = "Остановить",
+                notice = "Не удалось отправить. Черновик сохранён.",
+            )
+            QueueSample()
+        }
+    }
+}
+
+@Composable
+private fun QueueSample(modifier: Modifier = Modifier) {
+    HbMessageQueue(
+        modifier = modifier,
+        items = listOf(
+            HbQueueItem(
+                id = "1",
+                label = "Собрать журнал сборки",
+                state = HbQueueItemState.Accepted,
+                stateLabel = "Принято",
+            ),
+            HbQueueItem(
+                id = "2",
+                label = "Сравнить с прошлой версией",
+                state = HbQueueItemState.Queued,
+                stateLabel = "В очереди",
+            ),
+            HbQueueItem(
+                id = "3",
+                label = "Проверить линтером",
+                state = HbQueueItemState.Failed,
+                stateLabel = "Ошибка",
+            ),
+        ),
+    )
 }
 
 @Composable

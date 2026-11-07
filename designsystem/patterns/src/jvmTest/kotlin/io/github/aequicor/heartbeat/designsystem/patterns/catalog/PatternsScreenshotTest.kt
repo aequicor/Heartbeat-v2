@@ -53,6 +53,6 @@ class PatternsScreenshotTest {
     private companion object {
         private const val WIDTH = 900
 
-        private const val HEIGHT = 1100
+        private const val HEIGHT = 2000
     }
 }
