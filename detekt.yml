@@ -1,0 +1,212 @@
+# detekt 2 configuration for Heartbeat.
+#
+# The project pins detekt 2.0 because detekt 1.23 embeds a Kotlin 2.0 parser that cannot read
+# Kotlin 2.4 sources. The standard rule sets keep their values from default-detekt-config.yml;
+# this file adds the Compose adjustments from the detekt manual and activates three plugin rule
+# sets: mrmans0n/compose-rules, appKODE detekt-rules-compose and Faire detekt-rules.
+
+config:
+  validation: true
+  warningsAsErrors: true
+
+complexity:
+  LongParameterList:
+    allowedFunctionParameters: 12
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    ignoreAnnotatedFunctions:
+      - Preview
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][A-Za-z0-9]*'
+
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+  UnusedPrivateFunction:
+    ignoreAnnotated:
+      - Preview
+
+# mrmans0n/compose-rules: https://github.com/mrmans0n/compose-rules
+Compose:
+  ComposableAnnotationNaming:
+    active: true
+  ComposableNaming:
+    active: true
+  ComposableNestingDepth:
+    active: false
+  ComposableParamOrder:
+    active: true
+  CompositionLocalAllowlist:
+    active: true
+  CompositionLocalNaming:
+    active: true
+  ConditionHoist:
+    active: true
+  ContentEmitterReturningValues:
+    active: true
+  ContentTrailingLambda:
+    active: true
+  ContentSlotReused:
+    active: true
+  DefaultsVisibility:
+    active: true
+  InvalidReadOnlyComposable:
+    active: true
+  LambdaParameterEventTrailing:
+    active: true
+  LambdaParameterInRestartableEffect:
+    active: true
+  Material2:
+    active: false
+  MissingNonRestartableComposable:
+    active: true
+  MissingReadOnlyComposable:
+    active: true
+  ModifierClickableOrder:
+    active: true
+  ModifierComposed:
+    active: true
+  ModifierMissing:
+    active: true
+  ModifierNaming:
+    active: true
+  ModifierNotUsedAtRoot:
+    active: true
+  ModifierReused:
+    active: true
+  ModifierShouldBeForwardedToEveryBranch:
+    active: true
+  ModifierWithoutDefault:
+    active: true
+  MultipleEmitters:
+    active: true
+  MutableParams:
+    active: true
+  MutableStateAutoboxing:
+    active: true
+  MutableStateParam:
+    active: true
+  ParameterNaming:
+    active: true
+  PreviewAnnotationNaming:
+    active: true
+  PreviewNaming:
+    active: false
+  PreviewPublic:
+    active: true
+  RememberContentMissing:
+    active: true
+  RememberMissing:
+    active: true
+  StaleRememberUpdatedStateInRemember:
+    active: true
+  StateParam:
+    active: true
+  UnnecessaryComposable:
+    active: true
+  UnnecessaryLaunchedEffect:
+    active: true
+  UnstableCollections:
+    active: false
+  VarsWithoutStateBacking:
+    active: true
+  ViewModelForwarding:
+    active: true
+  ViewModelInjection:
+    active: true
+
+# appKODE detekt-rules-compose: https://github.com/appKODE/detekt-rules-compose
+compose:
+  ComposableEventParameterNaming:
+    active: true
+  ComposableFunctionName:
+    active: true
+  ComposableParametersOrdering:
+    active: true
+    trailingSlotNames:
+      - content
+    allowTrailingEventHandlers: true
+    allowTrailingLambdas: true
+  ConditionCouldBeLifted:
+    active: true
+    ignoreCallsWithArgumentNames:
+      - modifier
+      - contentAlignment
+  MissingModifierDefaultValue:
+    active: true
+    checkAbstractFunctions: false
+  ModifierHeightWithText:
+    active: true
+  PublicComposablePreview:
+    active: true
+  ReusedModifierInstance:
+    active: true
+  TopLevelComposableFunctions:
+    active: true
+    allowInObjects: false
+    allowInInterfaces: false
+  UnnecessaryEventHandlerParameter:
+    active: true
+    reportConstantArguments: true
+  UnnecessaryLayoutWrapper:
+    active: true
+
+# Faire detekt-rules: https://github.com/Faire/faire-detekt-rules
+FaireRuleSet:
+  AlwaysUseIsTrueOrIsFalse:
+    active: true
+  DoNotAccessVisibleForTesting:
+    active: true
+    excludes:
+      - '**/*Test.kt'
+  DoNotSplitByRegex:
+    active: true
+  DoNotStaticallyImportObjectFunctions:
+    active: true
+  DoNotUseDirectReceiverReferenceInsideWith:
+    active: true
+  DoNotUseHasSizeForEmptyListInAssert:
+    active: true
+  DoNotUseIsEqualToWhenArgumentIsOne:
+    active: true
+  DoNotUseIsEqualToWhenArgumentIsZero:
+    active: true
+  DoNotUsePropertyAccessInAssert:
+    active: true
+  DoNotUseSingleOnFilter:
+    active: true
+  GetOrDefaultShouldBeReplacedWithGetOrElse:
+    active: true
+  NoDuplicateKeysInMapOf:
+    active: true
+  NoExtensionFunctionOnNullableReceiver:
+    active: true
+  NoNonPrivateGlobalVariables:
+    active: true
+  NoNullableLambdaWithDefaultNull:
+    active: true
+  NoPairWithAmbiguousTypes:
+    active: true
+  PreferIgnoreCase:
+    active: true
+  PreventBannedImports:
+    active: true
+  ReturnValueOfLetMustBeUsed:
+    active: true
+  UseEntriesInsteadOfValuesOnEnum:
+    active: true
+  UseFirstOrNullInsteadOfFind:
+    active: true
+  UseMapNotNullInsteadOfFilterNotNull:
+    active: true
+  UseNoneMatchInsteadOfFirstOrNullIsNull:
+    active: true
+  UseOfCollectionInsteadOfEmptyCollection:
+    active: true
+  UseSetInsteadOfListToSet:
+    active: true

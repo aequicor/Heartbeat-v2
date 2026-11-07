@@ -3,9 +3,9 @@ import java.io.File
 import org.gradle.api.GradleException
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.compose.multiplatform)
-    alias(libs.plugins.kotlin.compose)
+    id("org.jetbrains.kotlin.jvm")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 val desktopVersion = "1.0.0"
