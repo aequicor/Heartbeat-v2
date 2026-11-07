@@ -24,96 +24,82 @@ class VisibilityRulesTest {
 
     private fun violation(
         packageName: String,
-        kind: DeclarationKind,
         name: String,
         isPublic: Boolean = true,
         annotations: List<String> = listOf(),
-    ): String? = VisibilityRules.violation(packageName, kind, name, isPublic, annotations)
+    ): String? = VisibilityRules.violation(packageName, name, isPublic, annotations)
 
     @Test
     fun implementationDetailsMustBeInternal() {
         Assert.assertEquals(
             "implementation detail must be internal: NoteDto",
-            violation(dataSource, DeclarationKind.CLASS, "NoteDto"),
+            violation(dataSource, "NoteDto"),
         )
         Assert.assertEquals(
             "implementation detail must be internal: NoteDto",
-            violation(dataDto, DeclarationKind.CLASS, "NoteDto"),
+            violation(dataDto, "NoteDto"),
         )
         Assert.assertEquals(
             "implementation detail must be internal: toNote",
-            violation(dataMapper, DeclarationKind.FUNCTION, "toNote"),
+            violation(dataMapper, "toNote"),
         )
         Assert.assertEquals(
             "implementation detail must be internal: toEditorState",
-            violation(presentationMapper, DeclarationKind.FUNCTION, "toEditorState"),
+            violation(presentationMapper, "toEditorState"),
         )
         Assert.assertEquals(
             "implementation detail must be internal: DefaultEditorStore",
-            violation(presentation, DeclarationKind.CLASS, "DefaultEditorStore"),
+            violation(presentation, "DefaultEditorStore"),
         )
     }
 
     @Test
     fun internalDeclarationsAreNotFlagged() {
-        Assert.assertNull(violation(dataSource, DeclarationKind.CLASS, "NoteDto", isPublic = false))
-        Assert.assertNull(violation(dataMapper, DeclarationKind.FUNCTION, "toNote", isPublic = false))
-        Assert.assertNull(
-            violation(presentation, DeclarationKind.CLASS, "DefaultEditorStore", isPublic = false),
-        )
+        Assert.assertNull(violation(dataSource, "NoteDto", isPublic = false))
+        Assert.assertNull(violation(dataMapper, "toNote", isPublic = false))
+        Assert.assertNull(violation(presentation, "DefaultEditorStore", isPublic = false))
     }
 
     @Test
     fun metroBoundTypesStayPublic() {
         Assert.assertNull(
-            violation(dataSource, DeclarationKind.CLASS, "EditorDataSource", annotations = listOf("SingleIn")),
+            violation(dataSource, "EditorDataSource", annotations = listOf("SingleIn")),
         )
         Assert.assertNull(
-            violation(domainUseCase, DeclarationKind.CLASS, "LoadNoteUseCase", annotations = listOf("Inject")),
+            violation(domainUseCase, "LoadNoteUseCase", annotations = listOf("Inject")),
         )
         Assert.assertNull(
-            violation(
-                presentation,
-                DeclarationKind.CLASS,
-                "DefaultEditorStore",
-                annotations = listOf("ContributesBinding"),
-            ),
+            violation(presentation, "DefaultEditorStore", annotations = listOf("ContributesBinding")),
         )
     }
 
     @Test
     fun contractsStayPublic() {
-        Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorStore"))
-        Assert.assertNull(violation(domainModel, DeclarationKind.CLASS, "Note"))
-        Assert.assertNull(violation(domainRepository, DeclarationKind.INTERFACE, "EditorRepository"))
-        Assert.assertNull(violation(di, DeclarationKind.CLASS, "DefaultEditorStoreFactory"))
-        Assert.assertNull(violation(ui, DeclarationKind.FUNCTION, "EditorScreen"))
+        Assert.assertNull(violation(api, "EditorStore"))
+        Assert.assertNull(violation(domainModel, "Note"))
+        Assert.assertNull(violation(domainRepository, "EditorRepository"))
+        Assert.assertNull(violation(di, "DefaultEditorStoreFactory"))
+        Assert.assertNull(violation(ui, "EditorScreen"))
     }
 
     @Test
     fun componentContractsArePublicButImplementationsAreInternal() {
-        Assert.assertNull(violation(component, DeclarationKind.INTERFACE, "EditorComponent"))
-        Assert.assertNull(violation(component, DeclarationKind.INTERFACE, "EditorComponentFactory"))
+        Assert.assertNull(violation(component, "EditorComponent"))
+        Assert.assertNull(violation(component, "EditorComponentFactory"))
         Assert.assertEquals(
             "implementation detail must be internal: DefaultEditorComponent",
-            violation(component, DeclarationKind.CLASS, "DefaultEditorComponent"),
+            violation(component, "DefaultEditorComponent"),
         )
-        Assert.assertNull(
-            violation(component, DeclarationKind.CLASS, "DefaultEditorComponent", isPublic = false),
-        )
+        Assert.assertNull(violation(component, "DefaultEditorComponent", isPublic = false))
     }
 
     @Test
     fun declarationsOutsideFeaturesHaveNoVisibilityRule() {
         Assert.assertNull(
-            violation(
-                "io.github.aequicor.heartbeat.core.platformapi",
-                DeclarationKind.CLASS,
-                "PlatformName",
-            ),
+            violation("io.github.aequicor.heartbeat.core.platformapi", "PlatformName"),
         )
         Assert.assertNull(
-            violation("io.github.aequicor.heartbeat.designsystem.theme", DeclarationKind.CLASS, "HbColors"),
+            violation("io.github.aequicor.heartbeat.designsystem.theme", "HbColors"),
         )
     }
 }

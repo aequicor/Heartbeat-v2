@@ -139,7 +139,6 @@ class ArchitectureTest {
         declarationViolations(files) { declaration ->
             VisibilityRules.violation(
                 packageName = declaration.packageName,
-                declarationKind = declaration.kind,
                 declarationName = declaration.name,
                 isPublic = declaration.isPublic,
                 annotations = declaration.annotations,

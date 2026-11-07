@@ -39,7 +39,6 @@ internal object VisibilityRules {
      */
     fun violation(
         packageName: String,
-        declarationKind: DeclarationKind,
         declarationName: String,
         isPublic: Boolean,
         annotations: List<String>,
