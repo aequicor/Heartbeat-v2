@@ -18,7 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -44,7 +44,7 @@ fun HbListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = LIST_ROW_MIN_HEIGHT),
+            .heightIn(min = HbSizes.settingsRowHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
@@ -68,4 +68,3 @@ fun HbListItem(
     }
 }
 
-private val LIST_ROW_MIN_HEIGHT = HbGeometries.Dense.settingsRowHeight.dp

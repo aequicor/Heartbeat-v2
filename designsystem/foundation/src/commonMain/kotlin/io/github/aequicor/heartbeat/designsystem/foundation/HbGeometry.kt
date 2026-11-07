@@ -55,4 +55,11 @@ public object HbGeometries {
         fieldRadius = 12,
         floatingSurfaceRadius = 16,
     )
+
+    /** Resolves the geometry defaults of a density. */
+    public fun forDensity(density: HbDensity): HbGeometry = when (density) {
+        HbDensity.Dense -> Dense
+        HbDensity.Comfortable -> Comfortable
+        HbDensity.Touch -> Touch
+    }
 }

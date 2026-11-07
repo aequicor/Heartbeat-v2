@@ -1,16 +1,29 @@
 package io.github.aequicor.heartbeat.designsystem.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
 
 /**
- * Corner shapes of the application: control, field and floating-surface radii of the resolved
- * density. Components round by role, not by a per-component measurement.
+ * Corner shapes of the application, resolved from the density geometry: control, field and
+ * floating-surface radii. Components round by role, not by a per-component measurement, so a touch
+ * host gets the larger radii without changing a call site.
  */
 object HbShapes {
-    private val geometry = HbGeometries.Dense
-    val Small = RoundedCornerShape(geometry.controlRadius.dp)
-    val Medium = RoundedCornerShape(geometry.fieldRadius.dp)
-    val Large = RoundedCornerShape(geometry.floatingSurfaceRadius.dp)
+    val Small: Shape
+        @Composable
+        @ReadOnlyComposable
+        get() = RoundedCornerShape(HbThemeDefaults.LocalGeometry.current.controlRadius.dp)
+
+    val Medium: Shape
+        @Composable
+        @ReadOnlyComposable
+        get() = RoundedCornerShape(HbThemeDefaults.LocalGeometry.current.fieldRadius.dp)
+
+    val Large: Shape
+        @Composable
+        @ReadOnlyComposable
+        get() = RoundedCornerShape(HbThemeDefaults.LocalGeometry.current.floatingSurfaceRadius.dp)
 }

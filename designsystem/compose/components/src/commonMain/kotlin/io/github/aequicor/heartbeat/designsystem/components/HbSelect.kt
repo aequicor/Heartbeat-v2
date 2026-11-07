@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -55,7 +55,7 @@ fun <T> HbSelect(
     var expanded by remember { mutableStateOf(false) }
     var activeIndex by remember { mutableIntStateOf(0) }
     val popupOffset = with(LocalDensity.current) {
-        FIELD_MIN_HEIGHT.roundToPx() + POPUP_OFFSET.roundToPx()
+        HbSizes.controlHeight.roundToPx() + POPUP_OFFSET.roundToPx()
     }
 
     Box(modifier = modifier) {
@@ -112,7 +112,7 @@ private fun SelectTrigger(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = FIELD_MIN_HEIGHT)
+            .heightIn(min = HbSizes.controlHeight)
             .clip(HbShapes.Medium)
             .background(colors.surface.input)
             .border(FIELD_BORDER, colors.border.control, HbShapes.Medium)
@@ -137,7 +137,6 @@ private fun SelectTrigger(
     }
 }
 
-private val FIELD_MIN_HEIGHT = HbGeometries.Dense.controlHeight.dp
 
 private val FIELD_BORDER = 1.dp
 

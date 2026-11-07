@@ -16,7 +16,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 
@@ -38,7 +38,7 @@ fun HbIconButton(
 
     Box(
         modifier = modifier
-            .size(ICON_TARGET)
+            .size(HbSizes.minimumTarget)
             .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
@@ -54,4 +54,3 @@ fun HbIconButton(
     }
 }
 
-private val ICON_TARGET = HbGeometries.Dense.minimumTarget.dp

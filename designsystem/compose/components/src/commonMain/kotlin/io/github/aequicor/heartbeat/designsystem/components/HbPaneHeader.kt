@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -33,7 +33,7 @@ fun HbPaneHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = HEADER_MIN_HEIGHT)
+            .heightIn(min = HbSizes.paneHeaderHeight)
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
@@ -59,4 +59,3 @@ fun HbPaneHeader(
     }
 }
 
-private val HEADER_MIN_HEIGHT = HbPaneGeometry.PaneHeaderDense.dp

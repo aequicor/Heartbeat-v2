@@ -22,7 +22,7 @@ import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -50,7 +50,7 @@ fun HbTreeItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = TREE_ROW_HEIGHT)
+            .heightIn(min = HbSizes.controlHeight)
             .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
@@ -81,6 +81,5 @@ fun HbTreeItem(
     }
 }
 
-private val TREE_ROW_HEIGHT = HbGeometries.Dense.controlHeight.dp
 
 private val INDENT_STEP = 16.dp

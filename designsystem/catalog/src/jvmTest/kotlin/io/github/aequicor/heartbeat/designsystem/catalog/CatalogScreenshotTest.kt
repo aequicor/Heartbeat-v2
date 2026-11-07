@@ -7,6 +7,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbContrastPreference
+import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -17,8 +18,8 @@ import kotlin.test.assertTrue
  * Renders the catalog to PNG files for review (HB-DS-039, HB-DS-040).
  *
  * The scene is raster and offscreen, so the check runs without a desktop window. The images land in
- * `designsystem/compose/components/build/catalog`; both appearances, a compact width, the 150% text
- * scale and the high-contrast mapping are covered, and every image must be a non-empty PNG.
+ * `designsystem/catalog/build/catalog`; both appearances, a compact width, the 150% text scale, the
+ * high-contrast mapping and the touch density are covered, and every image must be a non-empty PNG.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class CatalogScreenshotTest {
@@ -36,6 +37,17 @@ class CatalogScreenshotTest {
     @Test
     fun rendersCompactLightCatalog() {
         renderCatalog("catalog-compact-light", COMPACT_WIDTH, COMPACT_HEIGHT, HbAppearance.Light)
+    }
+
+    @Test
+    fun rendersTouchCatalog() {
+        renderCatalog(
+            name = "catalog-touch",
+            width = WIDE_WIDTH,
+            height = TOUCH_HEIGHT,
+            appearance = HbAppearance.Light,
+            density = HbDensity.Touch,
+        )
     }
 
     @Test
@@ -67,12 +79,14 @@ class CatalogScreenshotTest {
         appearance: HbAppearance,
         textScale: Float = 1f,
         contrast: HbContrastPreference = HbContrastPreference.System,
+        density: HbDensity = HbDensity.Dense,
     ) {
         val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
             HbTheme(
                 appearance = appearance,
                 textScale = textScale,
                 contrast = contrast,
+                density = density,
             ) {
                 CatalogScreen()
             }
@@ -101,5 +115,7 @@ class CatalogScreenshotTest {
         private const val COMPACT_WIDTH = 390
 
         private const val COMPACT_HEIGHT = 3100
+
+        private const val TOUCH_HEIGHT = 3000
     }
 }

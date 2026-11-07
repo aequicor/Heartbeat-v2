@@ -68,6 +68,7 @@ Compose:
       - LocalColors
       - LocalMotion
       - LocalTypography
+      - LocalGeometry
   CompositionLocalNaming:
     active: true
   ConditionHoist:

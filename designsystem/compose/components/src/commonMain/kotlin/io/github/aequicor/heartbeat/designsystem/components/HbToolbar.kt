@@ -10,7 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 
 /**
@@ -26,7 +26,7 @@ fun HbToolbar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = TOOLBAR_MIN_HEIGHT)
+            .heightIn(min = HbSizes.controlHeight)
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
@@ -34,4 +34,3 @@ fun HbToolbar(
     )
 }
 
-private val TOOLBAR_MIN_HEIGHT = HbGeometries.Dense.controlHeight.dp

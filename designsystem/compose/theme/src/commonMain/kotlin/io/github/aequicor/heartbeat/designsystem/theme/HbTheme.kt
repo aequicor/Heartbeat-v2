@@ -8,24 +8,31 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbColorPalettes
 import io.github.aequicor.heartbeat.designsystem.foundation.HbContrastPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbContrastSchemes
+import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
+import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
+import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScales
 
 /**
  * Wraps the content into the application theme: provides [HbThemeDefaults.LocalColors],
- * [HbThemeDefaults.LocalTypography] and [HbThemeDefaults.LocalMotion].
+ * [HbThemeDefaults.LocalTypography], [HbThemeDefaults.LocalGeometry] and
+ * [HbThemeDefaults.LocalMotion].
  *
  * [appearance] selects the semantic palette; [HbAppearance.System] follows the host where it reports
  * the preference. [contrast] applies the high-contrast mapping of the palette when it is [High], and
  * the system value resolves to the standard palette until the host reports a forced-contrast
  * setting. [textScale] is the user text preference and scales every type role, so containers grow
- * instead of clipping. [motion] carries the reduced-motion setting; [HbMotionPreference.System]
- * resolves to the full vocabulary until the host reports its accessibility setting.
+ * instead of clipping. [density] is the stable host default or the explicit user preference: it
+ * selects the geometry and, on a touch host, the touch type scale. [motion] carries the
+ * reduced-motion setting; [HbMotionPreference.System] resolves to the full vocabulary until the host
+ * reports its accessibility setting.
  */
 @Composable
 fun HbTheme(
     appearance: HbAppearance = HbAppearance.System,
     motion: HbMotionPreference = HbMotionPreference.System,
     textScale: Float = 1f,
+    density: HbDensity = HbDensity.Dense,
     contrast: HbContrastPreference = HbContrastPreference.System,
     content: @Composable () -> Unit,
 ) {
@@ -45,14 +52,17 @@ fun HbTheme(
         HbMotionPreference.System -> HbMotionPreference.Full
         HbMotionPreference.Reduced, HbMotionPreference.Full -> motion
     }
-    val typeStyles = remember(textScale) {
-        defaultTypeScale().toStyles(textScale.coerceIn(MinTextScale, MaxTextScale))
+    val geometry = HbGeometries.forDensity(density)
+    val typeScale = if (density == HbDensity.Touch) HbTypeScales.Touch else HbTypeScales.Desktop
+    val typeStyles = remember(density, textScale) {
+        typeScale.toStyles(textScale.coerceIn(MinTextScale, MaxTextScale))
     }
 
     CompositionLocalProvider(
         HbThemeDefaults.LocalColors provides colors,
         HbThemeDefaults.LocalMotion provides resolvedMotion,
         HbThemeDefaults.LocalTypography provides typeStyles,
+        HbThemeDefaults.LocalGeometry provides geometry,
         content = content,
     )
 }

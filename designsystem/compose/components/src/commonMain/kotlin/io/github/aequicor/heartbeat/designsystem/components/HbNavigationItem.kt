@@ -25,7 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -58,7 +58,7 @@ fun HbNavigationItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = navigationRowHeight)
+            .heightIn(min = HbSizes.navigationRowHeight)
             .clip(HbShapes.Small)
             .background(background)
             .drawBehind {
@@ -93,6 +93,5 @@ fun HbNavigationItem(
     }
 }
 
-private val navigationRowHeight = HbGeometries.Dense.navigationRowHeight.dp
 
 private val indicatorWidth = 2.dp

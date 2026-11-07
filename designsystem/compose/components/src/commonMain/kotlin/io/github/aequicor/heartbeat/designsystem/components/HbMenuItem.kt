@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
-import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -48,7 +48,7 @@ fun HbMenuItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = MENU_ITEM_MIN_HEIGHT)
+            .heightIn(min = HbSizes.controlHeight)
             .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
@@ -78,4 +78,3 @@ fun HbMenuItem(
     }
 }
 
-private val MENU_ITEM_MIN_HEIGHT = HbGeometries.Dense.controlHeight.dp
