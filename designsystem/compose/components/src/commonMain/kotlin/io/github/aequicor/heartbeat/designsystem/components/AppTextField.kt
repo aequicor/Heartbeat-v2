@@ -1,15 +1,13 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import io.github.aequicor.heartbeat.designsystem.theme.AppOnSurface
-import io.github.aequicor.heartbeat.designsystem.theme.AppSurface
+import io.github.aequicor.heartbeat.designsystem.theme.AppColors
 import io.github.aequicor.heartbeat.designsystem.theme.Shapes
 import io.github.aequicor.heartbeat.designsystem.theme.Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.Typography
@@ -27,7 +25,7 @@ fun AppTextField(
         onValueChange = onValueChange,
         modifier = modifier
             .clip(Shapes.Small)
-            .background(AppSurface)
+            .background(AppColors.surface)
             .padding(horizontal = Spacing.S, vertical = Spacing.Xs),
         textStyle = Typography.Body,
         singleLine = true,
@@ -35,7 +33,7 @@ fun AppTextField(
             if (value.isEmpty()) {
                 BasicText(
                     text = placeholder,
-                    color = { AppOnSurface },
+                    color = { AppColors.onSurface },
                     style = Typography.Caption,
                 )
             }

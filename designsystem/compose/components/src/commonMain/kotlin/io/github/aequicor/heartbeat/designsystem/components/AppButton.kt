@@ -8,8 +8,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import io.github.aequicor.heartbeat.designsystem.theme.AppOnPrimary
-import io.github.aequicor.heartbeat.designsystem.theme.AppPrimary
+import io.github.aequicor.heartbeat.designsystem.theme.AppColors
 import io.github.aequicor.heartbeat.designsystem.theme.Shapes
 import io.github.aequicor.heartbeat.designsystem.theme.Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.Typography
@@ -18,19 +17,19 @@ import io.github.aequicor.heartbeat.designsystem.theme.Typography
 @Composable
 fun AppButton(
     text: String,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .clip(Shapes.Medium)
-            .background(AppPrimary)
+            .background(AppColors.primary)
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.M, vertical = Spacing.S),
     ) {
         BasicText(
             text = text,
-            color = { AppOnPrimary },
+            color = { AppColors.onPrimary },
             style = Typography.Body,
         )
     }
