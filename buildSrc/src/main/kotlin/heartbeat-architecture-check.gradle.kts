@@ -1,20 +1,23 @@
+import heartbeat.ArchitectureRules
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
-// Enforces the module dependency rules from docs/specs/architecture.md
-// ("Запрещённые зависимости"). The task walks declared dependencies of every
-// subproject and, for universal `impl` modules, the resolved runtime classpaths,
-// so a forbidden library cannot arrive transitively through `core` or another
-// module. The check runs as part of `build` and `check`.
+// Enforces the rules from docs/specs/architecture.md ("Запрещённые зависимости"):
+// declared project and module dependencies, resolved compile/runtime graphs of the
+// universal `impl` modules (JVM, Android and Kotlin/Native), and source-level checks
+// for imports and Store naming. The task runs as part of `build` and `check`.
 
 val violations = sortedSetOf<String>()
 
+private val importPattern = Regex("""(?m)^\s*import\s+([\w.]+)""")
+private val declarationPattern = Regex("""\b(?:class|interface|object)\s+([A-Z]\w*)""")
+
 val checkTask = tasks.register("architectureCheck") {
     group = "verification"
-    description = "Checks module dependencies against the architecture rules."
+    description = "Checks module dependencies, classpaths and naming against the architecture rules."
     doLast {
         violations.clear()
         rootProject.subprojects.forEach(::checkProject)
@@ -42,140 +45,75 @@ subprojects.forEach { subproject ->
 
 private fun checkProject(project: Project) {
     project.configurations.forEach { configuration ->
-        configuration.dependencies.filterIsInstance<ProjectDependency>().forEach {
-            checkProjectDependency(project, project.rootProject.project(it.path))
+        configuration.dependencies.filterIsInstance<ProjectDependency>().forEach { dependency ->
+            ArchitectureRules.projectDependencyViolation(project.path, dependency.path)?.let { rule ->
+                report(project.path, dependency.path, rule)
+            }
         }
-        configuration.dependencies.filterIsInstance<ModuleDependency>().forEach {
-            checkModuleDependency(project, it)
+        configuration.dependencies.filterIsInstance<ModuleDependency>().forEach { dependency ->
+            val group = dependency.group.orEmpty()
+            ArchitectureRules.moduleDependencyViolation(project.path, group)?.let { rule ->
+                report(project.path, "$group:${dependency.name}", rule)
+            }
         }
     }
     checkResolvedDependencies(project)
+    checkSources(project)
 }
 
 private fun checkResolvedDependencies(project: Project) {
-    if (!isImpl(project.path)) {
+    if (!ArchitectureRules.isImpl(project.path)) {
         return
     }
     project.configurations
-        .filter { it.isCanBeResolved && it.name.endsWith("RuntimeClasspath") }
+        .filter {
+            ArchitectureRules.isRelevantClasspathConfiguration(it.name, it.isCanBeResolved)
+        }
         .forEach { configuration ->
-            val components = runCatching {
-                configuration.incoming.resolutionResult.allComponents
-            }.getOrNull() ?: return@forEach
-            components.forEach { component ->
+            val result = try {
+                configuration.incoming.resolutionResult
+            } catch (error: Exception) {
+                // A configuration that cannot be resolved must fail the gate: silently
+                // skipping it would hide forbidden transitive dependencies.
+                report(
+                    project.path,
+                    configuration.name,
+                    "architecture check cannot resolve the configuration: ${error.message}",
+                )
+                return@forEach
+            }
+            result.allComponents.forEach { component ->
                 val id = component.id
-                if (id is ModuleComponentIdentifier &&
-                    forbiddenImplGroups.any { id.group.startsWith(it) }
-                ) {
-                    report(
-                        project.path,
-                        "${id.group}:${id.module}:${id.version}",
-                        "impl must not depend on UI or presentation frameworks transitively",
-                    )
+                if (id is ModuleComponentIdentifier) {
+                    ArchitectureRules.moduleDependencyViolation(project.path, id.group)?.let { rule ->
+                        report(
+                            project.path,
+                            "${id.group}:${id.module}:${id.version}",
+                            "transitively $rule",
+                        )
+                    }
                 }
             }
         }
 }
 
-private fun checkProjectDependency(from: Project, to: Project) {
-    val fromPath = from.path
-    val toPath = to.path
-
-    when {
-        isApi(fromPath) -> {
-            if (isImpl(toPath) || isPresentation(toPath) || isUi(toPath) || isDesignSystem(toPath)) {
-                report(fromPath, toPath, "api modules depend only on api, core and di contracts")
+private fun checkSources(project: Project) {
+    project.fileTree("src") { include("**/*.kt") }.forEach { file ->
+        val text = file.readText()
+        val relativePath = file.relativeTo(project.projectDir).path
+        importPattern.findAll(text).forEach { match ->
+            ArchitectureRules.forbiddenImport(project.path, match.groupValues[1])?.let { rule ->
+                report(project.path, relativePath, rule)
             }
         }
-
-        isImpl(fromPath) -> {
-            if (isPresentation(toPath) || isUi(toPath) || isDesignSystem(toPath)) {
-                report(fromPath, toPath, "impl must not depend on presentation, ui or designsystem")
-            }
-            if (isFeature(toPath) && !isApi(toPath)) {
-                report(fromPath, toPath, "features interact only through api modules")
+        declarationPattern.findAll(text).forEach { match ->
+            ArchitectureRules.namingViolation(project.path, match.groupValues[1])?.let { rule ->
+                report(project.path, relativePath, rule)
             }
         }
-
-        isPresentation(fromPath) -> {
-            if (isUi(toPath)) {
-                report(fromPath, toPath, "presentation must not depend on ui")
-            }
-            if (isPresentation(toPath) &&
-                pathSegments(fromPath).last() != pathSegments(toPath).last()
-            ) {
-                report(fromPath, toPath, "presentation adapters must not depend on each other")
-            }
-        }
-
-        isUi(fromPath) -> {
-            if (isImpl(toPath)) {
-                report(fromPath, toPath, "ui must not depend on impl")
-            }
-            if (isPresentation(toPath) && fromPath != ":shell:ui:compose") {
-                report(
-                    fromPath,
-                    toPath,
-                    "ui is presentation-framework independent; only shell:ui:compose may bind components",
-                )
-            }
-        }
-
-        isCore(fromPath) -> {
-            if (isFeature(toPath)) {
-                report(fromPath, toPath, "core must not depend on features")
-            }
-        }
-
-        isDesignSystem(fromPath) -> {
-            if (isFeature(toPath)) {
-                report(fromPath, toPath, "designsystem must not depend on features")
-            }
-        }
-    }
-}
-
-private val forbiddenImplGroups = listOf(
-    "com.arkivanov.decompose",
-    "org.jetbrains.compose",
-    "androidx.compose",
-)
-
-private fun checkModuleDependency(from: Project, dependency: ModuleDependency) {
-    val fromPath = from.path
-    val group = dependency.group.orEmpty()
-    if (isImpl(fromPath) && forbiddenImplGroups.any { group.startsWith(it) }) {
-        report(
-            fromPath,
-            "$group:${dependency.name}",
-            "impl must not depend on UI or presentation frameworks",
-        )
     }
 }
 
 private fun report(from: String, to: String, rule: String) {
     violations += "$from -> $to violates rule: $rule"
 }
-
-private fun pathSegments(path: String): List<String> =
-    path.split(":").filter { it.isNotEmpty() }
-
-private fun isApi(path: String): Boolean =
-    path == ":shell:api" ||
-        (path.startsWith(":features:") && pathSegments(path).last() == "api")
-
-private fun isImpl(path: String): Boolean =
-    path == ":shell:impl" ||
-        (path.startsWith(":features:") && pathSegments(path).last() == "impl")
-
-private fun isPresentation(path: String): Boolean =
-    pathSegments(path).contains("presentation")
-
-private fun isUi(path: String): Boolean =
-    pathSegments(path).contains("ui")
-
-private fun isFeature(path: String): Boolean = path.startsWith(":features:")
-
-private fun isDesignSystem(path: String): Boolean = path.startsWith(":designsystem")
-
-private fun isCore(path: String): Boolean = path.startsWith(":core")

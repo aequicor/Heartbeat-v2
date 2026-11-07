@@ -17,4 +17,8 @@ dependencies {
     implementation(libs.compose.gradle.plugin)
     implementation(libs.metro.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
+
+    // Unit tests cover the pure rules in heartbeat/ArchitectureRules.kt.
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit)
 }

@@ -30,6 +30,20 @@ style:
   UnusedPrivateFunction:
     ignoreAnnotated:
       - Preview
+  ForbiddenImport:
+    active: true
+    forbiddenImports:
+      - 'com.arkivanov.decompose.*'
+      - 'org.jetbrains.compose.*'
+      - 'androidx.compose.*'
+      - 'androidx.lifecycle.ViewModel'
+    excludes:
+      - '**/presentation/decompose/**'
+      - '**/designsystem/**'
+      - '**/platform/**'
+      - '**/shell/presentation/**'
+      - '**/shell/ui/**'
+      - '**/ui/**'
 
 # mrmans0n/compose-rules: https://github.com/mrmans0n/compose-rules
 Compose:
