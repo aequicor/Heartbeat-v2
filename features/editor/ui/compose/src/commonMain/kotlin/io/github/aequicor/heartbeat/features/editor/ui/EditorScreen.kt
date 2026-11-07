@@ -22,27 +22,36 @@ fun EditorScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by store.state.collectAsState()
+    val fieldsEnabled = !state.isLoading && !state.isSaving && state.loadError == null
 
     Column(modifier = modifier) {
         HbTextField(
             value = state.title,
             onValueChange = { store.dispatch(EditorAction.TitleChanged(it)) },
             placeholder = "Заголовок",
-            enabled = !state.isLoading,
+            enabled = fieldsEnabled,
         )
         HbTextField(
             value = state.content,
             onValueChange = { store.dispatch(EditorAction.ContentChanged(it)) },
             placeholder = "Содержимое",
-            enabled = !state.isLoading,
+            enabled = fieldsEnabled,
         )
         HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
             onClick = { store.dispatch(EditorAction.Save) },
-            enabled = !state.isLoading && !state.isSaving,
+            enabled = fieldsEnabled,
         )
+        state.loadError?.let { error ->
+            HbText(text = "Не удалось загрузить: $error")
+            HbButton(
+                text = "Повторить",
+                onClick = { store.dispatch(EditorAction.Reload) },
+                enabled = !state.isLoading,
+            )
+        }
         state.saveError?.let { error ->
-            HbText(text = error)
+            HbText(text = "Не удалось сохранить: $error")
         }
     }
 }

@@ -22,9 +22,13 @@ import kotlinx.coroutines.launch
  * knows nothing about Decompose, Compose or BLoC — the caller provides the
  * [CoroutineScope] that defines its lifetime.
  *
- * Edits are ignored until the note is loaded, so the asynchronous load cannot
- * overwrite text the user already typed. A failed save sets [EditorState.saveError]
- * and always clears [EditorState.isSaving]; cancellation is not a save error.
+ * The store keeps the editor usable under failures: a failed load sets
+ * [EditorState.loadError] instead of blocking the store forever and can be
+ * retried with [EditorAction.Reload]; a failed save sets [EditorState.saveError]
+ * and always clears [EditorState.isSaving]. Edits are ignored while data is
+ * loading or a save is running, so the async work cannot overwrite user input
+ * and a save always persists the snapshot taken at the moment of the action.
+ * Cancellation is not a failure.
  */
 class DefaultEditorStore(
     private val loadNote: LoadNote,
@@ -40,13 +44,19 @@ class DefaultEditorStore(
     override val effects: Flow<EditorEffect> = effectsChannel.receiveAsFlow()
 
     init {
-        scope.launch {
-            mutableState.value = loadNote(noteId).toEditorState()
-        }
+        load()
     }
 
     override fun dispatch(action: EditorAction) {
-        if (mutableState.value.isLoading) {
+        when (action) {
+            EditorAction.Reload -> load()
+            else -> dispatchEdit(action)
+        }
+    }
+
+    private fun dispatchEdit(action: EditorAction) {
+        val current = mutableState.value
+        if (current.isLoading || current.isSaving || current.loadError != null) {
             return
         }
         when (action) {
@@ -57,6 +67,25 @@ class DefaultEditorStore(
                 mutableState.update { it.copy(content = action.value) }
 
             EditorAction.Save -> save()
+
+            EditorAction.Reload -> Unit
+        }
+    }
+
+    // Loading is the second boundary that turns an arbitrary storage failure into UI state.
+    @Suppress("TooGenericExceptionCaught")
+    private fun load() {
+        mutableState.update { it.copy(isLoading = true, loadError = null) }
+        scope.launch {
+            try {
+                mutableState.value = loadNote(noteId).toEditorState()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                mutableState.update {
+                    it.copy(isLoading = false, loadError = error.message ?: "Load failed")
+                }
+            }
         }
     }
 
@@ -64,15 +93,13 @@ class DefaultEditorStore(
     // storage implementations may throw arbitrary exceptions, so the catch stays generic.
     @Suppress("TooGenericExceptionCaught")
     private fun save() {
-        if (mutableState.value.isSaving) {
-            return
-        }
-        // The flag is set synchronously so a second Save dispatched before the
-        // coroutine starts cannot launch a parallel save.
+        // The snapshot is taken synchronously: edits dispatched while the save is
+        // running are ignored, so the persisted note always matches what the user saw.
+        val snapshot = mutableState.value
         mutableState.update { it.copy(isSaving = true, saveError = null) }
         scope.launch {
             try {
-                saveNote(mutableState.value.toNote(noteId))
+                saveNote(snapshot.toNote(noteId))
                 mutableState.update { it.copy(saveError = null) }
                 effectsChannel.send(EditorEffect.Saved)
             } catch (cancellation: CancellationException) {

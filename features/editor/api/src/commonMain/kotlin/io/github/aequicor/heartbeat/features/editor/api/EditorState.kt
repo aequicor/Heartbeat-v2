@@ -6,5 +6,6 @@ data class EditorState(
     val content: String = "",
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
+    val loadError: String? = null,
     val saveError: String? = null,
 )

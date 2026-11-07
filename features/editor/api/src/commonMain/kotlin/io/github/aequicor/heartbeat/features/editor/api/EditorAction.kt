@@ -7,4 +7,7 @@ sealed interface EditorAction {
     data class ContentChanged(val value: String) : EditorAction
 
     data object Save : EditorAction
+
+    /** Retries the note load after [EditorState.loadError]. */
+    data object Reload : EditorAction
 }

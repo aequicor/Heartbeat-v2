@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -71,6 +72,45 @@ class DefaultEditorStoreTest {
     }
 
     @Test
+    fun loadErrorDoesNotBlockTheStore() = runTest {
+        val repository = FakeEditorRepository(loadFailures = 1).apply {
+            seed(Note("n1", "Загруженный", ""))
+        }
+        val store = store(repository, "n1")
+
+        advanceUntilIdle()
+
+        assertEquals("network is down", store.state.value.loadError)
+        assertFalse(store.state.value.isLoading)
+    }
+
+    @Test
+    fun reloadAfterLoadErrorLoadsTheNote() = runTest {
+        val repository = FakeEditorRepository(loadFailures = 1).apply {
+            seed(Note("n1", "Загруженный", ""))
+        }
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+
+        store.dispatch(EditorAction.Reload)
+        advanceUntilIdle()
+
+        assertEquals("Загруженный", store.state.value.title)
+        assertNull(store.state.value.loadError)
+    }
+
+    @Test
+    fun editAfterLoadErrorIsIgnored() = runTest {
+        val store = store(FakeEditorRepository(loadFailures = 1), "n1")
+        advanceUntilIdle()
+
+        store.dispatch(EditorAction.TitleChanged("Правка без загрузки"))
+
+        assertEquals("", store.state.value.title)
+        assertEquals("network is down", store.state.value.loadError)
+    }
+
+    @Test
     fun titleChangeUpdatesState() = runTest {
         val store = store(repositoryWith(), "n1")
         advanceUntilIdle()
@@ -124,6 +164,24 @@ class DefaultEditorStoreTest {
         assertEquals(1, repository.saveCalls)
     }
 
+    @Test
+    fun savePersistsSnapshotAndIgnoresEditsWhileRunning() = runTest {
+        val repository = FakeEditorRepository(saveDelayMillis = 1_000)
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+        store.dispatch(EditorAction.TitleChanged("Снимок"))
+
+        store.dispatch(EditorAction.Save)
+        advanceTimeBy(100)
+        assertTrue(store.state.value.isSaving)
+
+        store.dispatch(EditorAction.TitleChanged("Правка во время сохранения"))
+        advanceUntilIdle()
+
+        assertEquals("Снимок", store.state.value.title)
+        assertEquals("Снимок", repository.load("n1").title)
+    }
+
     private suspend fun repositoryWith(vararg notes: Note): DefaultEditorRepository {
         val repository = DefaultEditorRepository(EditorDataSource())
         for (note in notes) {
@@ -144,13 +202,16 @@ class DefaultEditorStoreTest {
         )
 }
 
-/** In-memory repository with configurable load delay and save failure. */
+/** In-memory repository with configurable delays and failures. */
 private class FakeEditorRepository(
     private val loadDelayMillis: Long = 0,
+    private val saveDelayMillis: Long = 0,
     private val saveFailure: Throwable? = null,
+    loadFailures: Int = 0,
 ) : EditorRepository {
 
     private val notes = mutableMapOf<String, Note>()
+    private var remainingLoadFailures = loadFailures
 
     var saveCalls = 0
         private set
@@ -163,11 +224,18 @@ private class FakeEditorRepository(
         if (loadDelayMillis > 0) {
             delay(loadDelayMillis)
         }
+        if (remainingLoadFailures > 0) {
+            remainingLoadFailures--
+            error("network is down")
+        }
         return notes[noteId] ?: Note(id = noteId, title = "", content = "")
     }
 
     override suspend fun save(note: Note) {
         saveCalls++
+        if (saveDelayMillis > 0) {
+            delay(saveDelayMillis)
+        }
         val failure = saveFailure
         if (failure != null) {
             throw failure
