@@ -94,12 +94,12 @@ class CatalogScreenshotTest {
     private companion object {
         private const val WIDE_WIDTH = 1200
 
-        private const val WIDE_HEIGHT = 2150
+        private const val WIDE_HEIGHT = 2500
 
-        private const val LARGE_TEXT_HEIGHT = 3000
+        private const val LARGE_TEXT_HEIGHT = 3400
 
         private const val COMPACT_WIDTH = 390
 
-        private const val COMPACT_HEIGHT = 2700
+        private const val COMPACT_HEIGHT = 3100
     }
 }

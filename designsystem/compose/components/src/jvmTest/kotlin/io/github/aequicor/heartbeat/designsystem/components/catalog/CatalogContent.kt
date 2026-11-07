@@ -23,6 +23,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbBadge
+import io.github.aequicor.heartbeat.designsystem.components.HbBreadcrumbs
+import io.github.aequicor.heartbeat.designsystem.components.HbNavigationGroup
+import io.github.aequicor.heartbeat.designsystem.components.HbTable
+import io.github.aequicor.heartbeat.designsystem.components.HbTreeItem
 import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
 import io.github.aequicor.heartbeat.designsystem.components.HbCombobox
 import io.github.aequicor.heartbeat.designsystem.components.HbOrientation
@@ -85,10 +89,50 @@ internal fun CatalogScreen(modifier: Modifier = Modifier) {
         CatalogSection("Поля") { Fields() }
         CatalogSection("Выбор") { Selection() }
         CatalogSection("Навигация и списки") { NavigationAndLists(colors) }
+        CatalogSection("Структура") { Structure() }
         CatalogSection("Метаданные") { Metadata(colors) }
         CatalogSection("Обратная связь") { Feedback(colors) }
         CatalogSection("Рабочая область") { Workspace(colors) }
         CatalogSection("Поверхности") { Surfaces(colors) }
+    }
+}
+
+@Composable
+private fun Structure() {
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+        HbBreadcrumbs(
+            items = listOf("Проект", "Диалоги", "Разбор релиза"),
+            onNavigate = {},
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.M)) {
+            Column(modifier = Modifier.width(STRUCTURE_NAV_WIDTH)) {
+                HbNavigationGroup(title = "Недавние") {
+                    HbNavigationItem(label = "Разбор релиза", selected = true, onClick = {})
+                    HbNavigationItem(label = "Конспект", selected = false, onClick = {})
+                }
+            }
+            Column(modifier = Modifier.width(STRUCTURE_TREE_WIDTH)) {
+                HbTreeItem(
+                    label = "designsystem",
+                    depth = 0,
+                    expanded = true,
+                    onExpandedChange = {},
+                    stateDescription = "Развёрнуто",
+                )
+                HbTreeItem(label = "foundation", depth = 1, expanded = false, onExpandedChange = {})
+                HbTreeItem(label = "compose", depth = 1, expanded = true, onExpandedChange = {})
+                HbTreeItem(label = "components", depth = 2, expanded = false, onExpandedChange = {})
+            }
+            Column(modifier = Modifier.width(STRUCTURE_TABLE_WIDTH)) {
+                HbTable(
+                    columns = listOf("Файл", "Изменён", "Статус"),
+                    rows = listOf(
+                        listOf("HbButton.kt", "10:24", "Изменён"),
+                        listOf("HbTable.kt", "10:31", "Добавлен"),
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -400,6 +444,12 @@ private val SWATCH_HEIGHT = 28.dp
 private val NAV_WIDTH = 360.dp
 
 private val SURFACE_WIDTH = 320.dp
+
+private val STRUCTURE_NAV_WIDTH = 220.dp
+
+private val STRUCTURE_TREE_WIDTH = 380.dp
+
+private val STRUCTURE_TABLE_WIDTH = 520.dp
 
 private val SURFACE_HEIGHT = 180.dp
 
