@@ -4,6 +4,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -50,6 +51,7 @@ fun HbSwitch(
 ) {
     val colors = HbThemeDefaults.LocalColors.current
     var focused by remember { mutableStateOf(false) }
+    val reducedMotion = HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced
     val trackColor = when {
         !enabled -> colors.text.disabled
         checked -> colors.accent.brand
@@ -58,7 +60,11 @@ fun HbSwitch(
     val labelColor = if (enabled) colors.text.primary else colors.text.primary.copy(HbEffects.DisabledContent)
     val thumbOffset by animateDpAsState(
         targetValue = if (checked) thumbTravel else thumbInset,
-        animationSpec = tween(durationMillis = HbMotions.Default.ordinaryTransitionMs),
+        animationSpec = if (reducedMotion) {
+            snap()
+        } else {
+            tween(durationMillis = HbMotions.Default.ordinaryTransitionMs)
+        },
         label = "switchThumb",
     )
 

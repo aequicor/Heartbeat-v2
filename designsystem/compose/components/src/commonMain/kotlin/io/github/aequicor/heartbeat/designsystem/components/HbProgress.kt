@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -44,18 +46,7 @@ fun HbProgress(
 ) {
     val colors = HbThemeDefaults.LocalColors.current
     val fraction = progress?.coerceIn(0f, 1f)
-    val transition = rememberInfiniteTransition(label = "progress")
-    val offset by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = HbMotions.Default.deliberateTransitionMs * IndeterminateCycles,
-                easing = LinearEasing,
-            ),
-        ),
-        label = "progressOffset",
-    )
+    val offset = indeterminateOffset()
 
     Column(modifier = modifier) {
         if (label != null) {
@@ -104,3 +95,23 @@ private val TRACK_HEIGHT = 4.dp
 private const val IndeterminateSegment = 0.3f
 
 private const val IndeterminateCycles = 3
+
+@Composable
+private fun indeterminateOffset(): Float {
+    if (HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced) {
+        return 0f
+    }
+    val transition = rememberInfiniteTransition(label = "progress")
+    val animated by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = HbMotions.Default.deliberateTransitionMs * IndeterminateCycles,
+                easing = LinearEasing,
+            ),
+        ),
+        label = "progressOffset",
+    )
+    return animated
+}

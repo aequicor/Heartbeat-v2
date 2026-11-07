@@ -66,6 +66,7 @@ Compose:
     active: true
     allowedCompositionLocals:
       - LocalColors
+      - LocalMotion
   CompositionLocalNaming:
     active: true
   ConditionHoist:

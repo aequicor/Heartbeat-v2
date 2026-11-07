@@ -4,6 +4,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -58,11 +60,7 @@ fun HbDisclosure(
 ) {
     val colors = HbThemeDefaults.LocalColors.current
     var focused by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) ChevronExpandedDegrees else 0f,
-        animationSpec = tween(durationMillis = HbMotions.Default.ordinaryTransitionMs),
-        label = "disclosureChevron",
-    )
+    val rotation = chevronRotation(expanded = expanded)
 
     Column(modifier = modifier) {
         Row(
@@ -167,4 +165,19 @@ private fun Modifier.disclosureSemantics(
         expand { onExpandedChange(true); true }
     }
     stateDescription?.let { this.stateDescription = it }
+}
+
+@Composable
+private fun chevronRotation(expanded: Boolean): Float {
+    val reducedMotion = HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) ChevronExpandedDegrees else 0f,
+        animationSpec = if (reducedMotion) {
+            snap()
+        } else {
+            tween(durationMillis = HbMotions.Default.ordinaryTransitionMs)
+        },
+        label = "disclosureChevron",
+    )
+    return rotation
 }

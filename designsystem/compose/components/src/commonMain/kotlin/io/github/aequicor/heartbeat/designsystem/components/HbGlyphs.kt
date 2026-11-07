@@ -4,6 +4,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -15,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 
 /** Close glyph of a dismissible surface; the accessible name comes from the action, not the glyph. */
 @Composable
@@ -52,9 +55,14 @@ internal fun HbChevronGlyph(
     expanded: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val reducedMotion = HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced
     val rotation by animateFloatAsState(
         targetValue = if (expanded) ChevronExpandedDegrees else 0f,
-        animationSpec = tween(durationMillis = HbMotions.Default.ordinaryTransitionMs),
+        animationSpec = if (reducedMotion) {
+            snap()
+        } else {
+            tween(durationMillis = HbMotions.Default.ordinaryTransitionMs)
+        },
         label = "chevronRotation",
     )
 

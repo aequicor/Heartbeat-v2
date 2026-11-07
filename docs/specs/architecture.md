@@ -591,6 +591,8 @@ designsystem/
 │       ├── HbColorScheme.kt
 │       ├── HbTypography.kt
 │       ├── HbGeometry.kt
+│       ├── HbMotion.kt
+│       ├── HbMotionPreference.kt
 │       ├── HbLayout.kt
 │       └── HbWorkspaceLayout.kt
 │
