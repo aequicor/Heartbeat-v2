@@ -33,10 +33,11 @@ jobs:
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: Run Linux native tests
+        # Bare task name: Gradle runs linuxX64Test in every module that declares the target
+        # (universal and Decompose modules), so new modules are covered without editing the list.
         run: >-
           ./gradlew
-          :features:editor:impl:linuxX64Test
-          :features:editor:presentation:decompose:linuxX64Test
+          linuxX64Test
           --no-daemon
 
   apple-native:
@@ -54,15 +55,15 @@ jobs:
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: Compile Apple targets and run macOS tests
+        # Bare task names: Gradle compiles each Apple target and runs macOS tests in every module
+        # that declares it (universal and Decompose modules), so the matrix stays complete without
+        # a hand-maintained module list.
         run: >-
           ./gradlew
-          :features:editor:impl:compileKotlinMacosArm64
-          :features:editor:impl:compileKotlinMacosX64
-          :features:editor:impl:compileKotlinIosArm64
-          :features:editor:impl:compileKotlinIosSimulatorArm64
-          :features:editor:impl:compileKotlinIosX64
-          :features:editor:presentation:decompose:compileKotlinMacosArm64
-          :features:editor:presentation:decompose:compileKotlinMacosX64
-          :features:editor:impl:macosArm64Test
-          :features:editor:presentation:decompose:macosArm64Test
+          compileKotlinMacosArm64
+          compileKotlinMacosX64
+          compileKotlinIosArm64
+          compileKotlinIosSimulatorArm64
+          compileKotlinIosX64
+          macosArm64Test
           --no-daemon
