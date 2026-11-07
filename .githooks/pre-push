@@ -1,0 +1,8 @@
+#!/bin/sh
+# Blocks a push when detekt reports a violation in any module.
+#
+# Installed by `git config core.hooksPath .githooks` (see the `installGitHooks` Gradle task).
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+exec sh ./gradlew --console=plain detektAll
