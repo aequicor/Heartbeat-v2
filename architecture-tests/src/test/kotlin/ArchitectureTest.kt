@@ -9,6 +9,7 @@ import com.lemonappdev.konsist.api.declaration.KoInterfaceDeclaration
 import com.lemonappdev.konsist.api.declaration.KoObjectDeclaration
 import com.lemonappdev.konsist.api.provider.KoAnnotationProvider
 import com.lemonappdev.konsist.api.provider.KoNameProvider
+import com.lemonappdev.konsist.api.provider.modifier.KoModifierProvider
 import com.lemonappdev.konsist.api.provider.modifier.KoVisibilityModifierProvider
 import com.lemonappdev.konsist.api.verify.assertTrue
 import org.junit.Assert
@@ -177,7 +178,9 @@ class ArchitectureTest {
                 packageName = declaration.packageName,
                 declarationName = declaration.name,
                 isPublic = declaration.isPublic,
+                declarationKind = declaration.kind,
                 annotations = declaration.annotations,
+                modifiers = declaration.modifiers,
             )
         }
 
@@ -198,6 +201,7 @@ class ArchitectureTest {
                     name = name,
                     isPublic = declaration.isPublicOrDefault(),
                     annotations = declaration.annotationNames(),
+                    modifiers = declaration.modifierNames(),
                 ),
             )?.let { "${file.projectPath}: $it" }
         }
@@ -209,6 +213,7 @@ class ArchitectureTest {
         val name: String,
         val isPublic: Boolean,
         val annotations: List<String>,
+        val modifiers: List<String>,
     )
 
     private fun KoBaseDeclaration.kind(): DeclarationKind = when (this) {
@@ -220,6 +225,10 @@ class ArchitectureTest {
     }
 
     private fun KoBaseDeclaration.nameOrNull(): String? = (this as? KoNameProvider)?.name
+
+    /** Modifier names such as `DATA`, `SEALED`, `ENUM` and `VALUE` that define a model role. */
+    private fun KoBaseDeclaration.modifierNames(): List<String> =
+        (this as? KoModifierProvider)?.modifiers?.map { it.name }.orEmpty()
 
     private fun KoBaseDeclaration.annotationNames(): List<String> = when (this) {
         is KoAnnotationProvider -> {
