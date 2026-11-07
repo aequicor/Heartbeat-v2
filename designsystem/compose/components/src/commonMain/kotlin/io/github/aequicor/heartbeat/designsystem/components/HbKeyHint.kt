@@ -14,7 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -27,7 +27,7 @@ fun HbKeyHint(
     keys: List<String>,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Row(
         modifier = modifier,

@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -24,7 +24,7 @@ fun HbBadge(
     modifier: Modifier = Modifier,
     tone: HbStatusTone = HbStatusTone.Neutral,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Box(
         modifier = modifier

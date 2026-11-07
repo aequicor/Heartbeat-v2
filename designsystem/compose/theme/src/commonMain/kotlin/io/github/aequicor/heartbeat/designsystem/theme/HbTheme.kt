@@ -14,9 +14,9 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScales
 
 /**
- * Wraps the content into the application theme: provides [HbThemeDefaults.LocalColors],
- * [HbThemeDefaults.LocalTypography], [HbThemeDefaults.LocalGeometry] and
- * [HbThemeDefaults.LocalMotion].
+ * Wraps the content into the application theme: provides the colors behind [HbThemeTokens.colors],
+ * the type styles behind [HbTypography], the geometry behind [HbShapes] and [HbSizes], and the
+ * motion preference behind [HbThemeTokens.motion].
  *
  * [appearance] selects the semantic palette; [HbAppearance.System] follows the host where it reports
  * the preference. [contrast] applies the high-contrast mapping of the palette when it is [High], and

@@ -31,7 +31,7 @@ import androidx.compose.ui.window.PopupProperties
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -106,7 +106,7 @@ private fun SelectTrigger(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Row(
         modifier = modifier

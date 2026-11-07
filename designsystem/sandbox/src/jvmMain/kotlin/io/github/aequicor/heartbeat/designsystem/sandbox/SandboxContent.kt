@@ -26,7 +26,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -36,7 +36,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  */
 @Composable
 internal fun SandboxScreen(modifier: Modifier = Modifier) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Column(
         modifier = modifier
@@ -66,7 +66,7 @@ private fun SandboxSection(
     title: String,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
         BasicText(
@@ -119,7 +119,7 @@ private fun Palette(colors: HbColors) {
 
 @Composable
 private fun SwatchRow(swatches: List<Pair<String, Color>>) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
         swatches.forEach { (name, color) ->

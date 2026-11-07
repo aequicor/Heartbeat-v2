@@ -24,7 +24,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -41,7 +41,7 @@ fun HbMenuItem(
     selected: Boolean = false,
     hint: String? = null,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     var focused by remember { mutableStateOf(false) }
     val contentColor = if (enabled) colors.text.primary else colors.text.primary.copy(HbEffects.DisabledContent)
 

@@ -38,7 +38,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -58,7 +58,7 @@ fun HbDisclosure(
     enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     var focused by remember { mutableStateOf(false) }
     val rotation = chevronRotation(expanded = expanded)
 
@@ -169,7 +169,7 @@ private fun Modifier.disclosureSemantics(
 
 @Composable
 private fun chevronRotation(expanded: Boolean): Float {
-    val reducedMotion = HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced
+    val reducedMotion = HbThemeTokens.motion == HbMotionPreference.Reduced
     val rotation by animateFloatAsState(
         targetValue = if (expanded) ChevronExpandedDegrees else 0f,
         animationSpec = if (reducedMotion) {

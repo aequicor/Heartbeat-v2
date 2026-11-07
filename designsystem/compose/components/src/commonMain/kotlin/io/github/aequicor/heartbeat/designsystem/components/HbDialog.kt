@@ -28,7 +28,7 @@ import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -49,7 +49,7 @@ fun HbDialog(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     val darkCanvas = colors.surface.canvas.luminance() < DarkCanvasLuminance
     val scrim = if (darkCanvas) HbEffects.ScrimDark else HbEffects.ScrimLight
 

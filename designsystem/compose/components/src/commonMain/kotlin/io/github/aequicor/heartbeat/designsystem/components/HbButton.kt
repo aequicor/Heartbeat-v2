@@ -21,7 +21,7 @@ import androidx.compose.ui.semantics.Role
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -43,7 +43,7 @@ fun HbButton(
     enabled: Boolean = true,
     busy: Boolean = false,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     val interactive = enabled && !busy
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()

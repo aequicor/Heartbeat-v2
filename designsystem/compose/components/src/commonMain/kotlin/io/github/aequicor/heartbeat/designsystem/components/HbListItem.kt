@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 
 /**
  * List row with one primary action and explicit secondary controls (HB-DS-019).
@@ -38,7 +38,7 @@ fun HbListItem(
     trailing: @Composable RowScope.() -> Unit = {},
     content: @Composable RowScope.() -> Unit,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     var focused by remember { mutableStateOf(false) }
 
     Row(

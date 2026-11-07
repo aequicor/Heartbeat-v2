@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -93,7 +93,7 @@ private fun HbRadioOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     var focused by remember { mutableStateOf(false) }
     val labelColor = if (enabled) colors.text.primary else colors.text.primary.copy(HbEffects.DisabledContent)
     val indicatorColor = when {

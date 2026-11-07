@@ -16,7 +16,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -31,7 +31,7 @@ fun HbLink(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     var focused by remember { mutableStateOf(false) }
 
     BasicText(

@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -24,7 +24,7 @@ fun HbChip(
     selected: Boolean = false,
     tone: HbStatusTone = HbStatusTone.Neutral,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     val background = if (selected) colors.selection.background else tone.container(colors)
     val contentColor = if (selected) colors.selection.foreground else tone.foreground(colors)
 

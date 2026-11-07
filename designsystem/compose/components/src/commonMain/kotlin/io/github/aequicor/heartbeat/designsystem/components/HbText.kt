@@ -3,7 +3,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Body text in the primary content role, without a Material dependency. */
@@ -12,7 +12,7 @@ fun HbText(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     BasicText(
         text = text,

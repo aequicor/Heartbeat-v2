@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -44,7 +44,7 @@ fun HbProgress(
     progress: Float? = null,
     label: String? = null,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
     val fraction = progress?.coerceIn(0f, 1f)
     val offset = indeterminateOffset()
 
@@ -98,7 +98,7 @@ private const val IndeterminateCycles = 3
 
 @Composable
 private fun indeterminateOffset(): Float {
-    if (HbThemeDefaults.LocalMotion.current == HbMotionPreference.Reduced) {
+    if (HbThemeTokens.motion == HbMotionPreference.Reduced) {
         return 0f
     }
     val transition = rememberInfiniteTransition(label = "progress")

@@ -41,7 +41,7 @@ import io.github.aequicor.heartbeat.designsystem.components.HbToolbar
 import io.github.aequicor.heartbeat.designsystem.components.HbTreeItem
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Navigation, list, structure, metadata, feedback and workspace samples of the sandbox. */
@@ -173,7 +173,7 @@ internal fun Workspace(colors: HbColors) {
         HbToolbar(
             actions = {
                 HbIconButton(contentDescription = "Новый диалог", onClick = {}) {
-                    val iconColors = HbThemeDefaults.LocalColors.current
+                    val iconColors = HbThemeTokens.colors
                     BasicText(
                         text = "+",
                         style = HbTypography.Label,

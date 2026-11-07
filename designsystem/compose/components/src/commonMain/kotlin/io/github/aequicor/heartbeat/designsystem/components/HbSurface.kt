@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSurfaceColors
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 
 /**
  * Opaque surface container of a semantic role (HB-DS-002). Base surfaces carry no shadow: layering
@@ -27,7 +27,7 @@ fun HbSurface(
     contentPadding: Dp = 0.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val colors = HbThemeDefaults.LocalColors.current
+    val colors = HbThemeTokens.colors
 
     Box(
         modifier = modifier
