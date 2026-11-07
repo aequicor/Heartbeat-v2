@@ -8,6 +8,10 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
+    // The composition root lives in the platform compilation (HB-ARCH-014), so the Metro
+    // compiler plugin runs here and the integration test graph proves that the feature
+    // contributions of every module assemble into one graph.
+    id("dev.zacsweers.metro")
 }
 
 val desktopVersion = "1.0.0"
@@ -29,6 +33,16 @@ dependencies {
     }
     implementation(libs.jewel.int.ui.standalone)
     implementation(libs.jewel.decorated.window)
+
+    // Test-only: the composition root graph must see the feature bindings the platform
+    // wires together. The app itself does not depend on features yet.
+    testImplementation(project(":features:editor:api"))
+    testImplementation(project(":features:editor:impl"))
+    testImplementation(project(":features:editor:presentation:decompose"))
+    testImplementation(project(":di:api"))
+    testImplementation(libs.metro.runtime)
+    testImplementation(libs.junit)
+    testImplementation(kotlin("test"))
 }
 
 compose.desktop {
