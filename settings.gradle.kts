@@ -41,3 +41,4 @@ include(
     ":shell:presentation:decompose",
     ":shell:ui:compose",
 )
+include(":architecture-tests")

@@ -6,6 +6,7 @@ decompose = "3.6.0-beta02"
 metro = "1.5.2"
 kotlinx-coroutines = "1.11.0"
 junit = "4.13.2"
+konsist = "1.0.0-beta.1"
 jewel = "0.42.0-263.7307.200"
 detekt = "2.0.0-alpha.6"
 detekt-compose-rules = "0.6.8"
@@ -29,6 +30,7 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }
+konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 jewel-int-ui-standalone = { module = "org.jetbrains.jewel:jewel-int-ui-standalone", version.ref = "jewel" }
 jewel-decorated-window = { module = "org.jetbrains.jewel:jewel-decorated-window", version.ref = "jewel" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }

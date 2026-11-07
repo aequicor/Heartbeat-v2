@@ -29,6 +29,12 @@ val checkTask = tasks.register("architectureCheck") {
     }
 }
 
+// The Konsist source-level tests (contracts, package roles, intra-module layer direction) run
+// before the dependency/classpath checks. Both must pass for `gradlew build`/`check` to succeed.
+checkTask.configure {
+    dependsOn(":architecture-tests:test")
+}
+
 // `gradlew build` runs the `build` task of every project that has it. The root project
 // applies `base`, so its `build` and `check` tasks always exist; wiring the check to the
 // root lifecycle tasks makes the gate part of a plain `gradlew build`.
