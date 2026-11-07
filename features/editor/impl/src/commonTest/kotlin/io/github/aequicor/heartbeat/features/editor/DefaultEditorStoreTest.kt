@@ -6,8 +6,8 @@ import io.github.aequicor.heartbeat.features.editor.data.datasource.EditorDataSo
 import io.github.aequicor.heartbeat.features.editor.data.repository.DefaultEditorRepository
 import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCase
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -195,8 +195,8 @@ class DefaultEditorStoreTest {
         noteId: String,
     ): DefaultEditorStore =
         DefaultEditorStore(
-            loadNote = LoadNote(repository),
-            saveNote = SaveNote(repository),
+            loadNote = LoadNoteUseCase(repository),
+            saveNote = SaveNoteUseCase(repository),
             noteId = noteId,
             scope = this,
         )

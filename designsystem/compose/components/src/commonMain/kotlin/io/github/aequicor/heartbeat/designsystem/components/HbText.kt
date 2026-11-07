@@ -4,7 +4,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
-import io.github.aequicor.heartbeat.designsystem.theme.Typography
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Body text in the theme color, without a Material dependency. */
 @Composable
@@ -18,6 +18,6 @@ fun HbText(
         text = text,
         modifier = modifier,
         color = { colors.onSurface },
-        style = Typography.Body,
+        style = HbTypography.Body,
     )
 }

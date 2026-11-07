@@ -9,9 +9,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
-import io.github.aequicor.heartbeat.designsystem.theme.Shapes
-import io.github.aequicor.heartbeat.designsystem.theme.Spacing
-import io.github.aequicor.heartbeat.designsystem.theme.Typography
+import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Primary action button built on foundation, without a Material dependency. */
 @Composable
@@ -25,15 +25,15 @@ fun HbButton(
 
     Box(
         modifier = modifier
-            .clip(Shapes.Medium)
+            .clip(HbShapes.Medium)
             .background(colors.primary)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = Spacing.M, vertical = Spacing.S),
+            .padding(horizontal = HbSpacing.M, vertical = HbSpacing.S),
     ) {
         BasicText(
             text = text,
             color = { colors.onPrimary },
-            style = Typography.Body,
+            style = HbTypography.Body,
         )
     }
 }

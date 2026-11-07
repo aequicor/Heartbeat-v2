@@ -5,9 +5,12 @@ import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 
 /** Loads a note; a missing note yields an empty one with the requested id. */
-class LoadNote @Inject constructor(
+class LoadNoteUseCase @Inject constructor(
     private val repository: EditorRepository,
 ) {
 
     suspend operator fun invoke(noteId: String): Note = repository.load(noteId)
 }
+
+
+

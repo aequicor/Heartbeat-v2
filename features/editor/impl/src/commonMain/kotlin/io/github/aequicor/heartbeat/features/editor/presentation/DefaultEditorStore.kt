@@ -4,8 +4,8 @@ import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorEffect
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
 import io.github.aequicor.heartbeat.features.editor.api.EditorStore
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCase
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
@@ -31,8 +31,8 @@ import kotlinx.coroutines.launch
  * Cancellation is not a failure.
  */
 class DefaultEditorStore(
-    private val loadNote: LoadNote,
-    private val saveNote: SaveNote,
+    private val loadNote: LoadNoteUseCase,
+    private val saveNote: SaveNoteUseCase,
     private val noteId: String,
     private val scope: CoroutineScope,
 ) : EditorStore {

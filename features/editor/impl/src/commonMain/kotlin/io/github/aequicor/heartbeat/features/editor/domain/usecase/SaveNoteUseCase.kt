@@ -5,7 +5,7 @@ import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 
 /** Persists a note. */
-class SaveNote @Inject constructor(
+class SaveNoteUseCase @Inject constructor(
     private val repository: EditorRepository,
 ) {
 
@@ -13,3 +13,6 @@ class SaveNote @Inject constructor(
         repository.save(note)
     }
 }
+
+
+

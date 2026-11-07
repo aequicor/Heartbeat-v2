@@ -8,9 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
-import io.github.aequicor.heartbeat.designsystem.theme.Shapes
-import io.github.aequicor.heartbeat.designsystem.theme.Spacing
-import io.github.aequicor.heartbeat.designsystem.theme.Typography
+import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Single-line text input built on foundation, without a Material dependency. */
 @Composable
@@ -27,10 +27,10 @@ fun HbTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
-            .clip(Shapes.Small)
+            .clip(HbShapes.Small)
             .background(colors.surface)
-            .padding(horizontal = Spacing.S, vertical = Spacing.Xs),
-        textStyle = Typography.Body,
+            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
+        textStyle = HbTypography.Body,
         singleLine = true,
         enabled = enabled,
         decorationBox = { innerTextField ->
@@ -38,7 +38,7 @@ fun HbTextField(
                 BasicText(
                     text = placeholder,
                     color = { colors.onSurface },
-                    style = Typography.Caption,
+                    style = HbTypography.Caption,
                 )
             }
             innerTextField()

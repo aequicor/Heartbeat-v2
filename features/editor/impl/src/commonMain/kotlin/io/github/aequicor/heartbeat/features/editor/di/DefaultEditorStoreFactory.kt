@@ -4,8 +4,8 @@ import dev.zacsweers.metro.ContributesBinding
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
-import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCase
+import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
 import kotlinx.coroutines.CoroutineScope
 
@@ -16,8 +16,8 @@ import kotlinx.coroutines.CoroutineScope
  */
 @ContributesBinding(AppScope::class)
 class DefaultEditorStoreFactory(
-    private val loadNote: LoadNote,
-    private val saveNote: SaveNote,
+    private val loadNote: LoadNoteUseCase,
+    private val saveNote: SaveNoteUseCase,
 ) : EditorStoreFactory {
 
     override fun create(noteId: String, scope: CoroutineScope): EditorStore =
