@@ -60,6 +60,10 @@ jobs:
             -f description="$DESCRIPTION is running" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        env:
+          # setup-java reads GITHUB_TOKEN for the JetBrains distribution API. Without it the
+          # calls are anonymous and hit the GitHub API rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           distribution: jetbrains
           java-version: '25'

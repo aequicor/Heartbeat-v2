@@ -1,9 +1,12 @@
 name: Cross-platform checks
 
 # Project policy: every CI gate runs only for a commit the owner approved with `/reviewed`.
-# Apple targets and Linux native tests cannot run on the Windows host, so this workflow
-# validates them on the matching runners for the reviewed commit, next to the source-level
-# gates in `static-analysis.yml`. Platform entry points stay on demand in `verify-platform.yml`.
+# `resolve` pins the commit once; every job checks out that SHA and publishes its own commit
+# status for it, so a result always belongs to the commit that was actually tested, even when
+# the PR head moves during the run. Apple targets and Linux native tests cannot run on the
+# Windows host, so this workflow validates them on the matching runners, next to the
+# source-level gates in `static-analysis.yml`. Platform entry points stay on demand in
+# `verify-platform.yml`.
 on:
   issue_comment:
     types: [created]
@@ -16,8 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-native:
-    name: linux-native
+  resolve:
+    name: resolve-commit
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event.issue.pull_request &&
@@ -25,41 +28,111 @@ jobs:
       (startsWith(github.event.comment.body, '/reviewed') ||
        startsWith(github.event.comment.body, '/revied'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: refs/pull/${{ github.event.issue.number }}/head
           persist-credentials: false
+      - name: Record the reviewed commit
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  linux-native:
+    name: linux-native
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - name: Publish the pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: linux-native
+          DESCRIPTION: Linux native tests
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context="$CONTEXT" \
+            -f description="$DESCRIPTION are running" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        env:
+          # setup-java reads GITHUB_TOKEN for the JetBrains distribution API. Without it the
+          # calls are anonymous and hit the GitHub API rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           distribution: jetbrains
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: Run Linux native tests
-        # Bare task name: Gradle runs linuxX64Test in every module that declares the target
+        # Bare task names: Gradle runs linuxX64Test in every module that declares the target
         # (universal and Decompose modules), so new modules are covered without editing the list.
+        # linuxArm64 is compiled on this x64 runner because Kotlin/Native cross-compiles the klib;
+        # running arm64 tests would need an arm64 host.
         run: >-
           ./gradlew
+          compileKotlinLinuxArm64
           linuxX64Test
           --no-daemon
+      - name: Publish the result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: linux-native
+          DESCRIPTION: Linux native tests
+          OUTCOME: ${{ job.status }}
+        run: |
+          if [ "$OUTCOME" = success ]; then
+            state=success
+            description="$DESCRIPTION passed"
+          else
+            state=failure
+            description="$DESCRIPTION failed"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context="$CONTEXT" \
+            -f description="$description" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
   apple-native:
     name: apple-native
-    if: >-
-      github.ref == 'refs/heads/master' &&
-      github.event.issue.pull_request &&
-      github.event.comment.user.id == github.event.repository.owner.id &&
-      (startsWith(github.event.comment.body, '/reviewed') ||
-       startsWith(github.event.comment.body, '/revied'))
+    needs: resolve
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: refs/pull/${{ github.event.issue.number }}/head
+          ref: ${{ needs.resolve.outputs.sha }}
           persist-credentials: false
+      - name: Publish the pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: apple-native
+          DESCRIPTION: Apple native compilation and macOS tests
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=pending -f context="$CONTEXT" \
+            -f description="$DESCRIPTION are running" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        env:
+          # setup-java reads GITHUB_TOKEN for the JetBrains distribution API. Without it the
+          # calls are anonymous and hit the GitHub API rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           distribution: jetbrains
           java-version: '25'
@@ -77,3 +150,23 @@ jobs:
           compileKotlinIosX64
           macosArm64Test
           --no-daemon
+      - name: Publish the result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: apple-native
+          DESCRIPTION: Apple native compilation and macOS tests
+          OUTCOME: ${{ job.status }}
+        run: |
+          if [ "$OUTCOME" = success ]; then
+            state=success
+            description="$DESCRIPTION passed"
+          else
+            state=failure
+            description="$DESCRIPTION failed"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state="$state" -f context="$CONTEXT" \
+            -f description="$description" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
