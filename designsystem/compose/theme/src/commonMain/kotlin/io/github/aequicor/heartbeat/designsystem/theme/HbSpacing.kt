@@ -5,6 +5,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbSpace
 
 /** Base spacing grid of the application, resolved from the portable [HbSpace] scale. */
 object HbSpacing {
+    val Xxs = HbSpace.Two.dp
     val Xs = HbSpace.Four.dp
     val S = HbSpace.Eight.dp
     val M = HbSpace.Sixteen.dp
