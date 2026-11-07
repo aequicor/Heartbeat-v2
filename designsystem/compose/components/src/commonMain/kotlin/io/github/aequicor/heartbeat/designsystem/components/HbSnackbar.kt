@@ -16,7 +16,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -34,7 +34,7 @@ fun HbSnackbar(
     actionLabel: String? = null,
     onAction: () -> Unit = {},
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Row(
         modifier = modifier

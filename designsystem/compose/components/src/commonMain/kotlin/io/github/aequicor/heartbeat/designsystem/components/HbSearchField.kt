@@ -2,7 +2,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Search field with an explicit clear action (HB-DS-016).
@@ -21,7 +21,7 @@ fun HbSearchField(
     placeholder: String = "",
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     HbTextField(
         value = value,

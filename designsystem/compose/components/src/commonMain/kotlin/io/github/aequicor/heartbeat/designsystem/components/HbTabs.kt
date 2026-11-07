@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -92,7 +92,7 @@ private fun HbTab(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val contentColor = when {
         !enabled -> colors.text.primary.copy(HbEffects.DisabledContent)

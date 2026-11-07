@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Compact tone indicator of a status (HB-DS-006). The dot never carries the only meaning: a status
@@ -19,7 +19,7 @@ fun HbStatusDot(
     modifier: Modifier = Modifier,
     tone: HbStatusTone = HbStatusTone.Neutral,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Box(
         modifier = modifier

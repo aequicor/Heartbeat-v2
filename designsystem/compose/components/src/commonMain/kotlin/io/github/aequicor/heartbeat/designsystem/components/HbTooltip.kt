@@ -33,7 +33,7 @@ import androidx.compose.ui.window.PopupProperties
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import kotlinx.coroutines.delay
 
@@ -51,7 +51,7 @@ fun HbTooltip(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     val triggerInteraction = remember { MutableInteractionSource() }
     val tooltipInteraction = remember { MutableInteractionSource() }
     val hovered by triggerInteraction.collectIsHoveredAsState()

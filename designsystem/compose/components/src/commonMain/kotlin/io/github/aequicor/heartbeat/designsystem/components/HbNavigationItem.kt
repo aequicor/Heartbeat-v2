@@ -28,7 +28,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -46,7 +46,7 @@ fun HbNavigationItem(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val background = if (selected) colors.selection.background else Color.Transparent
     val contentColor = when {

@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.designsystem.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbColorPalettes
@@ -14,9 +15,31 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScales
 
 /**
- * Wraps the content into the application theme: provides the colors behind [HbThemeTokens.colors],
- * the type styles behind [HbTypography], the geometry behind [HbShapes] and [HbSizes], and the
- * motion preference behind [HbThemeTokens.motion].
+ * Values of the active theme, read as regular properties.
+ *
+ * Components use this accessor instead of reading a composition local directly, so the theme
+ * contract stays a small public surface: the locals themselves are private to the theme module.
+ * The accessor is read-only and does not create a new theme; [HbTheme] is the only provider.
+ */
+object HbTheme {
+
+    /** Semantic colors of the active appearance, contrast and palette. */
+    val colors: HbColors
+        @Composable
+        @ReadOnlyComposable
+        get() = HbThemeDefaults.LocalColors.current
+
+    /** Resolved motion preference; reduced motion drops movement but keeps the state change. */
+    val motion: HbMotionPreference
+        @Composable
+        @ReadOnlyComposable
+        get() = HbThemeDefaults.LocalMotion.current
+}
+
+/**
+ * Wraps the content into the application theme: provides the colors behind [HbTheme.colors], the
+ * type styles behind [HbTypography], the geometry behind [HbShapes] and [HbSizes], and the motion
+ * preference behind [HbTheme.motion].
  *
  * [appearance] selects the semantic palette; [HbAppearance.System] follows the host where it reports
  * the preference. [contrast] applies the high-contrast mapping of the palette when it is [High], and

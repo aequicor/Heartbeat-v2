@@ -26,7 +26,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -46,7 +46,7 @@ fun HbCheckbox(
     indeterminate: Boolean = false,
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val state = when {
         indeterminate -> ToggleableState.Indeterminate
@@ -90,7 +90,7 @@ private fun CheckboxMark(
     borderColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     val marked = state != ToggleableState.Off
     val background = when {
         !enabled -> colors.text.disabled

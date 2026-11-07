@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /** Close glyph of a dismissible surface; the accessible name comes from the action, not the glyph. */
 @Composable
@@ -42,7 +42,7 @@ internal fun HbChevronGlyph(
     expanded: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val reducedMotion = HbThemeTokens.motion == HbMotionPreference.Reduced
+    val reducedMotion = HbTheme.motion == HbMotionPreference.Reduced
     val rotation by animateFloatAsState(
         targetValue = if (expanded) ChevronExpandedDegrees else 0f,
         animationSpec = if (reducedMotion) {

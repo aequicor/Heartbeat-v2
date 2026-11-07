@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Separator between surfaces or form groups. A divider is a decorative boundary: it separates
@@ -20,7 +20,7 @@ fun HbDivider(
     modifier: Modifier = Modifier,
     vertical: Boolean = false,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     if (vertical) {
         Box(

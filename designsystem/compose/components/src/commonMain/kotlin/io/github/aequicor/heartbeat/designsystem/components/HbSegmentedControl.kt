@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -38,7 +38,7 @@ fun <T> HbSegmentedControl(
     optionLabel: (T) -> String = { it.toString() },
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Row(
         modifier = modifier
@@ -65,7 +65,7 @@ private fun RowScope.Segment(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     val background = if (selected) colors.selection.background else Color.Transparent
     val contentColor = when {
         !enabled -> colors.text.primary.copy(HbEffects.DisabledContent)

@@ -14,13 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbAdaptive
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /** Rendered adaptive classes at the documented widths (HB-DS-031, HB-DS-032). */
 @Composable
 internal fun AdaptiveSandboxScreen(modifier: Modifier = Modifier) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Column(
         modifier = modifier
@@ -40,7 +40,7 @@ private fun AdaptiveSample(
     width: Int,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     HbAdaptive(modifier = modifier.width(width.dp)) { windowWidth, fit ->
         Column(

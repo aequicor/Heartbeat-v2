@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -44,7 +44,7 @@ fun HbTreeItem(
     modifier: Modifier = Modifier,
     stateDescription: String? = null,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
 
     Row(

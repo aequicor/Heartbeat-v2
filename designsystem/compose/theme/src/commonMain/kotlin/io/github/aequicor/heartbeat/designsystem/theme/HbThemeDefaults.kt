@@ -7,7 +7,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 
 /**
  * Composition locals of the Design System theme. They are internal to the theme module: components
- * read the values through [HbThemeTokens], [HbTypography], [HbShapes] and [HbSizes], and only
+ * read the values through [HbTheme], [HbTypography], [HbShapes] and [HbSizes], and only
  * [HbTheme] provides them.
  */
 internal object HbThemeDefaults {

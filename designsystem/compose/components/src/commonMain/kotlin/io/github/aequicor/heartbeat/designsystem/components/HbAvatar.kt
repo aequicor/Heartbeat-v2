@@ -12,7 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -27,7 +27,7 @@ fun HbAvatar(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Box(
         modifier = modifier

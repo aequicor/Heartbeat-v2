@@ -30,7 +30,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import kotlin.math.roundToInt
 
 /**
@@ -50,7 +50,7 @@ fun HbSplitter(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val stepPixels = with(LocalDensity.current) { STEP.toPx() }.roundToInt()
     val vertical = orientation == HbOrientation.Vertical

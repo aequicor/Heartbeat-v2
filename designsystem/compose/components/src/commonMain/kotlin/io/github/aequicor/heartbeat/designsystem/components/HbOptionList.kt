@@ -21,7 +21,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Scrollable list of options shared by the choice surfaces (HB-DS-019).
@@ -41,7 +41,7 @@ internal fun <T> HbOptionList(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Column(
         modifier = modifier

@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Non-modal side panel for sustained secondary work (HB-DS-026).
@@ -29,7 +29,7 @@ fun HbInspector(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val colors = HbThemeTokens.colors
+    val colors = HbTheme.colors
 
     Row(
         modifier = modifier

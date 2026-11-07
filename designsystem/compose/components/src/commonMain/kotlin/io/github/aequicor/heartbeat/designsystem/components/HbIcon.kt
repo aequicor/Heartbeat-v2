@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
  * Icon of the shared vocabulary (HB-DS, icons).
@@ -22,7 +22,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbThemeTokens
 fun HbIcon(
     glyph: HbIconGlyph,
     modifier: Modifier = Modifier,
-    tint: Color = HbThemeTokens.colors.text.secondary,
+    tint: Color = HbTheme.colors.text.secondary,
     size: Dp = DenseGlyphSize,
 ) {
     Canvas(modifier = modifier.size(size)) {
