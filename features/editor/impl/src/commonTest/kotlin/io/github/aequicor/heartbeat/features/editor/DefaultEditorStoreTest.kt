@@ -10,13 +10,17 @@ import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCa
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -168,6 +172,31 @@ class DefaultEditorStoreTest {
 
         assertEquals("Правка после ошибки", store.state.value.title)
         assertEquals("disk full", store.state.value.saveError)
+    }
+
+    @Test
+    fun cancelledScopeDuringSaveClearsSavingWithoutError() = runTest {
+        val saveGate = CompletableDeferred<Unit>()
+        val repository = FakeEditorRepository(saveGate = saveGate)
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val store = DefaultEditorStore(
+            loadNote = LoadNoteUseCase(repository),
+            saveNote = SaveNoteUseCase(repository),
+            noteId = "n1",
+            scope = scope,
+        )
+        advanceUntilIdle()
+        store.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+        assertTrue(store.state.value.isSaving)
+
+        // Closing the screen cancels the owner scope. Cancellation is not a save failure, and the
+        // store must not stay in the saving state after the coroutine is gone.
+        scope.cancel()
+        advanceUntilIdle()
+
+        assertFalse(store.state.value.isSaving)
+        assertNull(store.state.value.saveError)
     }
 
     @Test
@@ -356,13 +385,14 @@ class DefaultEditorStoreTest {
         )
 }
 
-/** In-memory repository with configurable delays and failures. */
+/** In-memory repository with configurable delays, failures and a save gate for cancellation. */
 private class FakeEditorRepository(
     private val loadDelayMillis: Long = 0,
     private val saveDelayMillis: Long = 0,
     private val saveFailure: Throwable? = null,
     loadFailures: Int = 0,
     private val onSave: (Note) -> Unit = {},
+    private val saveGate: CompletableDeferred<Unit>? = null,
 ) : EditorRepository {
 
     private val notes = mutableMapOf<String, Note>()
@@ -389,6 +419,7 @@ private class FakeEditorRepository(
     override suspend fun save(note: Note) {
         saveCalls++
         onSave(note)
+        saveGate?.await()
         if (saveDelayMillis > 0) {
             delay(saveDelayMillis)
         }

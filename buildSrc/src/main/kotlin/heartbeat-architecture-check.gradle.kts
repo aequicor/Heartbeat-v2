@@ -105,6 +105,9 @@ private fun checkResolvedDependencies(project: Project) {
 }
 
 private fun checkSources(project: Project) {
+    // Import lines are a heuristic: a fully qualified reference needs the forbidden dependency on
+    // the compile classpath, so the resolved-graph check catches it. An exact source-level check
+    // needs type resolution (Kotlin Analysis API) and stays a separate task.
     project.fileTree("src") { include("**/*.kt") }.forEach { file ->
         val text = file.readText()
         val relativePath = file.relativeTo(project.projectDir).path
