@@ -66,6 +66,11 @@ Compose:
     active: true
     allowedCompositionLocals:
       - LocalColors
+      - LocalMotion
+      - LocalTypography
+      - LocalGeometry
+      - LocalLabel
+      - LocalError
   CompositionLocalNaming:
     active: true
   ConditionHoist:
