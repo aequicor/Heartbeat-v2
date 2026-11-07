@@ -3,12 +3,13 @@ import org.junit.Test
 
 /**
  * Unit tests of the visibility audit: implementation details are internal, while the Metro
- * boundary and the feature contracts stay public.
+ * boundary and the public contracts stay public (HB-ARCH-040).
  */
 class VisibilityRulesTest {
 
     private val feature = "io.github.aequicor.heartbeat.features.editor"
 
+    private val api = "$feature.api"
     private val dataSource = "$feature.data.datasource"
     private val dataDto = "$feature.data.dto"
     private val dataMapper = "$feature.data.mapper"
@@ -16,7 +17,10 @@ class VisibilityRulesTest {
     private val domainRepository = "$feature.domain.repository"
     private val domainUseCase = "$feature.domain.usecase"
     private val presentation = "$feature.presentation"
+    private val presentationMapper = "$feature.presentation.mapper"
     private val component = "$feature.component"
+    private val di = "$feature.di"
+    private val ui = "$feature.ui"
 
     private fun violation(
         packageName: String,
@@ -27,44 +31,45 @@ class VisibilityRulesTest {
     ): String? = VisibilityRules.violation(packageName, kind, name, isPublic, annotations)
 
     @Test
-    fun dtosAreInternal() {
+    fun implementationDetailsMustBeInternal() {
         Assert.assertEquals(
-            "DTO must be internal: NoteDto",
+            "implementation detail must be internal: NoteDto",
             violation(dataSource, DeclarationKind.CLASS, "NoteDto"),
         )
         Assert.assertEquals(
-            "DTO must be internal: NoteDto",
+            "implementation detail must be internal: NoteDto",
             violation(dataDto, DeclarationKind.CLASS, "NoteDto"),
         )
-        Assert.assertNull(violation(dataSource, DeclarationKind.CLASS, "NoteDto", isPublic = false))
-    }
-
-    @Test
-    fun mapperFunctionsAreInternal() {
         Assert.assertEquals(
-            "mapper function must be internal: toNote",
+            "implementation detail must be internal: toNote",
             violation(dataMapper, DeclarationKind.FUNCTION, "toNote"),
         )
         Assert.assertEquals(
-            "mapper function must be internal: toEditorState",
-            violation(presentation, DeclarationKind.FUNCTION, "toEditorState"),
+            "implementation detail must be internal: toEditorState",
+            violation(presentationMapper, DeclarationKind.FUNCTION, "toEditorState"),
         )
-        Assert.assertNull(
-            violation(dataMapper, DeclarationKind.FUNCTION, "toNote", isPublic = false),
-        )
-        Assert.assertNull(
-            violation(dataMapper, DeclarationKind.CLASS, "NoteMapper"),
+        Assert.assertEquals(
+            "implementation detail must be internal: DefaultEditorStore",
+            violation(presentation, DeclarationKind.CLASS, "DefaultEditorStore"),
         )
     }
 
     @Test
-    fun storeImplementationIsInternal() {
-        Assert.assertEquals(
-            "store implementation must be internal: DefaultEditorStore",
-            violation(presentation, DeclarationKind.CLASS, "DefaultEditorStore"),
-        )
+    fun internalDeclarationsAreNotFlagged() {
+        Assert.assertNull(violation(dataSource, DeclarationKind.CLASS, "NoteDto", isPublic = false))
+        Assert.assertNull(violation(dataMapper, DeclarationKind.FUNCTION, "toNote", isPublic = false))
         Assert.assertNull(
             violation(presentation, DeclarationKind.CLASS, "DefaultEditorStore", isPublic = false),
+        )
+    }
+
+    @Test
+    fun metroBoundTypesStayPublic() {
+        Assert.assertNull(
+            violation(dataSource, DeclarationKind.CLASS, "EditorDataSource", annotations = listOf("SingleIn")),
+        )
+        Assert.assertNull(
+            violation(domainUseCase, DeclarationKind.CLASS, "LoadNoteUseCase", annotations = listOf("Inject")),
         )
         Assert.assertNull(
             violation(
@@ -77,36 +82,24 @@ class VisibilityRulesTest {
     }
 
     @Test
-    fun componentImplementationIsInternal() {
+    fun contractsStayPublic() {
+        Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorStore"))
+        Assert.assertNull(violation(domainModel, DeclarationKind.CLASS, "Note"))
+        Assert.assertNull(violation(domainRepository, DeclarationKind.INTERFACE, "EditorRepository"))
+        Assert.assertNull(violation(di, DeclarationKind.CLASS, "DefaultEditorStoreFactory"))
+        Assert.assertNull(violation(ui, DeclarationKind.FUNCTION, "EditorScreen"))
+    }
+
+    @Test
+    fun componentContractsArePublicButImplementationsAreInternal() {
+        Assert.assertNull(violation(component, DeclarationKind.INTERFACE, "EditorComponent"))
+        Assert.assertNull(violation(component, DeclarationKind.INTERFACE, "EditorComponentFactory"))
         Assert.assertEquals(
-            "component implementation must be internal: DefaultEditorComponent",
+            "implementation detail must be internal: DefaultEditorComponent",
             violation(component, DeclarationKind.CLASS, "DefaultEditorComponent"),
         )
         Assert.assertNull(
             violation(component, DeclarationKind.CLASS, "DefaultEditorComponent", isPublic = false),
-        )
-        Assert.assertNull(
-            violation(component, DeclarationKind.INTERFACE, "EditorComponent"),
-        )
-    }
-
-    @Test
-    fun metroAndDomainContractsStayPublic() {
-        Assert.assertNull(
-            violation(dataSource, DeclarationKind.CLASS, "EditorDataSource", annotations = listOf("SingleIn")),
-        )
-        Assert.assertNull(
-            violation(dataSource, DeclarationKind.CLASS, "NoteDto", annotations = listOf("Inject")),
-        )
-        Assert.assertNull(violation(domainModel, DeclarationKind.CLASS, "Note"))
-        Assert.assertNull(violation(domainRepository, DeclarationKind.INTERFACE, "EditorRepository"))
-        Assert.assertNull(
-            violation(
-                domainUseCase,
-                DeclarationKind.CLASS,
-                "LoadNoteUseCase",
-                annotations = listOf("Inject"),
-            ),
         )
     }
 

@@ -6,6 +6,8 @@ import io.github.aequicor.heartbeat.features.editor.api.EditorState
 import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
+import io.github.aequicor.heartbeat.features.editor.presentation.mapper.toEditorState
+import io.github.aequicor.heartbeat.features.editor.presentation.mapper.toNote
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.BufferOverflow

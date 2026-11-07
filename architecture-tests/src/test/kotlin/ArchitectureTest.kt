@@ -187,7 +187,17 @@ class ArchitectureTest {
     private fun KoBaseDeclaration.nameOrNull(): String? = (this as? KoNameProvider)?.name
 
     private fun KoBaseDeclaration.annotationNames(): List<String> = when (this) {
-        is KoAnnotationProvider -> annotations.map { it.name }
+        is KoAnnotationProvider -> {
+            // Metro `@Inject` often sits on the constructor (`class X @Inject constructor()`),
+            // so constructor annotations are part of the DI boundary as well.
+            val constructorAnnotations = (this as? KoClassDeclaration)
+                ?.primaryConstructor
+                ?.annotations
+                ?.map { it.name }
+                .orEmpty()
+            annotations.map { it.name } + constructorAnnotations
+        }
+
         else -> listOf()
     }
 

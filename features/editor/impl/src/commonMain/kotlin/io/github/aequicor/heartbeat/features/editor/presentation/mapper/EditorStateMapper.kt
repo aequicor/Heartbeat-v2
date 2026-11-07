@@ -1,4 +1,4 @@
-package io.github.aequicor.heartbeat.features.editor.presentation
+package io.github.aequicor.heartbeat.features.editor.presentation.mapper
 
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
 import io.github.aequicor.heartbeat.features.editor.domain.model.Note

@@ -19,6 +19,7 @@ class NamingRulesTest {
     private val dataMapper = "$feature.data.mapper"
     private val dataRepository = "$feature.data.repository"
     private val presentation = "$feature.presentation"
+    private val presentationMapper = "$feature.presentation.mapper"
     private val di = "$feature.di"
     private val component = "$feature.component"
     private val ui = "$feature.ui"
@@ -141,10 +142,16 @@ class NamingRulesTest {
             "store implementation must be named DefaultEditorStore: EditorStore",
             violation(presentation, DeclarationKind.CLASS, "EditorStore"),
         )
-        Assert.assertNull(violation(presentation, DeclarationKind.FUNCTION, "toEditorState"))
+        // Helper functions are not mapper functions, so they stay free in presentation.
+        Assert.assertNull(violation(presentation, DeclarationKind.FUNCTION, "shouldReload"))
+    }
+
+    @Test
+    fun presentationMappersAreToFunctions() {
+        Assert.assertNull(violation(presentationMapper, DeclarationKind.FUNCTION, "toEditorState"))
         Assert.assertEquals(
             "mapper function must be named to<Type>: mapState",
-            violation(presentation, DeclarationKind.FUNCTION, "mapState"),
+            violation(presentationMapper, DeclarationKind.FUNCTION, "mapState"),
         )
     }
 

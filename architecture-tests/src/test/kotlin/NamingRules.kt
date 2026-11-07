@@ -112,7 +112,9 @@ internal object NamingRules {
                 typesOnly = true,
             )
 
-            listOf("presentation") -> presentationViolation(feature, declarationName, declarationKind)
+            listOf("presentation") -> storeViolation(feature, declarationName, declarationKind)
+
+            listOf("presentation", "mapper") -> mapperViolation(declarationName, declarationKind)
 
             listOf("di") -> metroBindingViolation(declarationKind, declarationName)
 
@@ -176,13 +178,11 @@ internal object NamingRules {
         else -> null
     }
 
-    private fun presentationViolation(
+    private fun storeViolation(
         feature: String,
         declarationName: String,
         declarationKind: DeclarationKind,
     ): String? = when {
-        declarationKind == DeclarationKind.FUNCTION -> mapperFunctionViolation(declarationName)
-
         declarationKind.isType() && declarationName != "Default${feature}Store" ->
             "store implementation must be named Default${feature}Store: $declarationName"
 

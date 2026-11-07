@@ -1015,7 +1015,7 @@ CI должен отклонять изменения, нарушающие за
 | DataSource | `data.datasource` | `*DataSource` | `EditorDataSource` |
 | DTO | `data.datasource`, `data.dto` | `*Dto` | `NoteDto` |
 | Mapper-класс | `data.mapper` | `*Mapper` | `NoteMapper` |
-| Mapper-функция | `data.mapper`, `presentation` | `to*()` | `toNote()`, `toDto()` |
+| Mapper-функция | `data.mapper`, `presentation.mapper` | `to*()` | `toNote()`, `toDto()` |
 | Store | `api` | `<Feature>Store` | `EditorStore` |
 | Реализация Store | `presentation` | `Default<Feature>Store` | `DefaultEditorStore` |
 | Фабрика Store | `api` | `<Feature>StoreFactory` | `EditorStoreFactory` |
