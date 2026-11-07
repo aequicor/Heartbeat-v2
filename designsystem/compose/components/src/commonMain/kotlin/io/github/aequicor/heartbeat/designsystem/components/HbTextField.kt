@@ -14,7 +14,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.Typography
 
 /** Single-line text input built on foundation, without a Material dependency. */
 @Composable
-fun AppTextField(
+fun HbTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,

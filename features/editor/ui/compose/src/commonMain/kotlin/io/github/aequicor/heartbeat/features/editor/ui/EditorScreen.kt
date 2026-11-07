@@ -5,8 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import io.github.aequicor.heartbeat.designsystem.components.AppButton
-import io.github.aequicor.heartbeat.designsystem.components.AppTextField
+import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorController
 
@@ -23,17 +23,17 @@ fun EditorScreen(
     val state by controller.state.collectAsState()
 
     Column(modifier = modifier) {
-        AppTextField(
+        HbTextField(
             value = state.title,
             onValueChange = { controller.dispatch(EditorAction.TitleChanged(it)) },
             placeholder = "Заголовок",
         )
-        AppTextField(
+        HbTextField(
             value = state.content,
             onValueChange = { controller.dispatch(EditorAction.ContentChanged(it)) },
             placeholder = "Содержимое",
         )
-        AppButton(
+        HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
             onClick = { controller.dispatch(EditorAction.Save) },
         )

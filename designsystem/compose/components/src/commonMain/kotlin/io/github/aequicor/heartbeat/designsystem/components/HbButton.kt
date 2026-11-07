@@ -15,7 +15,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.Typography
 
 /** Primary action button built on foundation, without a Material dependency. */
 @Composable
-fun AppButton(
+fun HbButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

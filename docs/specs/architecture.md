@@ -350,7 +350,7 @@ fun EditorScreen(
 ) {
     val state by controller.state.collectAsState()
 
-    AppTextField(
+    HbTextField(
         value = state.title,
         onValueChange = {
             controller.dispatch(
@@ -569,8 +569,7 @@ UI Kit разделяется по UI-технологиям, а не по аб�
 designsystem/
 ├── compose/
 │   ├── theme/
-│   │   ├── AppTheme.kt
-│   │   ├── Colors.kt
+│   │   ├── AppColors.kt
 │   │   ├── Typography.kt
 │   │   ├── Shapes.kt
 │   │   └── Spacing.kt
@@ -582,12 +581,12 @@ designsystem/
 │   │       └── values/
 │   │
 │   ├── components/
-│   │   ├── AppButton.kt
-│   │   ├── AppTextField.kt
-│   │   └── AppDialog.kt
+│   │   ├── HbButton.kt
+│   │   ├── HbTextField.kt
+│   │   └── HbDialog.kt
 │   │
 │   └── desktop/
-│       ├── AppTitleBar.kt
+│       ├── HbTitleBar.kt
 │       └── WindowControls.kt
 │
 └── native/
@@ -597,6 +596,7 @@ designsystem/
 
 ### Правила
 
+- Кастомные UI-компоненты Design System имеют префикс `Hb`: `HbButton`, `HbTextField`, `HbDialog`.
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
 - `theme` и `resources` внутри `compose` являются Compose-ориентированными.
@@ -1007,5 +1007,6 @@ features/<feature>/
 | HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен выполнять архитектурные проверки. | Согласованная архитектура от 7 ноября 2026 | Запустить тесты модулей и архитектурные проверки в CI. |
 | HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
 | HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
+| HB-ARCH-028 | Кастомные UI-компоненты Design System должны иметь префикс `Hb`: например `HbButton`, `HbTextField`. | Запрос владельца от 7 ноября 2026 | Проверить имена композаблов в `designsystem/compose/components` и их использование в фичах. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.
