@@ -1,13 +1,13 @@
 package io.github.aequicor.heartbeat.features.editor.api
 
 /** User intents the editor handles. */
-sealed interface EditorAction {
-    data class TitleChanged(val value: String) : EditorAction
+public sealed interface EditorAction {
+    public data class TitleChanged(val value: String) : EditorAction
 
-    data class ContentChanged(val value: String) : EditorAction
+    public data class ContentChanged(val value: String) : EditorAction
 
-    data object Save : EditorAction
+    public data object Save : EditorAction
 
     /** Retries the note load after [EditorState.loadError]. */
-    data object Reload : EditorAction
+    public data object Reload : EditorAction
 }

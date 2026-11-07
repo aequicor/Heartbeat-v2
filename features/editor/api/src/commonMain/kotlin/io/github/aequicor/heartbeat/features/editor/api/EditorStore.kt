@@ -10,19 +10,19 @@ import kotlinx.coroutines.flow.StateFlow
  * the feature `impl` module; UI and presentation adapters depend only on this
  * interface.
  */
-interface EditorStore {
-    val state: StateFlow<EditorState>
-    val effects: Flow<EditorEffect>
+public interface EditorStore {
+    public val state: StateFlow<EditorState>
+    public val effects: Flow<EditorEffect>
 
-    fun dispatch(action: EditorAction)
+    public fun dispatch(action: EditorAction)
 }
 
 /**
  * Creates stores for a note. The [CoroutineScope] belongs to the caller — a
  * Decompose component or a BLoC — and defines the store lifetime.
  */
-interface EditorStoreFactory {
-    fun create(
+public interface EditorStoreFactory {
+    public fun create(
         noteId: String,
         scope: CoroutineScope,
     ): EditorStore

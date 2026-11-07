@@ -4,8 +4,8 @@ import dev.zacsweers.metro.Scope
 
 /** Lifetime of the application instance. */
 @Scope
-annotation class AppScope
+public annotation class AppScope
 
 /** Lifetime of the current user session. */
 @Scope
-annotation class SessionScope
+public annotation class SessionScope

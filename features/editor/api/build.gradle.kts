@@ -1,5 +1,5 @@
 plugins {
-    id("heartbeat-kmp-universal")
+    id("heartbeat-kmp-api")
 }
 
 kotlin {
