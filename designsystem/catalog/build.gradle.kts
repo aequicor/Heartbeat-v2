@@ -9,7 +9,6 @@ kotlin {
         implementation(project(":designsystem:foundation"))
         implementation(project(":designsystem:compose:theme"))
         implementation(project(":designsystem:compose:components"))
-        implementation(project(":designsystem:patterns"))
         implementation(compose.desktop.currentOs)
     }
     sourceSets.jvmTest.dependencies {
@@ -17,13 +16,12 @@ kotlin {
         implementation(project(":designsystem:foundation"))
         implementation(project(":designsystem:compose:theme"))
         implementation(project(":designsystem:compose:components"))
-        implementation(project(":designsystem:patterns"))
         implementation(compose.desktop.currentOs)
     }
 }
 
 // The catalog is a desktop application for review, not a product entry point: it lives in the
-// design system boundary and depends on the published kit and patterns only.
+// design system boundary and depends on the published kit only.
 val jvmRuntimeClasspath = configurations.getByName("jvmRuntimeClasspath")
 
 tasks.register<JavaExec>("runCatalog") {

@@ -16,8 +16,6 @@ import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
-import io.github.aequicor.heartbeat.designsystem.patterns.HbComposer
-import io.github.aequicor.heartbeat.designsystem.patterns.HbComposerState
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,60 +88,6 @@ class KitInteractionTest {
     }
 
     @Test
-    fun composerSendsOnEnter() = runComposeUiTest {
-        var sent = 0
-        var value by mutableStateOf("Привет")
-        setContent {
-            HbTheme {
-                HbComposer(
-                    value = value,
-                    onValueChange = { value = it },
-                    state = HbComposerState.Editing,
-                    placeholder = "Сообщение",
-                    label = "Черновик сообщения",
-                    sendLabel = "Отправить",
-                    stopLabel = "Остановить",
-                    onSend = { sent++ },
-                )
-            }
-        }
-
-        onNodeWithText("Привет").performClick()
-        onNodeWithText("Привет").performKeyInput { pressKey(Key.Enter) }
-
-        assertEquals(1, sent)
-    }
-
-    @Test
-    fun composerKeepsShiftEnterAsNewline() = runComposeUiTest {
-        var sent = 0
-        var value by mutableStateOf("Привет")
-        setContent {
-            HbTheme {
-                HbComposer(
-                    value = value,
-                    onValueChange = { value = it },
-                    state = HbComposerState.Editing,
-                    placeholder = "Сообщение",
-                    label = "Черновик сообщения",
-                    sendLabel = "Отправить",
-                    stopLabel = "Остановить",
-                    onSend = { sent++ },
-                )
-            }
-        }
-
-        onNodeWithText("Привет").performClick()
-        onNodeWithText("Привет").performKeyInput {
-            keyDown(Key.ShiftLeft)
-            pressKey(Key.Enter)
-            keyUp(Key.ShiftLeft)
-        }
-
-        assertEquals(0, sent)
-    }
-
-    @Test
     fun busyButtonIgnoresClicks() = runComposeUiTest {
         var clicks = 0
         setContent {
@@ -173,30 +117,5 @@ class KitInteractionTest {
         onNodeWithText("Сохранить").performClick()
 
         assertEquals(1, clicks)
-    }
-
-    @Test
-    fun composerDoesNotSendWhileGenerating() = runComposeUiTest {
-        var sent = 0
-        var value by mutableStateOf("Привет")
-        setContent {
-            HbTheme {
-                HbComposer(
-                    value = value,
-                    onValueChange = { value = it },
-                    state = HbComposerState.Generating,
-                    placeholder = "Сообщение",
-                    label = "Черновик сообщения",
-                    sendLabel = "Отправить",
-                    stopLabel = "Остановить",
-                    onSend = { sent++ },
-                )
-            }
-        }
-
-        onNodeWithText("Привет").performClick()
-        onNodeWithText("Привет").performKeyInput { pressKey(Key.Enter) }
-
-        assertEquals(0, sent)
     }
 }

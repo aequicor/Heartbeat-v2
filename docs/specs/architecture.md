@@ -599,21 +599,12 @@ designsystem/
 │       ├── HbLayout.kt
 │       └── HbWorkspaceLayout.kt
 │
-├── patterns/
-│   └── src/commonMain/kotlin/
-│       ├── HbSessionRow.kt
-│       ├── HbMessage.kt
-│       ├── HbToolActivity.kt
-│       ├── HbApprovalRequest.kt
-│       ├── HbWorkspaceScaffold.kt
-│       └── HbUsageDisplay.kt
-│
 ├── catalog/
 │   └── src/jvmMain/kotlin/
 │       ├── HbCatalogEntry.kt
 │       ├── CatalogContent.kt
 │       ├── CatalogFieldSamples.kt
-│       └── CatalogPatternSamples.kt
+│       └── CatalogSectionSamples.kt
 │
 ├── compose/
 │   ├── theme/
@@ -649,8 +640,8 @@ designsystem/
 - Публичный API Design System имеет префикс `Hb`: компоненты (`HbButton`, `HbTextField`, `HbDialog`), токены и тема (`HbColors`, `HbTheme`).
 - `foundation` хранит портативную схему и значения токенов: цвета sRGB, логические размеры, масштабируемую типографику, длительности, кривые и идентификаторы иконок. Модуль не импортирует Compose и не содержит типов `Color`, `Dp`, `TextStyle`, объектов навигации, DI и клиентов среды исполнения.
 - `compose` разрешает портативные токены в типы Compose; `theme` и `resources` внутри него Compose-ориентированы.
-- `patterns` содержит продуктовые паттерны Heartbeat: строку сессии, сообщение, активность инструмента, запрос подтверждения и отображение расхода. Паттерны получают модели представления и callbacks, а бизнес-правила остаются в feature store.
-- `catalog` содержит исполняемые примеры кита и паттернов: приложение каталога и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:catalog:runCatalog`.
+- `catalog` содержит исполняемые примеры кита: приложение каталога и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:catalog:runCatalog`.
+- Продуктовые паттерны (composer, транскрипт, подтверждения) принадлежат UI соответствующих фич, а не общему киту; контракт оформления для них задан в [спецификации дизайн-системы](design-system.md).
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
 - Фичи могут использовать Design System через свои UI-модули.

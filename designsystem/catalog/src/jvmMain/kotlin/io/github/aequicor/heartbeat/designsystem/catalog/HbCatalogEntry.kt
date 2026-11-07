@@ -23,9 +23,9 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 /**
  * Desktop catalog of the design system (HB-DS-039).
  *
- * The entry point is a review tool, not a product screen: it renders the kit, the product patterns,
- * the workspace scaffold and the adaptive classes in one window, so the owner can inspect states
- * that a static screenshot cannot show. It depends only on the published design-system modules.
+ * The entry point is a review tool, not a product screen: it renders the kit and the adaptive
+ * classes in one window, so the owner can inspect states that a static screenshot cannot show. It
+ * depends only on the published design-system modules.
  */
 object HbCatalogEntry {
 
@@ -63,10 +63,7 @@ private fun CatalogHost(modifier: Modifier = Modifier) {
         Box(modifier = Modifier.weight(1f)) {
             when (selectedTab) {
                 CatalogTab.Components -> CatalogScreen()
-                CatalogTab.Patterns -> PatternsCatalogScreen()
-                CatalogTab.Workspace -> ScaffoldCatalogScreen()
                 CatalogTab.Adaptive -> AdaptiveCatalogScreen()
-                CatalogTab.Studio -> StudioCatalogScreen()
             }
         }
     }
@@ -74,8 +71,5 @@ private fun CatalogHost(modifier: Modifier = Modifier) {
 
 private enum class CatalogTab(val title: String) {
     Components("Компоненты"),
-    Patterns("Паттерны"),
-    Workspace("Рабочая область"),
     Adaptive("Адаптивность"),
-    Studio("Студия"),
 }
