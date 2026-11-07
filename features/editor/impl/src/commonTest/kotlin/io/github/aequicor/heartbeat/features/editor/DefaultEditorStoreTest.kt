@@ -200,6 +200,33 @@ class DefaultEditorStoreTest {
     }
 
     @Test
+    fun dispatchAfterScopeCancellationDoesNotChangeState() = runTest {
+        val repository = FakeEditorRepository()
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val store = DefaultEditorStore(
+            loadNote = LoadNoteUseCase(repository),
+            saveNote = SaveNoteUseCase(repository),
+            noteId = "n1",
+            scope = scope,
+        )
+        advanceUntilIdle()
+        store.dispatch(EditorAction.TitleChanged("До отмены"))
+        scope.cancel()
+        advanceUntilIdle()
+
+        // A late callback from a destroyed component must not mutate the closed store or claim a
+        // save whose coroutine can never run.
+        store.dispatch(EditorAction.TitleChanged("После отмены"))
+        store.dispatch(EditorAction.Save)
+        store.dispatch(EditorAction.Reload)
+        advanceUntilIdle()
+
+        assertEquals("До отмены", store.state.value.title)
+        assertFalse(store.state.value.isSaving)
+        assertEquals(0, repository.saveCalls)
+    }
+
+    @Test
     fun repeatedSaveRunsOnce() = runTest {
         val repository = FakeEditorRepository()
         val store = store(repository, "n1")

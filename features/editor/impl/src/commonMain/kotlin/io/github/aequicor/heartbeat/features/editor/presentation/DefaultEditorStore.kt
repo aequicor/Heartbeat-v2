@@ -10,6 +10,7 @@ import io.github.aequicor.heartbeat.features.editor.presentation.mapper.toEditor
 import io.github.aequicor.heartbeat.features.editor.presentation.mapper.toNote
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -33,7 +35,9 @@ import kotlinx.coroutines.launch
  * and a save always persists the snapshot taken at the moment of the action.
  * Every decision and the state write it leads to happen in one atomic
  * compare-and-set ([transition]), so a concurrent action cannot change the
- * state between the check and the write. Cancellation is not a failure.
+ * state between the check and the write. A destroyed store is closed: once the
+ * owner [scope] is no longer active, [dispatch] ignores every action instead of
+ * claiming a save that could never run. Cancellation is not a failure.
  *
  * The implementation is internal: the feature exposes [EditorStore], and the
  * store factory creates the instance inside the module.
@@ -97,13 +101,18 @@ internal class DefaultEditorStore(
     }
 
     /**
-     * Applies [transform] atomically and returns the state it replaced, or `null` when [transform]
-     * rejected the transition by returning `null`. A rejected transition does not write the state,
-     * so it cannot be re-evaluated later, when the blocking condition has cleared; an accepted
-     * transition re-runs [transform] on the latest state when another action wins the race, so the
-     * decision and the write always concern the same state.
+     * Applies [transform] atomically and returns the state it replaced, or `null` when the store
+     * is closed or [transform] rejected the transition by returning `null`. A rejected transition
+     * does not write the state, so it cannot be re-evaluated later, when the blocking condition
+     * has cleared; an accepted transition re-runs [transform] on the latest state when another
+     * action wins the race, so the decision and the write always concern the same state.
      */
-    private fun transition(transform: (EditorState) -> EditorState?): EditorState? {
+    private fun transition(transform: (EditorState) -> EditorState?): EditorState? =
+        // The owner scope defines the store lifetime: after it is destroyed, a new action must not
+        // claim a state that only a coroutine could resolve.
+        if (scope.isActive) transitionWhileActive(transform) else null
+
+    private fun transitionWhileActive(transform: (EditorState) -> EditorState?): EditorState? {
         while (true) {
             val current = mutableState.value
             val next = transform(current) ?: return null
@@ -115,9 +124,11 @@ internal class DefaultEditorStore(
 
     // Loading is the second boundary that turns an arbitrary storage failure into UI state.
     // The loading flag is claimed before the launch: by the initial state or by reload().
+    // ATOMIC guarantees that the body runs even if the scope is cancelled between the claim and
+    // the launch, so the failure path still clears the flag.
     @Suppress("TooGenericExceptionCaught")
     private fun startLoad() {
-        scope.launch {
+        scope.launch(start = CoroutineStart.ATOMIC) {
             try {
                 mutableState.value = loadNote(noteId).toEditorState()
             } catch (cancellation: CancellationException) {
@@ -144,7 +155,9 @@ internal class DefaultEditorStore(
                 null
             }
         } ?: return
-        scope.launch {
+        // ATOMIC closes the window between the claim and the launch: if the scope is cancelled
+        // right now, the body still runs to the first suspension and `finally` clears isSaving.
+        scope.launch(start = CoroutineStart.ATOMIC) {
             try {
                 saveNote(snapshot.toNote(noteId))
                 mutableState.update { it.copy(saveError = null) }
