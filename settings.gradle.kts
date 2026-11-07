@@ -23,3 +23,9 @@ include(
     ":designsystem:compose:components",
     ":designsystem:compose:desktop",
 )
+include(
+    ":features:editor:api",
+    ":features:editor:impl",
+    ":features:editor:presentation:decompose",
+    ":features:editor:ui:compose",
+)
