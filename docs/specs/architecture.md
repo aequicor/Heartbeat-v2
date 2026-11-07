@@ -600,6 +600,7 @@ designsystem/
 │       ├── HbMessage.kt
 │       ├── HbToolActivity.kt
 │       ├── HbApprovalRequest.kt
+│       ├── HbWorkspaceScaffold.kt
 │       └── HbUsageDisplay.kt
 │
 ├── compose/
