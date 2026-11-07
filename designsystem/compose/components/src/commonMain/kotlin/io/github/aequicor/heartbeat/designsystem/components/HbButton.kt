@@ -29,7 +29,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * exposes the [Role.Button] semantics, so accessibility services announce an action button, not a
  * clickable container.
  *
- * States: default uses the primary action pair, disabled keeps the container muted and dims the
+ * States: default uses the primary action pair, [busy] prevents duplicate activation immediately
+ * while the container and the label stay readable, disabled keeps the container muted and dims the
  * label, pressed lightens the container, focused draws the design system focus outline in
  * [io.github.aequicor.heartbeat.designsystem.theme.HbColors.focus]. The component has no error state:
  * a failed action belongs to the screen that owns the operation.
@@ -40,8 +41,10 @@ fun HbButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    busy: Boolean = false,
 ) {
     val colors = HbThemeDefaults.LocalColors.current
+    val interactive = enabled && !busy
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     var focused by remember { mutableStateOf(false) }
@@ -80,7 +83,7 @@ fun HbButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = LocalIndication.current,
-                enabled = enabled,
+                enabled = interactive,
                 role = Role.Button,
                 onClick = onClick,
             )

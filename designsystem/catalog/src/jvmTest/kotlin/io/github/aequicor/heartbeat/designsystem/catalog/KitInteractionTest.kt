@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
+import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
@@ -140,6 +141,38 @@ class KitInteractionTest {
         }
 
         assertEquals(0, sent)
+    }
+
+    @Test
+    fun busyButtonIgnoresClicks() = runComposeUiTest {
+        var clicks = 0
+        setContent {
+            HbTheme {
+                HbButton(
+                    text = "Подключение…",
+                    onClick = { clicks++ },
+                    busy = true,
+                )
+            }
+        }
+
+        onNodeWithText("Подключение…").performClick()
+
+        assertEquals(0, clicks)
+    }
+
+    @Test
+    fun idleButtonCallsTheAction() = runComposeUiTest {
+        var clicks = 0
+        setContent {
+            HbTheme {
+                HbButton(text = "Сохранить", onClick = { clicks++ })
+            }
+        }
+
+        onNodeWithText("Сохранить").performClick()
+
+        assertEquals(1, clicks)
     }
 
     @Test
