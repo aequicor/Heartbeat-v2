@@ -51,6 +51,8 @@ fun HbDisclosure(
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     stateDescription: String? = null,
+    subtitle: String? = null,
+    status: HbStatusTone? = null,
     enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
@@ -74,24 +76,35 @@ fun HbDisclosure(
                     role = Role.Button,
                     onClick = { onExpandedChange(!expanded) },
                 )
-                .semantics {
-                    if (expanded) {
-                        collapse { onExpandedChange(false); true }
-                    } else {
-                        expand { onExpandedChange(true); true }
-                    }
-                    stateDescription?.let { this.stateDescription = it }
-                }
+                .disclosureSemantics(
+                    expanded = expanded,
+                    stateDescription = stateDescription,
+                    onExpandedChange = onExpandedChange,
+                )
                 .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
         ) {
-            BasicText(
-                text = title,
-                style = HbTypography.Label,
-                color = { colors.text.primary },
+            if (status != null) {
+                HbStatusDot(tone = status)
+            }
+            Column(
                 modifier = Modifier.weight(1f),
-            )
+                verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
+            ) {
+                BasicText(
+                    text = title,
+                    style = HbTypography.Label,
+                    color = { colors.text.primary },
+                )
+                if (subtitle != null) {
+                    BasicText(
+                        text = subtitle,
+                        style = HbTypography.Caption,
+                        color = { colors.text.secondary },
+                    )
+                }
+            }
             DisclosureChevron(color = colors.text.secondary, rotation = rotation)
         }
         if (expanded) {
@@ -142,3 +155,16 @@ private const val ChevronMiddleY = 0.66f
 private const val ChevronEndX = 0.8f
 
 private const val ChevronExpandedDegrees = 180f
+
+private fun Modifier.disclosureSemantics(
+    expanded: Boolean,
+    stateDescription: String?,
+    onExpandedChange: (Boolean) -> Unit,
+): Modifier = semantics {
+    if (expanded) {
+        collapse { onExpandedChange(false); true }
+    } else {
+        expand { onExpandedChange(true); true }
+    }
+    stateDescription?.let { this.stateDescription = it }
+}

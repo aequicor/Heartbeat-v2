@@ -39,21 +39,21 @@ fun HbBanner(
         modifier = modifier
             .fillMaxWidth()
             .clip(HbShapes.Medium)
-            .background(colors.containerFor(tone))
-            .border(BANNER_BORDER, colors.foregroundFor(tone), HbShapes.Medium)
+            .background(tone.container(colors))
+            .border(BANNER_BORDER, tone.foreground(colors), HbShapes.Medium)
             .padding(HbSpacing.S),
         verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
     ) {
         BasicText(
             text = title,
             style = HbTypography.Label,
-            color = { colors.foregroundFor(tone) },
+            color = { tone.foreground(colors) },
         )
         if (message != null) {
             BasicText(
                 text = message,
                 style = HbTypography.Caption,
-                color = { colors.foregroundFor(tone) },
+                color = { tone.foreground(colors) },
             )
         }
         Row(

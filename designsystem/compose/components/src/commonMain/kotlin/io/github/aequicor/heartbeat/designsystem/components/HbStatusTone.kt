@@ -14,20 +14,23 @@ enum class HbStatusTone {
     Success,
     Warning,
     Error,
-}
+    ;
 
-internal fun HbColors.containerFor(tone: HbStatusTone): Color = when (tone) {
-    HbStatusTone.Neutral -> surface.subtle
-    HbStatusTone.Info -> status.information.container
-    HbStatusTone.Success -> status.success.container
-    HbStatusTone.Warning -> status.warning.container
-    HbStatusTone.Error -> status.error.container
-}
+    /** Container of the tone, resolved from the current color scheme. */
+    fun container(colors: HbColors): Color = when (this) {
+        Neutral -> colors.surface.subtle
+        Info -> colors.status.information.container
+        Success -> colors.status.success.container
+        Warning -> colors.status.warning.container
+        Error -> colors.status.error.container
+    }
 
-internal fun HbColors.foregroundFor(tone: HbStatusTone): Color = when (tone) {
-    HbStatusTone.Neutral -> text.primary
-    HbStatusTone.Info -> status.information.foreground
-    HbStatusTone.Success -> status.success.foreground
-    HbStatusTone.Warning -> status.warning.foreground
-    HbStatusTone.Error -> status.error.foreground
+    /** Foreground and indicator of the tone, resolved from the current color scheme. */
+    fun foreground(colors: HbColors): Color = when (this) {
+        Neutral -> colors.text.primary
+        Info -> colors.status.information.foreground
+        Success -> colors.status.success.foreground
+        Warning -> colors.status.warning.foreground
+        Error -> colors.status.error.foreground
+    }
 }

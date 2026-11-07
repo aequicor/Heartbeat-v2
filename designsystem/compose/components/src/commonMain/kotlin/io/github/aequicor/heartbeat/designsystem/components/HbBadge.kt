@@ -29,14 +29,14 @@ fun HbBadge(
     Box(
         modifier = modifier
             .clip(HbShapes.Small)
-            .background(colors.containerFor(tone))
+            .background(tone.container(colors))
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xxs),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
             text = label,
             style = HbTypography.Metadata,
-            color = { colors.foregroundFor(tone) },
+            color = { tone.foreground(colors) },
         )
     }
 }

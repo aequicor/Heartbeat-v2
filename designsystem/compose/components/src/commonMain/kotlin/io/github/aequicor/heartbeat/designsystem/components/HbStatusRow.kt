@@ -41,7 +41,7 @@ fun HbStatusRow(
             modifier = Modifier
                 .size(STATUS_INDICATOR)
                 .clip(CircleShape)
-                .background(colors.foregroundFor(tone)),
+                .background(tone.foreground(colors)),
         )
         Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs)) {
             BasicText(

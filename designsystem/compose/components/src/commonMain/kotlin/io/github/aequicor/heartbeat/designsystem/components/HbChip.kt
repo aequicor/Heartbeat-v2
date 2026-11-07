@@ -25,8 +25,8 @@ fun HbChip(
     tone: HbStatusTone = HbStatusTone.Neutral,
 ) {
     val colors = HbThemeDefaults.LocalColors.current
-    val background = if (selected) colors.selection.background else colors.containerFor(tone)
-    val contentColor = if (selected) colors.selection.foreground else colors.foregroundFor(tone)
+    val background = if (selected) colors.selection.background else tone.container(colors)
+    val contentColor = if (selected) colors.selection.foreground else tone.foreground(colors)
 
     Box(
         modifier = modifier
