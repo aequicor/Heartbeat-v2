@@ -29,6 +29,12 @@ import io.github.aequicor.heartbeat.designsystem.components.HbChip
 import io.github.aequicor.heartbeat.designsystem.components.HbCopyButton
 import io.github.aequicor.heartbeat.designsystem.components.HbDisclosure
 import io.github.aequicor.heartbeat.designsystem.components.HbFormField
+import io.github.aequicor.heartbeat.designsystem.components.HbIconButton
+import io.github.aequicor.heartbeat.designsystem.components.HbInspector
+import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
+import io.github.aequicor.heartbeat.designsystem.components.HbSheet
+import io.github.aequicor.heartbeat.designsystem.components.HbSnackbar
+import io.github.aequicor.heartbeat.designsystem.components.HbToolbar
 import io.github.aequicor.heartbeat.designsystem.components.HbKeyHint
 import io.github.aequicor.heartbeat.designsystem.components.HbLink
 import io.github.aequicor.heartbeat.designsystem.components.HbListItem
@@ -74,6 +80,8 @@ internal fun CatalogScreen(modifier: Modifier = Modifier) {
         CatalogSection("Навигация и списки") { NavigationAndLists(colors) }
         CatalogSection("Метаданные") { Metadata(colors) }
         CatalogSection("Обратная связь") { Feedback(colors) }
+        CatalogSection("Рабочая область") { Workspace() }
+        CatalogSection("Поверхности") { Surfaces(colors) }
     }
 }
 
@@ -363,3 +371,64 @@ private val SWATCH_WIDTH = 96.dp
 private val SWATCH_HEIGHT = 28.dp
 
 private val NAV_WIDTH = 360.dp
+
+private val SURFACE_WIDTH = 320.dp
+
+private val SURFACE_HEIGHT = 180.dp
+
+@Composable
+private fun Workspace() {
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
+        HbPaneHeader(
+            title = "Диалог",
+            subtitle = "Проект «Heartbeat»",
+            actions = { HbButton(text = "Остановить", onClick = {}) },
+        )
+        HbToolbar(
+            actions = {
+                HbIconButton(contentDescription = "Новый диалог", onClick = {}) {
+                    val colors = HbThemeDefaults.LocalColors.current
+                    BasicText(
+                        text = "+",
+                        style = HbTypography.Label,
+                        color = { colors.text.primary },
+                    )
+                }
+                HbKeyHint(keys = listOf("Ctrl", "N"))
+            },
+        )
+        HbSnackbar(
+            message = "Черновик сохранён",
+            actionLabel = "Отменить",
+        )
+    }
+}
+
+@Composable
+private fun Surfaces(colors: HbColors) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
+        verticalAlignment = Alignment.Top,
+    ) {
+        HbSheet(
+            title = "Параметры ответа",
+            onClose = {},
+            closeLabel = "Закрыть параметры",
+            modifier = Modifier.width(SURFACE_WIDTH),
+        ) {
+            BasicText(
+                text = "Модель: heartbeat-fast",
+                style = HbTypography.Caption,
+                color = { colors.text.secondary },
+            )
+        }
+        HbInspector(
+            title = "Источники",
+            onClose = {},
+            closeLabel = "Закрыть источники",
+            modifier = Modifier.width(SURFACE_WIDTH).height(SURFACE_HEIGHT),
+        ) {
+            HbStatusRow(label = "3 источника", tone = HbStatusTone.Info)
+        }
+    }
+}
