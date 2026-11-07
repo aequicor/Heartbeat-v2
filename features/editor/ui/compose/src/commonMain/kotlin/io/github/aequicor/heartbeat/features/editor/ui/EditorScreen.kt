@@ -36,6 +36,7 @@ fun EditorScreen(
             onValueChange = { store.dispatch(EditorAction.ContentChanged(it)) },
             placeholder = "Содержимое",
             enabled = fieldsEnabled,
+            singleLine = false,
         )
         HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
