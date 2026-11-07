@@ -6,10 +6,11 @@ import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 // Enforces the rules from docs/specs/architecture.md ("Запрещённые зависимости"):
-// declared project and module dependencies, resolved compile/runtime graphs of the
-// universal `impl` modules (JVM, Android and Kotlin/Native), and source-level checks
-// for forbidden imports. The naming standard is checked by the Konsist tests in
-// `:architecture-tests`, which this task runs. The task runs as part of `build` and `check`.
+// project dependencies are checked against the role allowlist, module classpaths are checked
+// against the frameworks a role forbids, resolved compile/runtime graphs of the universal
+// modules are checked for transitive UI frameworks, and imports are checked per role. The
+// naming standard is checked by the Konsist tests in `:architecture-tests`, which this task
+// runs. The task runs as part of `build` and `check`.
 
 val violations = sortedSetOf<String>()
 
@@ -68,7 +69,7 @@ private fun checkProject(project: Project) {
 }
 
 private fun checkResolvedDependencies(project: Project) {
-    if (!ArchitectureRules.isImpl(project.path)) {
+    if (!ArchitectureRules.requiresCleanClasspath(project.path)) {
         return
     }
     project.configurations
