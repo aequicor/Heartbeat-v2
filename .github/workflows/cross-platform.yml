@@ -15,8 +15,11 @@ permissions:
   contents: read
 
 concurrency:
+  # A repeated `/reviewed` waits for the running checks instead of cancelling them: a cancelled
+  # run can leave the pending status it already published for the SHA, and GitHub then cannot tell
+  # whether that commit passed. `static-analysis.yml` follows the same policy.
   group: cross-platform-${{ github.event.issue.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   resolve:
