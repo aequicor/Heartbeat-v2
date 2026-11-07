@@ -1,8 +1,10 @@
 name: Static analysis
 
-# detekt runs on every pull request in `quality.yml`; this workflow repeats it for the commit the
-# owner approved with `/reviewed` and publishes the result as the `static-analysis` status on that
-# commit, so branch protection can require it next to `owner-review`.
+# Project policy: CI runs only for a commit the owner approved with `/reviewed`, or for a check
+# that the owner's host cannot run at all — the latter lives in `cross-platform.yml`. This
+# workflow runs the two source-level gates for the reviewed commit and publishes
+# `static-analysis` and `architecture-check` statuses, so branch protection can require them next
+# to `owner-review`. Pull requests never run these gates before the review command.
 on:
   issue_comment:
     types: [created]
@@ -10,25 +12,35 @@ on:
 permissions:
   contents: read
 
-# A repeated review command waits for the running analysis instead of cancelling it, so a
-# required status is never left pending.
-concurrency:
-  group: static-analysis-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
-  detekt:
+  gates:
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event.issue.pull_request &&
       github.event.comment.user.id == github.event.repository.owner.id &&
       (startsWith(github.event.comment.body, '/reviewed') ||
        startsWith(github.event.comment.body, '/revied'))
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
       statuses: write
+    # A repeated review command waits for the running analysis instead of cancelling it, so a
+    # required status is never left pending. Each gate has its own group.
+    concurrency:
+      group: ${{ matrix.name }}-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: static-analysis
+            task: detektAll
+            description: detekt
+          - name: architecture-check
+            task: architectureCheck
+            description: architecture
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -41,33 +53,39 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.sha.outputs.sha }}
+          CONTEXT: ${{ matrix.name }}
+          DESCRIPTION: ${{ matrix.description }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-            -f state=pending -f context=static-analysis \
-            -f description="detekt is running" \
+            -f state=pending -f context="$CONTEXT" \
+            -f description="$DESCRIPTION is running" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: jetbrains
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-      - name: Run detekt
-        run: ./gradlew detektAll --no-daemon
+      - name: Run the gate
+        env:
+          GRADLE_TASK: ${{ matrix.task }}
+        run: ./gradlew "$GRADLE_TASK" --no-daemon
       - name: Publish the result
         if: always() && steps.sha.outputs.sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.sha.outputs.sha }}
+          CONTEXT: ${{ matrix.name }}
+          DESCRIPTION: ${{ matrix.description }}
           OUTCOME: ${{ job.status }}
         run: |
           if [ "$OUTCOME" = success ]; then
             state=success
-            description="detekt passed"
+            description="$DESCRIPTION passed"
           else
             state=failure
-            description="detekt failed"
+            description="$DESCRIPTION failed"
           fi
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-            -f state="$state" -f context=static-analysis \
+            -f state="$state" -f context="$CONTEXT" \
             -f description="$description" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

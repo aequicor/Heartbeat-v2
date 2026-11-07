@@ -1,0 +1,68 @@
+name: Cross-platform checks
+
+# Project policy: CI runs only after the owner approved the commit with `/reviewed`, or for a
+# check that the owner's host cannot run at all. Apple targets and Linux native tests cannot run
+# on the Windows host, so this workflow validates them on the matching runners while the pull
+# request is open. Source-level gates stay in `static-analysis.yml` and run only for a reviewed
+# commit. Platform entry points stay on demand in `verify-platform.yml`.
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-platform-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  linux-native:
+    name: linux-native
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: jetbrains
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - name: Run Linux native tests
+        run: >-
+          ./gradlew
+          :features:editor:impl:linuxX64Test
+          :features:editor:presentation:decompose:linuxX64Test
+          --no-daemon
+
+  apple-native:
+    name: apple-native
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: jetbrains
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - name: Compile Apple targets and run macOS tests
+        run: >-
+          ./gradlew
+          :features:editor:impl:compileKotlinMacosArm64
+          :features:editor:impl:compileKotlinMacosX64
+          :features:editor:impl:compileKotlinIosArm64
+          :features:editor:impl:compileKotlinIosSimulatorArm64
+          :features:editor:impl:compileKotlinIosX64
+          :features:editor:presentation:decompose:compileKotlinMacosArm64
+          :features:editor:presentation:decompose:compileKotlinMacosX64
+          :features:editor:impl:macosArm64Test
+          :features:editor:presentation:decompose:macosArm64Test
+          --no-daemon
