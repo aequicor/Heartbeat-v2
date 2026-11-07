@@ -1,9 +1,33 @@
-# Платформенные приложения
+# Поддерживаемые таргеты
 
 Поведение точек входа и доставки артефактов платформ. Требования перенесены из прежней версии
 [архитектуры](architecture.md) при её полной замене 7 ноября 2026; ID сохранены.
 
 Модульная структура платформ описана в разделе «Платформенные приложения»
+[спецификации архитектуры](architecture.md).
+
+## Таргеты
+
+Основной таргет — `jvm`: desktop-приложение для Windows и Linux. Остальные таргеты перечислены в
+порядке поддержки их Kotlin: сначала цели первого уровня Kotlin/Native, затем второго и третьего,
+затем устаревающие. Уровни соответствуют документации Kotlin «Kotlin/Native supported targets and
+hosts».
+
+| Таргет | Платформа | Уровень поддержки Kotlin |
+| --- | --- | --- |
+| `jvm` | Windows, Linux | Основной таргет, Kotlin/JVM |
+| `android` | Android | Kotlin для Android |
+| `iosArm64` | iOS | Kotlin/Native, Tier 1 |
+| `iosSimulatorArm64` | iOS Simulator | Kotlin/Native, Tier 1 |
+| `macosArm64` | macOS | Kotlin/Native, Tier 1 |
+| `linuxX64` | Linux | Kotlin/Native, Tier 2 |
+| `linuxArm64` | Linux | Kotlin/Native, Tier 2 |
+| `mingwX64` | Windows | Kotlin/Native, Tier 3 |
+| `iosX64` | iOS Simulator на x86-64 | Kotlin/Native, Tier 3 |
+| `wasmJs` | Chromium | Kotlin/Wasm |
+| `macosX64` | macOS на x86-64 | Устаревает с Kotlin 2.3.20 |
+
+Обязательный набор targets универсальных модулей задан требованием HB-ARCH-021 в
 [спецификации архитектуры](architecture.md).
 
 ## Требования и проверка
