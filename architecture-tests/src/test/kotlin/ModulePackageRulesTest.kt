@@ -92,16 +92,96 @@ class ModulePackageRulesTest {
     }
 
     @Test
-    fun pathsOutsideFeatureAndDesignSystemModulesHaveNoRule() {
+    fun coreModuleDeclaresThePackageOfItsDirectory() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "core/platform-api/src/commonMain/kotlin/Platform.kt",
+                "io.github.aequicor.heartbeat.core.platformapi",
+            ),
+        )
         Assert.assertNull(
             ModulePackageRules.violation(
                 "core/network/src/commonMain/kotlin/HttpClient.kt",
                 "io.github.aequicor.heartbeat.core.network",
             ),
         )
+        assertViolation(
+            "core/network/src/commonMain/kotlin/HttpClient.kt",
+            "io.github.aequicor.heartbeat.core.database",
+            "core/network",
+            "io.github.aequicor.heartbeat.core.network",
+        )
+        assertViolation(
+            "core/network/src/commonMain/kotlin/HttpClient.kt",
+            "com.example.unrelated",
+            "core/network",
+        )
+    }
+
+    @Test
+    fun diModuleDeclaresTheSharedDiPackage() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "di/api/src/commonMain/kotlin/Scopes.kt",
+                "io.github.aequicor.heartbeat.di",
+            ),
+        )
+        assertViolation(
+            "di/api/src/commonMain/kotlin/Scopes.kt",
+            "io.github.aequicor.heartbeat.features.editor",
+            "di/api",
+        )
+        Assert.assertEquals(
+            "unknown di module role: di/extra",
+            ModulePackageRules.violation(
+                "di/extra/src/commonMain/kotlin/Extra.kt",
+                "io.github.aequicor.heartbeat.di",
+            ),
+        )
+    }
+
+    @Test
+    fun shellModulesDeclareTheShellArea() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "shell/impl/src/commonMain/kotlin/Shell.kt",
+                "io.github.aequicor.heartbeat.shell",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "shell/ui/compose/src/commonMain/kotlin/Shell.kt",
+                "io.github.aequicor.heartbeat.shell.ui",
+            ),
+        )
+        assertViolation(
+            "shell/impl/src/commonMain/kotlin/Shell.kt",
+            "com.example.unrelated",
+            "shell/impl",
+        )
+    }
+
+    @Test
+    fun platformModulesDeclareTheRootPackageOnly() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "platform/desktop/src/main/kotlin/Main.kt",
+                "io.github.aequicor.heartbeat",
+            ),
+        )
+        assertViolation(
+            "platform/desktop/src/main/kotlin/Main.kt",
+            "io.github.aequicor.heartbeat.features.editor",
+            "platform/desktop",
+        )
+    }
+
+    @Test
+    fun pathsOutsideArchitectureAreasHaveNoRule() {
         Assert.assertNull(
             ModulePackageRules.violation("buildSrc/src/main/kotlin/Plugin.gradle.kts", "plugin"),
         )
+        Assert.assertNull(ModulePackageRules.violation("docs/README.md", "docs"))
     }
 
     @Test
