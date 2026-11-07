@@ -1,4 +1,5 @@
 import heartbeat.KmpDefaults
+import org.gradle.api.artifacts.VersionCatalogsExtension
 
 // Compose Multiplatform module with Android and JVM targets. Compose is not
 // available for Linux/Windows Native; Apple targets stay optional and a module
@@ -10,6 +11,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.android.kotlin.multiplatform.library")
 }
+
+val libs = extensions.getByType(VersionCatalogsExtension::class.java).named("libs")
 
 kotlin {
     android {
@@ -27,8 +30,8 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(compose.runtime)
-            implementation(compose.foundation)
+            implementation(libs.findLibrary("compose-runtime").get())
+            implementation(libs.findLibrary("compose-foundation").get())
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

@@ -9,7 +9,7 @@ import org.gradle.jvm.toolchain.JvmVendorSpec
 
 object KmpDefaults {
 
-    const val COMPILE_SDK = 36
+    const val COMPILE_SDK = 37
     const val MIN_SDK = 23
     const val NAMESPACE_PREFIX = "io.github.aequicor.heartbeat"
 

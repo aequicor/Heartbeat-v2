@@ -21,7 +21,7 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 
 ## Шаг 3. Проверь SDK и Gradle JDK
 
-- **Tools → SDK Manager**: установлены SDK Platform 36 и Platform-Tools.
+- **Tools → SDK Manager**: установлены SDK Platform 37 и Platform-Tools.
 - **Settings → Build, Execution, Deployment → Build Tools → Gradle**: Gradle JDK — `Embedded JDK
   (JetBrains Runtime 25)`, дистрибутив — из `gradle-wrapper.properties`. Обёртка скачает
   Gradle 9.8.2.

@@ -15,5 +15,5 @@ project.pluginManager.apply("dev.zacsweers.metro")
 val libs = extensions.getByType(VersionCatalogsExtension::class.java).named("libs")
 
 dependencies {
-    add("commonMainImplementation", libs.findLibrary("metro-runtime"))
+    add("commonMainImplementation", libs.findLibrary("metro-runtime").get())
 }
