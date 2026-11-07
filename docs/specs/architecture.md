@@ -1,26 +1,1011 @@
 # Архитектура
 
-Heartbeat использует Kotlin Multiplatform. Общий код обслуживает сценарии кодинга и исследований в проектах. Целевые платформы — Android, iOS, Linux, Windows и macOS. Desktop-цели выполняются на JVM с Compose Multiplatform. Расширение Chromium использует Kotlin/Wasm.
+Heartbeat использует Kotlin Multiplatform. Общий код обслуживает сценарии кодинга и исследований в проектах. Целевые платформы — Android, iOS, Linux, Windows и macOS; desktop работает на JVM с Compose Multiplatform, расширение Chromium использует Kotlin/Wasm.
+
+Проект построен по **Feature-first Modular Architecture** с разделением публичных контрактов, универсальной реализации и платформозависимых адаптеров.
+
+Поведение точек входа и доставка артефактов описаны на странице
+[Платформенные приложения](platforms.md).
+
+## Архитектурная концепция
+
+| Область | Технология |
+| --- | --- |
+| Язык | Kotlin 2.4 |
+| Общая логика | Kotlin Multiplatform |
+| Dependency Injection | Metro 1.5 (compile-time) |
+| Асинхронность | Coroutines 1.11, Flow |
+| Presentation | Decompose 3.6 / собственный BLoC (запланирован) |
+| UI | Compose Multiplatform 1.12 / нативные UI |
+| Сборка | Gradle Kotlin DSL, AGP 9.5 |
+| Конфигурация сборки | Precompiled-плагины в `buildSrc` |
+
+### Основные принципы
+
+1. **Feature-first** — бизнес-функциональность изолируется внутри соответствующей фичи.
+2. **Universal Core** — `api` и `impl` каждой фичи компилируются для всех заявленных KMP targets.
+3. **Framework-independent Logic** — бизнес-логика и состояние UI не зависят от Decompose, Compose или BLoC.
+4. **Pluggable Presentation** — Decompose и BLoC выступают альтернативными адаптерами.
+5. **Pluggable UI** — Compose, SwiftUI и Win32 могут использовать одинаковые бизнес-контракты.
+6. **Dependency Inversion** — взаимодействие между фичами происходит через публичные API.
+7. **Compile-time DI** — Metro собирает и проверяет граф зависимостей при компиляции.
+8. **Platform-owned Composition Root** — платформенное приложение выбирает конкретные реализации.
+9. **Explicit Module Boundaries** — зависимости между модулями контролируются Gradle и архитектурными проверками.
 
 ## Границы компонентов
 
 | Компонент | Ответственность |
 | --- | --- |
-| Desktop-платформа | Показать заставку и прогресс, подключить бандлы |
-| Бандлы | Поставлять функциональность desktop-приложения в виде подключаемых модулей |
-| Launcher | Обновлять бандлы и собственную версию |
-| Приложения Android и iOS | Поставляться как самостоятельные приложения |
-| Расширение Chromium | Поставляться как расширение на Kotlin/Wasm |
+| `platform/` | Точки входа: запуск, создание Metro-графа, корневая Presentation-иерархия, интеграция с ОС |
+| `shell/` | Общая оболочка приложения: корневая навигация, состояние сессии, координация фич |
+| `features/` | Бизнес-функциональность: контракты, реализация, адаптеры Presentation и UI |
+| `frameworks/` | Собственные переиспользуемые фреймворки, например BLoC |
+| `di/` | Общие определения областей видимости Metro и общие registrations |
+| `designsystem/` | UI Kit по UI-технологиям |
+| `core/` | Техническая инфраструктура: сеть, БД, файловая система, платформенные сервисы |
+| `buildSrc/` | Precompiled-плагины соглашений сборки |
+
+## Структура репозитория
+
+```text
+project/
+│
+├── platform/
+│   ├── android/
+│   ├── desktop/
+│   ├── ios/
+│   ├── macos/
+│   ├── windows/
+│   └── linux/
+│
+├── shell/
+│   ├── api/
+│   ├── impl/
+│   ├── presentation/
+│   │   ├── decompose/
+│   │   └── block/
+│   └── ui/
+│       └── compose/
+│
+├── features/
+│   ├── home/
+│   ├── editor/
+│   └── settings/
+│
+├── frameworks/
+│   └── block/
+│
+├── di/
+│   ├── api/
+│   └── impl/
+│
+├── designsystem/
+│   ├── compose/
+│   │   ├── theme/
+│   │   ├── resources/
+│   │   ├── components/
+│   │   └── desktop/
+│   └── native/
+│       ├── swiftui/
+│       └── win32/
+│
+├── core/
+│   ├── network/
+│   ├── database/
+│   ├── filesystem/
+│   └── platform-api/
+│
+├── buildSrc/
+│   └── src/main/kotlin/
+│
+├── docs/
+│   └── specs/
+│
+├── gradle/
+│   └── libs.versions.toml
+│
+├── build.gradle.kts
+└── settings.gradle.kts
+```
+
+Обозначенные фичи являются примерами. Структура применяется к реальным функциональным областям приложения.
+
+`presentation/block`, `frameworks/block` и нативные UI-каталоги пока являются запланированными компонентами. До реализации BLoC они не подключаются к Gradle.
+
+Нативные UI-каталоги могут быть Swift Package, Xcode-проектами или C/C++-библиотеками. Не каждый каталог обязательно является Gradle-модулем.
+
+## Структура фичи
+
+Каждая фича имеет стандартную структуру:
+
+```text
+features/<feature>/
+├── api/
+├── impl/
+├── presentation/
+│   ├── decompose/
+│   └── block/
+└── ui/
+    ├── compose/
+    └── <native-ui>/
+```
+
+### `api` — публичные контракты
+
+Gradle path: `:features:<feature>:api`
+
+Содержит:
+
+- Публичные интерфейсы контроллеров.
+- Контракты фабрик.
+- UI State.
+- Actions и Effects.
+- Бизнес-модели, которые должны использовать другие модули.
+- Публичные бизнес-сервисы, если фича предоставляет их другим фичам.
+
+Пример:
+
+```kotlin
+interface EditorController {
+    val state: StateFlow<EditorState>
+    val effects: Flow<EditorEffect>
+
+    fun dispatch(action: EditorAction)
+}
+
+interface EditorControllerFactory {
+    fun create(
+        noteId: String,
+        scope: CoroutineScope,
+    ): EditorController
+}
+
+data class EditorState(
+    val title: String = "",
+    val content: String = "",
+    val isSaving: Boolean = false,
+)
+
+sealed interface EditorAction {
+    data class TitleChanged(
+        val value: String
+    ) : EditorAction
+
+    data object Save : EditorAction
+}
+
+sealed interface EditorEffect {
+    data object Saved : EditorEffect
+}
+```
+
+API не должен содержать типов Decompose, Compose, Metro или BLoC.
+
+`Coroutines` и `Flow` допустимы, поскольку являются платформонезависимыми Kotlin-библиотеками.
+
+**Targets: все поддерживаемые платформы проекта.**
+
+### `impl` — универсальная реализация
+
+Gradle path: `:features:<feature>:impl`
+
+Этот модуль объединяет Domain, Data и UI-независимую Presentation-логику.
+
+```text
+impl/
+└── src/
+    ├── commonMain/
+    │   └── kotlin/
+    │       ├── domain/
+    │       │   ├── model/
+    │       │   ├── repository/
+    │       │   └── usecase/
+    │       │
+    │       ├── data/
+    │       │   ├── datasource/
+    │       │   ├── repository/
+    │       │   └── mapper/
+    │       │
+    │       ├── presentation/
+    │       │   ├── DefaultEditorController.kt
+    │       │   └── EditorStateMapper.kt
+    │       │
+    │       └── di/
+    │           └── EditorBindings.kt
+    │
+    ├── androidMain/
+    ├── jvmMain/
+    ├── iosMain/
+    ├── macosMain/
+    ├── mingwX64Main/
+    └── linuxX64Main/
+```
+
+Domain, Data и Presentation — внутренние пакеты **одного Gradle-модуля**, а не независимые Gradle-проекты.
+
+Ответственность:
+
+**Domain**
+
+- Бизнес-модели.
+- UseCase.
+- Бизнес-правила.
+- Бизнес-валидация.
+- Контракты репозиториев.
+
+**Data**
+
+- Реализации репозиториев.
+- DataSource.
+- DTO и мапперы.
+- Кэширование.
+- Работа с сетью и локальным хранилищем.
+
+**Presentation**
+
+- Обработка пользовательских действий.
+- Управление `StateFlow`.
+- Формирование UI State.
+- Запуск бизнес-операций.
+- Формирование одноразовых эффектов.
+
+Presentation внутри `impl` не управляет платформенной навигацией, окнами или жизненным циклом UI-фреймворка.
+
+Допускаются Metro-аннотации и registrations, если они совместимы со всеми обязательными targets. Это означает независимость от UI-фреймворков, а не полный запрет DI-инструментов.
+
+**Targets: все поддерживаемые платформы проекта, включая `mingwX64` и Linux Native.**
+
+### `presentation/decompose`
+
+Gradle path: `:features:<feature>:presentation:decompose`
+
+Содержит адаптер бизнес-контроллера к Decompose.
+
+```text
+presentation/decompose/
+└── src/commonMain/kotlin/
+    ├── component/
+    │   ├── EditorComponent.kt
+    │   └── DefaultEditorComponent.kt
+    └── di/
+        └── EditorComponentBindings.kt
+```
+
+Ответственность:
+
+- `ComponentContext`.
+- Навигация внутри фичи.
+- Lifecycle.
+- State restoration.
+- Back handling.
+- Управление временем жизни контроллера.
+- Обработка выходных Effects.
+- Создание компонентов через Metro.
+
+Пример контракта:
+
+```kotlin
+interface EditorComponent {
+    val controller: EditorController
+}
+```
+
+Реализация получает `EditorControllerFactory` и создаёт контроллер с нужными параметрами и lifecycle-aware `CoroutineScope`.
+
+Decompose не должен дублировать состояние и бизнес-логику `DefaultEditorController`.
+
+**Targets: только совместимые с Decompose платформы.**
+
+### `presentation/block`
+
+Gradle path: `:features:<feature>:presentation:block`
+
+Это будущая альтернативная реализация Presentation-адаптера.
+
+Предполагаемая структура:
+
+```text
+presentation/block/
+└── src/commonMain/kotlin/
+    ├── bloc/
+    │   └── EditorBloc.kt
+    ├── lifecycle/
+    └── di/
+```
+
+Ответственность:
+
+- Интеграция с собственным BLoC framework.
+- Жизненный цикл контроллеров.
+- Навигационные события.
+- Связь с платформенным event loop.
+- Управление подписками и освобождением ресурсов.
+- Адаптация состояния для Native UI.
+
+`presentation/block` использует ту же бизнес-реализацию из `impl`, что и Decompose-адаптер.
+
+Он не должен содержать копию UseCase, репозиториев и бизнес-правил.
+
+**Цель: поддержка всех KMP targets, включая Windows/Linux Native.**
+
+### `ui`
+
+Платформенно-зависимые реализации интерфейса:
+
+```text
+ui/
+├── compose/
+├── swiftui/
+└── win32/
+```
+
+`ui/compose` должен быть независим от конкретного Presentation Framework.
+
+Например:
+
+```kotlin
+@Composable
+fun EditorScreen(
+    controller: EditorController,
+) {
+    val state by controller.state.collectAsState()
+
+    AppTextField(
+        value = state.title,
+        onValueChange = {
+            controller.dispatch(
+                EditorAction.TitleChanged(it)
+            )
+        },
+    )
+}
+```
+
+Пример иллюстрирует контракт. В реальном Compose-приложении нужно использовать соответствующую lifecycle-aware подписку.
+
+Связывание `EditorComponent` с `EditorScreen` выполняется в интеграционном слое UI/оболочки, а не внутри универсального экрана.
+
+Таким образом, один экран может использоваться с разными Presentation-адаптерами.
+
+## Архитектура Shell
+
+`shell` — общая оболочка приложения.
+
+```text
+shell/
+├── api/
+├── impl/
+├── presentation/
+│   ├── decompose/
+│   └── block/
+└── ui/
+    └── compose/
+```
+
+### `shell:api`
+
+Общие контракты приложения:
+
+- Состояние приложения.
+- Команды глобальной навигации.
+- Контракты координации фич.
+- События изменения сессии.
+- Контракты фабрик, не привязанные к Decompose.
+
+### `shell:impl`
+
+Универсальная логика оболочки:
+
+- Координация запуска приложения.
+- Управление состоянием сессии.
+- Обработка глобальных бизнес-событий.
+- Координация фич, если она не принадлежит конкретной фиче.
+
+Не должен зависеть от Decompose или BLoC.
+
+### `shell:presentation:decompose`
+
+Содержит:
+
+- RootComponent.
+- Root navigation.
+- `ChildStack`, `ChildSlot` и другие необходимые модели.
+- Создание дочерних компонентов фич.
+- Управление деревом компонентов.
+- Обработку глобальных навигационных событий.
+
+Зависит от контрактов и фабрик Decompose-адаптеров подключаемых фич, но не от их бизнес-реализаций.
+
+### `shell:presentation:block`
+
+Будущая реализация корневого Presentation через собственный BLoC framework.
+
+Она должна обеспечивать аналогичную функциональность без зависимости от Decompose.
+
+### `shell:ui:compose`
+
+Отвечает за отображение приложения:
+
+- Root UI.
+- Отрисовку навигационного дерева.
+- Подключение Compose UI фич.
+- Общий layout приложения.
+- Передачу контроллеров в экраны фич.
+
+Это интеграционный UI-модуль, поэтому ему разрешена зависимость от `shell:presentation:decompose` и API Decompose-адаптеров фич. При этом сами `features/*/ui/compose` от Decompose не зависят.
+
+Для нативных платформ Root UI располагается в соответствующем `platform` или нативном UI-проекте.
+
+## Платформенные приложения
+
+Все платформенные точки входа располагаются исключительно в `platform/`.
+
+```text
+platform/
+├── android/
+├── desktop/
+├── ios/
+├── macos/
+├── windows/
+└── linux/
+```
+
+### Назначение
+
+| Модуль | Runtime | UI | Presentation |
+| --- | --- | --- | --- |
+| `android` | Android / ART | Compose | Decompose |
+| `desktop` | JVM | Compose Desktop | Decompose |
+| `ios` | Kotlin/Native + Swift | SwiftUI | Decompose |
+| `macos` | Kotlin/Native | Native UI | Decompose или BLoC |
+| `windows` | Kotlin/Native | Win32 | BLoC |
+| `linux` | Kotlin/Native | Native UI | BLoC или совместимый Decompose |
+
+`desktop` и `windows` — разные приложения по типу runtime.
+
+`desktop` использует JVM, а `windows` — Kotlin/Native и нативные API Windows.
+
+Каждая платформа отвечает за:
+
+- Точку входа.
+- Создание Metro Graph.
+- Создание корневой Presentation-иерархии.
+- Инициализацию UI.
+- Интеграцию с ОС.
+- Window lifecycle.
+- Управление потоками UI.
+- Завершение приложения.
+
+Платформы самостоятельно выбирают зависимости на `presentation/decompose` или `presentation/block`.
+
+## Dependency Injection — Metro
+
+Metro является единственным основным DI-фреймворком.
+
+### Общие DI-модули
+
+```text
+di/
+├── api/
+│   ├── AppScope.kt
+│   └── SessionScope.kt
+│
+└── impl/
+    └── CommonBindings.kt
+```
+
+**`di:api`** содержит общие определения DI-областей видимости.
+
+**`di:impl`** предназначен исключительно для общих DI-регистраций, не принадлежащих конкретной фиче или платформе.
+
+Если таких registrations нет, `di:impl` можно не создавать до появления реальной необходимости.
+
+### Локальные registrations
+
+Каждая реализация самостоятельно регистрирует предоставляемые зависимости.
+
+| Расположение | Что регистрируется |
+| --- | --- |
+| `features/editor/impl` | ControllerFactory, Repository, UseCase |
+| `features/editor/presentation/decompose` | Decompose ComponentFactory |
+| `features/editor/presentation/block` | BLoC factory |
+| `core/network` | HTTP services |
+| `core/database` | Общая инфраструктура БД |
+
+Предпочтительно constructor injection и Metro `@ContributesBinding`.
+
+Параметры, возникающие во время исполнения, такие как `ComponentContext`, `noteId` и callbacks, передаются через фабрики и Assisted Injection.
+
+### Composition Root
+
+Финальный Metro-граф принадлежит платформенному приложению.
+
+```text
+platform/android/
+└── src/main/kotlin/
+    └── di/
+        └── AndroidGraph.kt
+
+platform/windows/
+└── src/mingwX64Main/kotlin/
+    └── di/
+        └── WindowsGraph.kt
+```
+
+Концептуально:
+
+```kotlin
+@DependencyGraph(AppScope::class)
+interface AndroidGraph {
+    val rootFactory: DecomposeRootFactory
+}
+```
+
+А Windows Native Graph предоставляет фабрику корневого BLoC вместо Decompose.
+
+Общий контракт графа можно выделить отдельно, если это действительно требуется нескольким платформам.
+
+**Важно:** при смешивании common и platform-specific bindings финальный `@DependencyGraph` располагается в платформенной компиляции, чтобы видеть весь набор registrations.
+
+### Scopes
+
+| Scope | Время жизни |
+| --- | --- |
+| `AppScope` | Время жизни экземпляра приложения |
+| `SessionScope` | Время жизни пользовательской сессии |
+| Controller / Component | Время жизни конкретного экземпляра Presentation |
+
+Жизненным циклом экранных контроллеров управляет Presentation-адаптер.
+
+Metro не заменяет Decompose lifecycle.
+
+Для Desktop с несколькими окнами создаются независимые корневые Presentation-иерархии. Глобальные сервисы могут находиться в одном application graph.
+
+## Design System / UI Kit
+
+UI Kit разделяется по UI-технологиям, а не по абстрактным кроссплатформенным слоям.
+
+```text
+designsystem/
+├── compose/
+│   ├── theme/
+│   │   ├── AppTheme.kt
+│   │   ├── Colors.kt
+│   │   ├── Typography.kt
+│   │   ├── Shapes.kt
+│   │   └── Spacing.kt
+│   │
+│   ├── resources/
+│   │   └── src/commonMain/composeResources/
+│   │       ├── drawable/
+│   │       ├── font/
+│   │       └── values/
+│   │
+│   ├── components/
+│   │   ├── AppButton.kt
+│   │   ├── AppTextField.kt
+│   │   └── AppDialog.kt
+│   │
+│   └── desktop/
+│       ├── AppTitleBar.kt
+│       └── WindowControls.kt
+│
+└── native/
+    ├── swiftui/
+    └── win32/
+```
+
+### Правила
+
+- Design System не зависит от фич.
+- Design System не зависит от Metro или Decompose.
+- `theme` и `resources` внутри `compose` являются Compose-ориентированными.
+- Фичи могут использовать Design System через свои UI-модули.
+- Компоненты с бизнес-семантикой остаются в UI конкретной фичи.
+- Платформенные UI Kit могут иметь разные реализации и следовать нативным паттернам ОС.
+
+При необходимости единого набора токенов для SwiftUI, Compose и Win32 можно добавить build-time генератор дизайн-токенов. Это не обязательный runtime-модуль KMP.
+
+## Core — техническая инфраструктура
+
+```text
+core/
+├── network/
+├── database/
+├── filesystem/
+└── platform-api/
+```
+
+`core` содержит только техническую инфраструктуру.
+
+Допустимое содержимое:
+
+- Настройка сетевого клиента.
+- Общие database drivers.
+- Абстракции файловой системы.
+- Платформенные сервисы.
+- Общие средства сериализации и логирования при необходимости.
+
+Недопустимое содержимое:
+
+- Feature-specific Repository.
+- Бизнес-модели.
+- UseCase.
+- Экранное состояние.
+- Навигация фич.
+
+Каждый модуль `core` должен объявлять только те KMP targets, которые он действительно поддерживает. Универсальные инфраструктурные зависимости, используемые в `feature:impl`, обязаны поддерживать все targets этого `impl`.
+
+## Межфичевое взаимодействие
+
+Фичи не должны зависеть от чужих `impl`.
+
+Пример:
+
+```text
+features/
+├── notes/
+│   ├── api/
+│   └── impl/
+│
+├── editor/
+│   ├── api/
+│   └── impl/
+│
+└── home/
+    ├── api/
+    └── impl/
+```
+
+Если `Editor` и `Home` работают с одной бизнес-сущностью Notes, то общий контракт размещается в `notes:api`.
+
+```text
+editor:impl ──> notes:api
+home:impl   ──> notes:api
+
+notes:impl  ──> notes:api
+```
+
+Реализация Notes подключается в платформенном Metro Graph.
+
+Такая фича может не иметь UI и Presentation — это допустимая **headless feature**.
+
+Для навигации между фичами используются callbacks, outputs и Shell, а не обращения к чужим Decompose-компонентам из бизнес-логики.
+
+## Направление зависимостей
+
+### Универсальная часть
+
+```text
+feature:api
+    ▲
+    │
+feature:impl
+    ├── domain/
+    ├── data/
+    └── presentation/
+```
+
+`impl` реализует контракты `api`.
+
+### Presentation
+
+```text
+feature:presentation:decompose
+    ├── feature:api
+    ├── Decompose
+    └── Metro
+
+feature:presentation:block
+    ├── feature:api
+    ├── frameworks:block
+    └── Metro
+```
+
+Обе Presentation-реализации получают бизнес-контроллеры через API-фабрики.
+
+### UI
+
+```text
+feature:ui:compose
+    ├── feature:api
+    ├── Compose
+    └── designsystem:compose:components
+```
+
+### Composition Root
+
+```text
+platform:android
+    ├── shell:presentation:decompose
+    ├── shell:ui:compose
+    ├── features:*:impl
+    ├── features:*:presentation:decompose
+    └── Metro Graph
+
+platform:windows
+    ├── shell:presentation:block
+    ├── features:*:impl
+    ├── features:*:presentation:block
+    ├── native UI
+    └── Metro Graph
+```
+
+Приведены логические зависимости; точный список Gradle-зависимостей определяется используемыми фичами.
+
+### Запрещённые зависимости
+
+```text
+api              -X-> impl
+api              -X-> presentation/*
+impl             -X-> presentation/*
+impl             -X-> ui/*
+impl             -X-> Decompose
+impl             -X-> Compose
+impl             -X-> BLoC Framework
+presentation/*   -X-> ui/*
+presentation/decompose -X-> presentation/block
+presentation/block     -X-> presentation/decompose
+ui/compose       -X-> feature:impl
+core             -X-> features/*
+designsystem     -X-> features/*
+```
+
+Исключение: композиционный UI-модуль Shell может зависеть от Decompose Presentation API для отрисовки навигационного дерева.
+
+## KMP Targets
+
+### Обязательные для универсальных модулей
+
+```text
+android
+jvm
+iosArm64
+iosSimulatorArm64
+iosX64
+macosArm64
+macosX64
+mingwX64
+linuxX64
+linuxArm64
+```
+
+При необходимости список расширяется другими KMP targets.
+
+`api`, `impl` и универсальные модули `shell` должны компилироваться для всего утверждённого набора.
+
+Apple-цели компилируются только на macOS-хостах; CI должен предусматривать необходимые хосты и toolchains. Поддержка цели библиотекой и возможность собрать её на конкретной машине — разные вещи.
+
+### Матрица
+
+| Модуль | Android | JVM | Apple Native | Linux Native | Windows Native |
+| --- | --- | --- | --- | --- | --- |
+| `api` | Да | Да | Да | Да | Да |
+| `impl` | Да | Да | Да | Да | Да |
+| `presentation/decompose` | Да | Да | Да | Да, с Decompose 3.6.0 | Нет |
+| `presentation/block` | План | План | План | План | План |
+| `ui/compose` | Да | Да | Опционально | Нет | Нет |
+
+Decompose публикует артефакты `linuxX64` и `linuxArm64` начиная с версии 3.6.0; артефактов `mingwX64` нет, поэтому Windows Native использует BLoC.
+
+## Особенности Native Windows / Linux
+
+Планируемая связка:
+
+```text
+Win32 / Linux Native UI
+          |
+          v
+Presentation BLoC
+          |
+          v
+Universal EditorController
+          |
+          v
+Domain + Data
+          |
+          v
+Platform Services
+```
+
+Kotlin/Native используется для исполнения общей логики без JVM.
+
+Native UI взаимодействует с Kotlin через соответствующий FFI или платформенный адаптер.
+
+Требования:
+
+- Нативный UI event loop не должен блокироваться бизнес-операциями.
+- Обновления интерфейса должны выполняться на соответствующем UI-потоке.
+- Подписки на Flow должны отменяться при уничтожении экрана.
+- Граница Kotlin/Native и C ABI должна управлять временем жизни объектов.
+- На границе с C не следует передавать произвольные Kotlin-объекты как будто это C-совместимые структуры.
+- UI не должен управлять репозиториями напрямую.
+
+BLoC framework должен предоставлять абстракции, достаточные для интеграции с lifecycle и event loop каждой целевой ОС.
+
+## Convention Plugins
+
+Precompiled-плагины хранятся в `buildSrc/src/main/kotlin/`. Идентификатор плагина совпадает с именем файла.
+
+```text
+buildSrc/src/main/kotlin/
+├── heartbeat-kmp-universal.gradle.kts
+├── heartbeat-kmp-decompose.gradle.kts
+├── heartbeat-kmp-compose.gradle.kts
+├── heartbeat-metro.gradle.kts
+├── heartbeat-compose-designsystem.gradle.kts
+└── heartbeat-architecture-check.gradle.kts
+```
+
+| Plugin | Ответственность |
+| --- | --- |
+| `heartbeat-kmp-universal` | Полный обязательный набор KMP targets |
+| `heartbeat-kmp-decompose` | Совместимые Decompose targets и зависимости |
+| `heartbeat-kmp-compose` | Compose Multiplatform |
+| `heartbeat-metro` | Metro compiler plugin и runtime |
+| `heartbeat-compose-designsystem` | Конфигурация Compose UI Kit |
+| `heartbeat-architecture-check` | Проверка правил архитектуры |
+
+Плагин `heartbeat-kmp-block` появится вместе с реализацией BLoC framework.
+
+### Примеры использования
+
+`features/editor/impl/build.gradle.kts`
+
+```kotlin
+plugins {
+    id("heartbeat-kmp-universal")
+    id("heartbeat-metro")
+}
+
+kotlin {
+    sourceSets.commonMain.dependencies {
+        implementation(projects.features.editor.api)
+        implementation(libs.kotlinx.coroutines.core)
+    }
+}
+```
+
+`features/editor/presentation/decompose/build.gradle.kts`
+
+```kotlin
+plugins {
+    id("heartbeat-kmp-decompose")
+    id("heartbeat-metro")
+}
+
+kotlin {
+    sourceSets.commonMain.dependencies {
+        implementation(projects.features.editor.api)
+        implementation(libs.decompose)
+    }
+}
+```
+
+`features/editor/ui/compose/build.gradle.kts`
+
+```kotlin
+plugins {
+    id("heartbeat-kmp-compose")
+}
+
+kotlin {
+    sourceSets.commonMain.dependencies {
+        implementation(projects.features.editor.api)
+        implementation(
+            projects.designsystem.compose.components
+        )
+    }
+}
+```
+
+Convention Plugins должны обеспечивать единые версии инструментов, согласованные compiler options и тестовые настройки.
+
+## Тестирование
+
+### `api` и `impl`
+
+- `commonTest` для бизнес-логики.
+- Тесты UseCase.
+- Тесты Repository с fake DataSource.
+- Проверка переходов UI State.
+- Проверка Actions и Effects.
+- Тесты ошибок и отмены операций.
+- Компиляция для всех обязательных KMP targets.
+
+### Presentation-адаптеры
+
+- Тестирование навигации.
+- Тестирование жизненного цикла.
+- Корректность создания и уничтожения контроллеров.
+- Проверка State restoration.
+- Тесты интеграции с Metro.
+- Контрактные тесты одинаковых сценариев для Decompose и BLoC.
+
+### UI
+
+- Compose UI Tests.
+- Preview/Screenshot Tests.
+- Нативные UI-тесты.
+- Smoke Tests запуска приложения.
+
+### Архитектурные проверки
+
+CI должен отклонять изменения, нарушающие зависимости между модулями.
+
+Особое внимание:
+
+- Decompose не должен появляться в транзитивных зависимостях универсального `impl`.
+- UI не должен зависеть от бизнес-реализаций.
+- Фичи не должны импортировать чужие реализации.
+- Все заявленные targets должны компилироваться.
+- Metro contributions должны быть доступны конечным графам.
+- Внутри `impl` должны соблюдаться границы Domain/Data/Presentation.
+
+Проверка package boundaries внутри одного Gradle-модуля потребует дополнительных правил статического анализа, например Detekt или собственного архитектурного теста.
+
+## Соглашения по именованию
+
+| Имя | Значение |
+| --- | --- |
+| `platform` | Платформенные приложения |
+| `shell` | Общая оболочка приложения |
+| `features` | Бизнес-функциональность |
+| `api` | Публичные универсальные контракты |
+| `impl` | Универсальная бизнес-реализация |
+| `presentation/decompose` | Адаптер Decompose |
+| `presentation/block` | Адаптер собственного BLoC |
+| `ui/compose` | Compose UI |
+| `ui/swiftui` | SwiftUI |
+| `ui/win32` | Win32 Native UI |
+| `frameworks` | Собственные переиспользуемые фреймворки |
+| `di` | Общие контракты и регистрации Metro |
+| `designsystem` | UI Kit по технологиям |
+| `core` | Универсальная техническая инфраструктура |
+| `buildSrc` | Precompiled-плагины соглашений сборки |
+
+### Результирующий стандарт фичи
+
+```text
+features/<feature>/
+├── api/
+├── impl/
+│   ├── domain/
+│   ├── data/
+│   └── presentation/
+├── presentation/
+│   ├── decompose/
+│   └── block/
+└── ui/
+    └── compose/
+```
+
+Фактические каталоги `domain/`, `data/` и `presentation/` внутри `impl` находятся в `src/commonMain/kotlin/...`, а не непосредственно в корне Gradle-проекта.
 
 ## Требования и проверка
 
 | ID | Требование | Источник | Критерий проверки |
 | --- | --- | --- | --- |
-| HB-ARCH-001 | Когда пользователь запускает desktop-приложение, платформа должна показать заставку с прогрессом и подключить бандлы. | Модель desktop из постановки проекта | Запустить приложение на Linux, Windows и macOS. Убедиться, что платформа показывает прогресс и открывает приложение с подключёнными бандлами. |
-| HB-ARCH-002 | Пока при первом запуске загружаются бандлы, платформа должна показывать прогресс загрузки. | Сценарий первого запуска из постановки проекта | Запустить приложение с чистым профилем и проверить прогресс до завершения загрузки. |
-| HB-ARCH-003 | Когда доступно обновление бандла или launcher, launcher должен уметь обновить соответствующий компонент. | Контракт launcher из постановки проекта | Отдельно установить обновление бандла и launcher. Проверить версии и следующий запуск. |
-| HB-ARCH-004 | Система сборки должна выпускать самостоятельные приложения для Android и iOS. | Перечень платформ из постановки проекта | Собрать, установить и запустить приложение на каждой мобильной платформе. |
-| HB-ARCH-005 | Система сборки должна собирать расширение Chromium из Kotlin/Wasm. | Требование к расширению из постановки проекта | Собрать расширение и проверить его загрузку в Chromium. |
-| HB-ARCH-006 | Система сборки должна собирать установщик desktop-приложения для Windows с помощью Inno Setup. | Запрос владельца от 6 ноября 2026 | Выполнить `gradlew :platform:desktop:packageDistributionForCurrentOS` на Windows и проверить `Heartbeat-<версия>-setup.exe`. |
+| HB-ARCH-007 | Репозиторий должен содержать каталоги `platform`, `shell`, `features`, `frameworks`, `di`, `designsystem`, `core` и `buildSrc` с назначением по таблице границ компонентов. | Согласованная архитектура от 7 ноября 2026 | Сверить дерево репозитория с разделом «Структура репозитория». |
+| HB-ARCH-008 | Каждая фича должна следовать стандартной структуре `api`, `impl`, `presentation/*`, `ui/*`; внутри `impl` пакеты `domain`, `data`, `presentation` находятся в одном Gradle-модуле. | Согласованная архитектура от 7 ноября 2026 | Проверить дерево модулей фичи и пакеты `src/commonMain/kotlin` её `impl`. |
+| HB-ARCH-009 | Модуль `api` фичи не должен содержать типов Decompose, Compose, Metro или BLoC; Coroutines и Flow допустимы. | Согласованная архитектура от 7 ноября 2026 | Собрать `api` для всех targets и проверить его транзитивные зависимости архитектурной проверкой. |
+| HB-ARCH-010 | Модуль `impl` фичи должен компилироваться для всех обязательных KMP targets, включая `mingwX64` и Linux Native. | Согласованная архитектура от 7 ноября 2026 | Скомпилировать `impl` для каждого обязательного target на поддерживающем хосте. |
+| HB-ARCH-011 | Presentation-адаптеры должны получать бизнес-контроллеры через фабрики `api` и не дублировать состояние и бизнес-логику `impl`. | Согласованная архитектура от 7 ноября 2026 | Сверить граф зависимостей адаптера и отсутствие копий UseCase/репозиториев в его коде. |
+| HB-ARCH-012 | Модуль `ui/compose` фичи не должен зависеть от `feature:impl` и от Presentation-фреймворков; экраны принимают контракты `api`. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка и сборка `ui/compose` без зависимости от Decompose. |
+| HB-ARCH-013 | Модули `shell:api` и `shell:impl` не должны зависеть от Decompose или BLoC; `shell:presentation:decompose` должен зависеть от адаптеров фич только через их API. | Согласованная архитектура от 7 ноября 2026 | Сверить зависимости shell-модулей архитектурной проверкой. |
+| HB-ARCH-014 | Финальный Metro `@DependencyGraph` должен располагаться в платформенной компиляции, чтобы видеть весь набор registrations. | Согласованная архитектура от 7 ноября 2026 и документация Metro | Объявить граф в платформенном модуле и убедиться, что компилятор видит contributions всех модулей. |
+| HB-ARCH-015 | DI должен использовать Metro с constructor injection и `@ContributesBinding`; runtime-параметры должны передаваться через фабрики или Assisted Injection. | Согласованная архитектура от 7 ноября 2026 | Собрать модули с Metro; тест графа в `commonTest` возвращает связанные зависимости. |
+| HB-ARCH-016 | Области видимости `AppScope`, `SessionScope` и время жизни Controller должны задаваться Presentation-адаптером; Metro не заменяет Decompose lifecycle. | Согласованная архитектура от 7 ноября 2026 | Проверить определения scope в `di:api` и уничтожение контроллера при завершении компонента. |
+| HB-ARCH-017 | Design System не должна зависеть от фич, Metro или Decompose; компоненты с бизнес-семантикой остаются в UI фичи. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка графа зависимостей `designsystem`. |
+| HB-ARCH-018 | Модули `core` должны содержать только техническую инфраструктуру: без Feature-specific Repository, бизнес-моделей, UseCase, экранного состояния и навигации. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает зависимости `core` от `features`; ревью содержимого. |
+| HB-ARCH-019 | Фичи должны взаимодействовать только через публичные `api`; допустимы headless-фичи без UI и Presentation. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает `impl → features:*:impl`; наличие headless-фичи подтверждается отсутствием UI-модулей. |
+| HB-ARCH-020 | Система сборки должна отклонять запрещённые зависимости из раздела «Запрещённые зависимости», включая транзитивное появление Decompose в `impl`. | Согласованная архитектура от 7 ноября 2026 | Задача `heartbeat-architecture-check`; негативный сценарий с временной запрещённой зависимостью падает. |
+| HB-ARCH-021 | Универсальные модули должны объявлять обязательный набор targets: android, jvm, iosArm64, iosSimulatorArm64, iosX64, macosArm64, macosX64, mingwX64, linuxX64, linuxArm64. | Согласованная архитектура от 7 ноября 2026 | Сверить `kotlin.targets` модулей с набором; сборка каждого target на поддерживающем хосте. |
+| HB-ARCH-022 | Модули должны следовать матрице targets по типу: Decompose-адаптеры без Windows Native, Compose UI без Linux и Windows Native. | Согласованная архитектура от 7 ноября 2026 | Сверить targets модулей с матрицей раздела «KMP Targets». |
+| HB-ARCH-023 | Пока BLoC framework не реализован, `presentation/block`, `frameworks/block` и нативные UI-каталоги не должны подключаться к Gradle. | Согласованная архитектура от 7 ноября 2026 | Проверить, что `settings.gradle.kts` не содержит block-модулей. |
+| HB-ARCH-024 | Соглашения сборки должны задаваться precompiled-плагинами `buildSrc`: `heartbeat-kmp-universal`, `heartbeat-kmp-decompose`, `heartbeat-kmp-compose`, `heartbeat-metro`, `heartbeat-compose-designsystem`, `heartbeat-architecture-check`; версии — только в `gradle/libs.versions.toml`. | Согласованная архитектура от 7 ноября 2026 и buildSrc/AGENTS.md | Сверить файлы плагинов и версии каталога; сборка модулей применяет плагины по идентификатору без версии. |
+| HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен выполнять архитектурные проверки. | Согласованная архитектура от 7 ноября 2026 | Запустить тесты модулей и архитектурные проверки в CI. |
+| HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
+| HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
 
-[Каналы выпуска](releases.md)
+**Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.
