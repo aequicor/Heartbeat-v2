@@ -249,6 +249,17 @@ private fun ComposerSection(modifier: Modifier = Modifier) {
                 stopLabel = "Остановить",
                 notice = "Не удалось отправить. Черновик сохранён.",
             )
+            HbComposer(
+                value = "Проверь журнал сборки",
+                onValueChange = {},
+                state = HbComposerState.Editing,
+                modifier = Modifier.width(NARROW_COMPOSER_WIDTH),
+                placeholder = "Напишите сообщение…",
+                label = "Черновик сообщения",
+                sendLabel = "Отправить",
+                stopLabel = "Остановить",
+                modelLabel = "heartbeat-fast",
+            )
             QueueSample()
         }
     }
@@ -382,3 +393,5 @@ private fun Section(
 private val SECTION_WIDTH = 640.dp
 
 private val TRANSCRIPT_HEIGHT = 320.dp
+
+private val NARROW_COMPOSER_WIDTH = 420.dp

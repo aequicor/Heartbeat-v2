@@ -5,6 +5,8 @@ package io.github.aequicor.heartbeat.designsystem.patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -68,15 +70,17 @@ fun HbComposer(
 ) {
     val colors = HbThemeDefaults.LocalColors.current
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(HbShapes.Medium)
-            .background(colors.surface.input)
-            .border(COMPOSER_BORDER, colors.border.control, HbShapes.Medium)
-            .padding(HbSpacing.S),
-        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val narrow = maxWidth < NarrowComposerWidth
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(HbShapes.Medium)
+                .background(colors.surface.input)
+                .border(COMPOSER_BORDER, colors.border.control, HbShapes.Medium)
+                .padding(HbSpacing.S),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+        ) {
         attachments()
         HbTextField(
             value = value,
@@ -100,31 +104,75 @@ fun HbComposer(
             minLines = 1,
             maxLines = Int.MAX_VALUE,
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-        ) {
-            if (modelLabel != null) {
-                HbChip(label = modelLabel)
-            }
-            actions()
-            Spacer(modifier = Modifier.weight(1f))
-            ComposerAction(
-                state = state,
-                sendLabel = sendLabel,
-                stopLabel = stopLabel,
-                onSend = onSend,
-                onStop = onStop,
-            )
-        }
-        if (notice != null) {
-            BasicText(
-                text = notice,
-                style = HbTypography.Caption,
-                color = { noticeColor(state, colors) },
-            )
+        ComposerControls(
+            narrow = narrow,
+            modelLabel = modelLabel,
+            actions = actions,
+            state = state,
+            sendLabel = sendLabel,
+            stopLabel = stopLabel,
+            onSend = onSend,
+            onStop = onStop,
+        )
+        Notice(state = state, notice = notice, colors = colors)
         }
     }
+}
+
+@Composable
+private fun ComposerSecondary(
+    modelLabel: String?,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
+    ) {
+        if (modelLabel != null) {
+            HbChip(label = modelLabel)
+        }
+        actions()
+    }
+}
+
+@Composable
+private fun ComposerPrimary(
+    state: HbComposerState,
+    sendLabel: String,
+    stopLabel: String,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        ComposerAction(
+            state = state,
+            sendLabel = sendLabel,
+            stopLabel = stopLabel,
+            onSend = onSend,
+            onStop = onStop,
+        )
+    }
+}
+
+@Composable
+private fun Notice(
+    state: HbComposerState,
+    notice: String?,
+    colors: HbColors,
+    modifier: Modifier = Modifier,
+) {
+    if (notice == null) {
+        return
+    }
+    BasicText(
+        text = notice,
+        style = HbTypography.Caption,
+        color = { noticeColor(state, colors) },
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -212,3 +260,50 @@ private fun noticeColor(
 private val EDITOR_MAX_HEIGHT = 168.dp
 
 private val COMPOSER_BORDER = 1.dp
+
+private val NarrowComposerWidth = 480.dp
+
+@Composable
+private fun ComposerControls(
+    narrow: Boolean,
+    modelLabel: String?,
+    actions: @Composable RowScope.() -> Unit,
+    state: HbComposerState,
+    sendLabel: String,
+    stopLabel: String,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (narrow) {
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+        ) {
+            ComposerSecondary(modelLabel = modelLabel, actions = actions)
+            ComposerPrimary(
+                state = state,
+                sendLabel = sendLabel,
+                stopLabel = stopLabel,
+                onSend = onSend,
+                onStop = onStop,
+            )
+        }
+    } else {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
+        ) {
+            ComposerSecondary(modelLabel = modelLabel, actions = actions)
+            Spacer(modifier = Modifier.weight(1f))
+            ComposerAction(
+                state = state,
+                sendLabel = sendLabel,
+                stopLabel = stopLabel,
+                onSend = onSend,
+                onStop = onStop,
+            )
+        }
+    }
+}

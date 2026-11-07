@@ -17,8 +17,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
@@ -32,8 +40,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  *
  * Selection is exposed by the `selectable` semantics and marked by an underline drawn across the
  * measured tab, so it is not encoded by color alone and a horizontally scrolling strip keeps the
- * indicator aligned. A long strip scrolls instead of shrinking its labels; the owner of the content
- * preserves the state of each tab.
+ * indicator aligned. The strip is one keyboard group: the left and right arrows move the selection
+ * and the focus together, and a long strip scrolls instead of shrinking its labels.
  */
 @Composable
 fun <T> HbTabs(
@@ -44,16 +52,33 @@ fun <T> HbTabs(
     tabLabel: (T) -> String = { it.toString() },
     enabled: Boolean = true,
 ) {
+    val focusRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
+
     Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .focusGroup()
+            .onPreviewKeyEvent { event ->
+                if (!enabled || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val current = tabs.indexOf(selected)
+                val target = when (event.key) {
+                    Key.DirectionRight -> (current + 1) % tabs.size
+                    Key.DirectionLeft -> (current - 1 + tabs.size) % tabs.size
+                    else -> return@onPreviewKeyEvent false
+                }
+                focusRequesters[target].requestFocus()
+                onSelect(tabs[target])
+                true
+            },
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
-        tabs.forEach { tab ->
+        tabs.forEachIndexed { index, tab ->
             HbTab(
                 label = tabLabel(tab),
                 selected = tab == selected,
                 enabled = enabled,
                 onClick = { onSelect(tab) },
+                modifier = Modifier.focusRequester(focusRequesters[index]),
             )
         }
     }
