@@ -260,6 +260,71 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun presentationInheritsLifecycleButMustNotDeclareIt() {
+        assertEquals(
+            "presentation adapters must not depend on UI or presentation frameworks",
+            ArchitectureRules.moduleDependencyViolation(
+                ":features:editor:presentation:decompose",
+                "androidx.lifecycle",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":features:editor:presentation:decompose",
+                "androidx.lifecycle",
+            ),
+        )
+        assertEquals(
+            "presentation adapters must not depend on Compose",
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":features:editor:presentation:decompose",
+                "org.jetbrains.compose.foundation",
+            ),
+        )
+    }
+
+    @Test
+    fun transitivePolicyStillBansFrameworksForCleanRoles() {
+        assertEquals(
+            "api contracts must not depend on Metro",
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":features:editor:api",
+                "dev.zacsweers.metro",
+            ),
+        )
+        assertEquals(
+            "impl must not depend on Compose",
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":features:editor:impl",
+                "org.jetbrains.compose.runtime",
+            ),
+        )
+        assertEquals(
+            "designsystem must not depend on Decompose",
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":designsystem:compose:components",
+                "com.arkivanov.decompose",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":platform:desktop",
+                "dev.zacsweers.metro",
+            ),
+        )
+    }
+
+    @Test
+    fun frameworkBansCoverTheResolvedGraphOfEveryGuardedRole() {
+        // A framework ban protects the boundary only if it applies to the resolved graph as well:
+        // the forbidden group can arrive through an allowed intermediate library.
+        roleSamples.forEach { (path, role) ->
+            val guarded = role != Role.Platform && role != Role.Other
+            assertEquals(guarded, ArchitectureRules.requiresCleanClasspath(path), path)
+        }
+    }
+
+    @Test
     fun classpathConfigurationSelectionCoversJvmAndroidAndNative() {
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmRuntimeClasspath", true))
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmCompileClasspath", true))

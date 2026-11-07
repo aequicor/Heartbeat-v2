@@ -49,14 +49,10 @@ object ArchitectureRules {
         "androidx.lifecycle",
     )
 
-    /** Roles whose resolved compile and runtime graphs must stay free of UI frameworks. */
-    private val cleanClasspathRoles = setOf(
-        Role.FeatureApi,
-        Role.ShellApi,
-        Role.FeatureImpl,
-        Role.ShellImpl,
-        Role.DiApi,
-        Role.Core,
+    /** Compose without the lifecycle artifacts, which Decompose itself brings transitively. */
+    private val composeArtifactGroups = listOf(
+        "org.jetbrains.compose",
+        "androidx.compose",
     )
 
     private val allowedTargetsByRole: Map<Role, Set<Role>> = mapOf(
@@ -117,6 +113,17 @@ object ArchitectureRules {
         Role.Other to listOf(),
     )
 
+    /**
+     * Framework groups a role must not have on its resolved compile and runtime graph. The
+     * transitive policy differs from the direct one where a framework arrives through an allowed
+     * dependency: a presentation adapter may inherit the `androidx.lifecycle` artifacts from
+     * Decompose, but declaring them directly stays forbidden.
+     */
+    private val forbiddenTransitiveGroups: Map<Role, List<String>> = forbiddenGroups + mapOf(
+        Role.FeaturePresentation to composeArtifactGroups,
+        Role.ShellPresentation to composeArtifactGroups,
+    )
+
     private val forbiddenImports: Map<Role, List<String>> = mapOf(
         Role.FeatureApi to uiFrameworkGroups + METRO_GROUP,
         Role.ShellApi to uiFrameworkGroups + METRO_GROUP,
@@ -162,8 +169,16 @@ object ArchitectureRules {
         else -> Role.Other
     }
 
-    /** Modules whose resolved graphs are checked for transitive UI frameworks. */
-    fun requiresCleanClasspath(path: String): Boolean = role(path) in cleanClasspathRoles
+    /**
+     * Modules whose resolved graphs are checked for forbidden transitive frameworks. Every role
+     * that forbids a framework group is checked: the framework can arrive through an allowed
+     * intermediate library (for example Compose through a presentation adapter dependency), so
+     * declared dependencies alone do not protect the boundary. The declared-dependency pass and
+     * the resolved-graph pass stay separate checks with separate policies
+     * ([moduleDependencyViolation] and [transitiveModuleDependencyViolation]).
+     */
+    fun requiresCleanClasspath(path: String): Boolean =
+        forbiddenTransitiveGroups.getValue(role(path)).isNotEmpty()
 
     fun allowedTargets(from: String): Set<Role> = allowedTargetsByRole.getValue(role(from))
 
@@ -206,9 +221,21 @@ object ArchitectureRules {
         }
     }
 
-    fun moduleDependencyViolation(modulePath: String, group: String): String? {
+    /** Violation of the declared-dependency policy of the module role. */
+    fun moduleDependencyViolation(modulePath: String, group: String): String? =
+        groupViolation(forbiddenGroups, modulePath, group)
+
+    /** Violation of the resolved-graph policy of the module role. */
+    fun transitiveModuleDependencyViolation(modulePath: String, group: String): String? =
+        groupViolation(forbiddenTransitiveGroups, modulePath, group)
+
+    private fun groupViolation(
+        policy: Map<Role, List<String>>,
+        modulePath: String,
+        group: String,
+    ): String? {
         val moduleRole = role(modulePath)
-        val forbidden = forbiddenGroups.getValue(moduleRole).firstOrNull { isGroup(group, it) }
+        val forbidden = policy.getValue(moduleRole).firstOrNull { isGroup(group, it) }
             ?: return null
         return "${roleDescription(moduleRole)} must not depend on ${reason(forbidden)}"
     }

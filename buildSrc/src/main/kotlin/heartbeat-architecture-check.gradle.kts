@@ -7,10 +7,10 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 // Enforces the rules from docs/specs/architecture.md ("Запрещённые зависимости"):
 // project dependencies are checked against the role allowlist, module classpaths are checked
-// against the frameworks a role forbids, resolved compile/runtime graphs of the universal
-// modules are checked for transitive UI frameworks, and imports are checked per role. The
-// naming standard is checked by the Konsist tests in `:architecture-tests`, which this task
-// runs. The task runs as part of `build` and `check`.
+// against the frameworks a role forbids, resolved compile/runtime graphs of every role that bans
+// a framework are checked for that framework appearing transitively, and imports are checked per
+// role. The naming standard is checked by the Konsist tests in `:architecture-tests`, which this
+// task runs. The task runs as part of `build` and `check`.
 
 val violations = sortedSetOf<String>()
 
@@ -92,7 +92,7 @@ private fun checkResolvedDependencies(project: Project) {
             result.allComponents.forEach { component ->
                 val id = component.id
                 if (id is ModuleComponentIdentifier) {
-                    ArchitectureRules.moduleDependencyViolation(project.path, id.group)?.let { rule ->
+                    ArchitectureRules.transitiveModuleDependencyViolation(project.path, id.group)?.let { rule ->
                         report(
                             project.path,
                             "${id.group}:${id.module}:${id.version}",
