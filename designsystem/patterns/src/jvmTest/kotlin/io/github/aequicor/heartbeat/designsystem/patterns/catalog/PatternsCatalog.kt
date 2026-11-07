@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
@@ -14,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.patterns.HbComposer
 import io.github.aequicor.heartbeat.designsystem.patterns.HbComposerState
+import io.github.aequicor.heartbeat.designsystem.patterns.HbConnectionRow
+import io.github.aequicor.heartbeat.designsystem.patterns.HbConnectionStatus
+import io.github.aequicor.heartbeat.designsystem.patterns.HbTranscript
 import io.github.aequicor.heartbeat.designsystem.patterns.HbMessageQueue
 import io.github.aequicor.heartbeat.designsystem.patterns.HbQueueItem
 import io.github.aequicor.heartbeat.designsystem.patterns.HbQueueItemState
@@ -50,6 +54,8 @@ internal fun PatternsCatalogScreen(modifier: Modifier = Modifier) {
         MessagesSection()
         ToolsSection()
         ComposerSection()
+        ConnectionsSection()
+        TranscriptSection()
         ApprovalsSection()
         UsageSection()
     }
@@ -276,6 +282,86 @@ private fun QueueSample(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun ConnectionsSection(modifier: Modifier = Modifier) {
+    Section(title = "Подключения", modifier = modifier) {
+        Column(modifier = Modifier.width(SECTION_WIDTH)) {
+            HbConnectionRow(
+                name = "Локальная среда",
+                provider = "Ollama · localhost",
+                status = HbConnectionStatus.Ready,
+                statusLabel = "Готово",
+                detail = "Проверено 2 мин назад",
+                actions = { HbLink(text = "Изменить", onClick = {}) },
+            )
+            HbConnectionRow(
+                name = "Удалённый сервер",
+                provider = "OpenAI",
+                status = HbConnectionStatus.Failed,
+                statusLabel = "Ошибка",
+                detail = "Не удалось проверить ключ",
+                actions = { HbLink(text = "Повторить", onClick = {}) },
+            )
+            HbConnectionRow(
+                name = "Резервный сервер",
+                provider = "Anthropic",
+                status = HbConnectionStatus.Unavailable,
+                statusLabel = "Недоступно",
+                detail = "Ключ не настроен",
+            )
+        }
+    }
+}
+
+@Composable
+private fun TranscriptSection(modifier: Modifier = Modifier) {
+    val colors = HbThemeDefaults.LocalColors.current
+
+    Section(title = "Транскрипт", modifier = modifier) {
+        Column(modifier = Modifier.width(SECTION_WIDTH)) {
+            HbTranscript(
+                following = true,
+                onFollowingChange = {},
+                jumpToLatestLabel = "К последнему",
+                newContentLabel = "Новое сообщение",
+                modifier = Modifier.height(TRANSCRIPT_HEIGHT),
+            ) {
+                item {
+                    HbMessage(role = HbMessageRole.User, roleLabel = "Вы") {
+                        BasicText(
+                            text = "Проверь журнал сборки и предложи исправление.",
+                            style = HbTypography.Body,
+                            color = { colors.text.primary },
+                        )
+                    }
+                }
+                item {
+                    HbMessage(
+                        role = HbMessageRole.Assistant,
+                        roleLabel = "Ассистент",
+                        meta = "12:45",
+                    ) {
+                        BasicText(
+                            text = "Сборка падает на задаче проверки зависимостей.",
+                            style = HbTypography.Body,
+                            color = { colors.text.primary },
+                        )
+                    }
+                }
+                item {
+                    HbToolActivity(
+                        title = "read_file",
+                        target = "docs/specs/design-system.md",
+                        status = HbToolStatus.Succeeded,
+                        expanded = false,
+                        onExpandedChange = {},
+                    ) {}
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun Section(
     title: String,
     modifier: Modifier = Modifier,
@@ -294,3 +380,5 @@ private fun Section(
 }
 
 private val SECTION_WIDTH = 640.dp
+
+private val TRANSCRIPT_HEIGHT = 320.dp
