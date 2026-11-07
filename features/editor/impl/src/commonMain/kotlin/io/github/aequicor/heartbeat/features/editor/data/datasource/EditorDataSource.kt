@@ -10,6 +10,9 @@ import kotlinx.coroutines.sync.withLock
  * In-memory note storage; replaces network or database data sources for now.
  * The instance is shared in [AppScope], so every access is guarded by [Mutex]
  * and the storage stays safe when stores run on different dispatchers.
+ *
+ * The class is public because Metro constructs it in another module; the storage
+ * operations are implementation details and stay internal.
  */
 @SingleIn(AppScope::class)
 class EditorDataSource @Inject constructor() {
@@ -17,9 +20,9 @@ class EditorDataSource @Inject constructor() {
     private val mutex = Mutex()
     private val notes = mutableMapOf<String, NoteDto>()
 
-    suspend fun find(noteId: String): NoteDto? = mutex.withLock { notes[noteId] }
+    internal suspend fun find(noteId: String): NoteDto? = mutex.withLock { notes[noteId] }
 
-    suspend fun store(dto: NoteDto) {
+    internal suspend fun store(dto: NoteDto) {
         mutex.withLock { notes[dto.id] = dto }
     }
 }

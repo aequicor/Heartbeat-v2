@@ -45,20 +45,27 @@ class NamingRulesTest {
     }
 
     @Test
-    fun apiContractsFollowTheFeatureName() {
+    fun apiDeclarationsFollowTheFeatureName() {
         Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorStore"))
         Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorStoreFactory"))
         Assert.assertNull(violation(api, DeclarationKind.CLASS, "EditorState"))
         Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorAction"))
         Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorEffect"))
+        Assert.assertNull(violation(api, DeclarationKind.CLASS, "EditorNote"))
+        Assert.assertNull(violation(api, DeclarationKind.INTERFACE, "EditorService"))
         Assert.assertEquals(
-            "api contract must start with Editor: NoteStore",
+            "api declaration must start with Editor: NoteStore",
             violation(api, DeclarationKind.INTERFACE, "NoteStore"),
         )
+    }
+
+    @Test
+    fun apiSubpackagesFollowTheFeatureName() {
+        Assert.assertNull(violation("$api.model", DeclarationKind.CLASS, "EditorNote"))
+        Assert.assertNull(violation("$api.service", DeclarationKind.INTERFACE, "EditorService"))
         Assert.assertEquals(
-            "api contract must be <Feature>Store, <Feature>StoreFactory, <Feature>State, " +
-                "<Feature>Action or <Feature>Effect: EditorNote",
-            violation(api, DeclarationKind.CLASS, "EditorNote"),
+            "api declaration must start with Editor: Note",
+            violation("$api.model", DeclarationKind.CLASS, "Note"),
         )
     }
 

@@ -68,6 +68,11 @@ class ArchitectureTest {
     }
 
     @Test
+    fun implementationDetailsAreInternal() {
+        Assert.assertEquals(listOf<String>(), visibilityViolations(featureScope.files))
+    }
+
+    @Test
     fun nestedActionAndEffectMembersAreNotContracts() {
         val actionFile = featureScope.files.single { it.projectPath.endsWith("EditorAction.kt") }
         val apiPackage = "$featurePrefix.editor.api"
@@ -120,21 +125,56 @@ class ArchitectureTest {
     }
 
     private fun namingViolations(files: List<KoFileDeclaration>): List<String> =
-        files.flatMap { file ->
-            file.declarations(includeNested = false, includeLocal = false).mapNotNull { declaration ->
-                // Imports and the package directive are declarations for Konsist too.
-                val kind = declaration.kind()
-                if (kind == DeclarationKind.OTHER) return@mapNotNull null
-                val name = declaration.nameOrNull() ?: return@mapNotNull null
-                NamingRules.violation(
-                    packageName = file.packagee?.name.orEmpty(),
-                    declarationKind = kind,
-                    declarationName = name,
+        declarationViolations(files) { declaration ->
+            NamingRules.violation(
+                packageName = declaration.packageName,
+                declarationKind = declaration.kind,
+                declarationName = declaration.name,
+                isPublic = declaration.isPublic,
+                annotations = declaration.annotations,
+            )
+        }
+
+    private fun visibilityViolations(files: List<KoFileDeclaration>): List<String> =
+        declarationViolations(files) { declaration ->
+            VisibilityRules.violation(
+                packageName = declaration.packageName,
+                declarationKind = declaration.kind,
+                declarationName = declaration.name,
+                isPublic = declaration.isPublic,
+                annotations = declaration.annotations,
+            )
+        }
+
+    private fun declarationViolations(
+        files: List<KoFileDeclaration>,
+        rule: (DeclarationInfo) -> String?,
+    ): List<String> = files.flatMap { file ->
+        val packageName = file.packagee?.name.orEmpty()
+        file.declarations(includeNested = false, includeLocal = false).mapNotNull { declaration ->
+            // Imports and the package directive are declarations for Konsist too.
+            val kind = declaration.kind()
+            if (kind == DeclarationKind.OTHER) return@mapNotNull null
+            val name = declaration.nameOrNull() ?: return@mapNotNull null
+            rule(
+                DeclarationInfo(
+                    packageName = packageName,
+                    kind = kind,
+                    name = name,
                     isPublic = declaration.isPublicOrDefault(),
                     annotations = declaration.annotationNames(),
-                )?.let { "${file.projectPath}: $it" }
-            }
+                ),
+            )?.let { "${file.projectPath}: $it" }
         }
+    }
+
+    private data class DeclarationInfo(
+        val packageName: String,
+        val kind: DeclarationKind,
+        val name: String,
+        val isPublic: Boolean,
+        val annotations: List<String>,
+    )
 
     private fun KoBaseDeclaration.kind(): DeclarationKind = when (this) {
         is KoInterfaceDeclaration -> DeclarationKind.INTERFACE

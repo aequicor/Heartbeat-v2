@@ -753,21 +753,33 @@ platform:windows
 
 ### Запрещённые зависимости
 
-```text
-api              -X-> impl
-api              -X-> presentation/*
-impl             -X-> presentation/*
-impl             -X-> ui/*
-impl             -X-> Decompose
-impl             -X-> Compose
-impl             -X-> BLoC Framework
-presentation/*   -X-> ui/*
-presentation/decompose -X-> presentation/block
-presentation/block     -X-> presentation/decompose
-ui/compose       -X-> feature:impl
-core             -X-> features/*
-designsystem     -X-> features/*
-```
+Зависимости задаются allowlist по ролям модулей: ребро, которого нет в таблице, — нарушение.
+
+| Роль модуля | Может зависеть от |
+| --- | --- |
+| `platform` | всех ролей: в платформенной компиляции находится итоговый граф Metro |
+| `shell:api` | `shell:api`, `features/*/api`, `di:api`, `core/*` |
+| `shell:impl` | `shell:api`, `shell:impl`, `features/*/api`, `di:api`, `core/*` |
+| `shell:presentation/*` | `shell:api`, `shell:impl`, `shell:presentation/*`, `features/*/api`, `features/*/presentation/*`, `di:api`, `core/*` |
+| `shell:ui/*` | `shell:*`, `features/*/api`, `features/*/presentation/*`, `features/*/ui/*`, `designsystem/*`, `di:api`, `core/*` |
+| `features/*/api` | `features/*/api`, `core/*` |
+| `features/*/impl` | `features/*/api`, `di:api`, `core/*` |
+| `features/*/presentation/*` | `features/*/api`, `di:api`, `core/*` |
+| `features/*/ui/*` | `features/*/api`, `designsystem/*`, `core/*` |
+| `di:api` | `di:api`, `core/*` |
+| `core/*` | `core/*`, `di:api` |
+| `designsystem/*` | `designsystem/*`, `core/*` |
+
+Следствия, которые проверяются отдельными сообщениями:
+
+- `api` не зависит от `impl`, `presentation`, `ui`, `designsystem` и `di`: Metro в контрактах запрещён.
+- `impl` не зависит от `presentation`, `ui` и `designsystem`; фичи взаимодействуют только через `api`.
+- Presentation-адаптер получает Store через `api` и не зависит от `impl`; адаптеры не зависят друг от друга.
+- `ui` не зависит от `impl`; связывать компоненты может только `shell:ui:compose`.
+- `core` и `designsystem` не зависят от фич; `designsystem` не зависит от `di`.
+- `features/*/api` и `core` не зависят от UI-фреймворков и Metro; `designsystem` и `ui` — от Decompose и Metro; Presentation-адаптеры — от Compose.
+
+Группы артефактов проверяются и в объявленных зависимостях, и в разрешённых compile/runtime/klib-графах универсальных модулей; импорты проверяются по той же роли модуля.
 
 Исключение: композиционный UI-модуль Shell может зависеть от Decompose Presentation API для отрисовки навигационного дерева.
 
@@ -959,16 +971,17 @@ CI должен отклонять изменения, нарушающие за
 - Все заявленные targets должны компилироваться.
 - Metro contributions должны быть доступны конечным графам.
 - Внутри `impl` должны соблюдаться границы Domain/Data/Presentation.
-- Запрещённые импорты Decompose, Compose и платформенных UI API в универсальных модулях контролируются правилом detekt `ForbiddenImport` и собственной проверкой исходников.
+- Запрещённые импорты Decompose, Compose, Metro и платформенных UI API контролируются правилом detekt `ForbiddenImport` и собственной проверкой исходников по роли модуля.
 - Имена архитектурных ролей и пакеты их размещения контролируются Konsist-тестами `:architecture-tests`; правила покрыты unit-тестами `NamingRulesTest`.
 - Соответствие имени файла основному объявлению контролирует правило detekt `MatchingDeclarationName`, имена классов — `ClassNaming`.
 
-Проверка разделена на четыре уровня:
+Проверка разделена на пять уровней:
 
-- **Gradle (`heartbeat-architecture-check`).** Направления объявленных project-зависимостей, запрещённые фреймворки в `api`/`impl` и разрешённые compile/runtime/klib-графы JVM, Android и Kotlin/Native, включая транзитивное появление Decompose в `impl`. Правила покрыты unit-тестами в `buildSrc`.
-- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: стандарт именования ролей и размещение по пакетам, публичность контрактов `api`, соответствие `Default<Contract>` одноимённому интерфейсу `Contract`, направление импортов пакетов-ролей фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`). Задача `architectureCheck` запускает `:architecture-tests:test`.
+- **Gradle (`heartbeat-architecture-check`).** Allowlist зависимостей по ролям модулей, запрещённые фреймворки в объявленных зависимостях, разрешённые compile/runtime/klib-графы универсальных модулей JVM, Android и Kotlin/Native и импорты по роли модуля. Правила покрыты unit-тестами в `buildSrc`.
+- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: стандарт именования ролей и размещение по пакетам, публичность контрактов `api` и видимость деталей `impl`, соответствие `Default<Contract>` одноимённому интерфейсу `Contract`, направление импортов пакетов-ролей фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`). Задача `architectureCheck` запускает `:architecture-tests:test`.
 - **detekt.** Синтаксические соглашения: `MatchingDeclarationName` (имя файла), `ClassNaming` (имена классов), `ForbiddenImport` (запрещённые фреймворки). Запускается задачей `detektAll` и пре-пуш хуком.
 - **explicit API (`heartbeat-kmp-api`).** Модули `features/*/api`, `shell:api` и `di:api` компилируются в explicit API mode: публичные объявления указывают видимость, публичные свойства и функции — тип.
+- **CI (`quality.yml`).** На каждом pull request выполняются `architectureCheck` и `detektAll`, компиляция обязательных KMP targets (Linux и Windows на ubuntu, Apple на macOS) и тесты JVM. Метка `verify-platform` дополнительно собирает и запускает точки входа.
 
 ## Соглашения по именованию
 
@@ -1018,6 +1031,8 @@ CI должен отклонять изменения, нарушающие за
 
 Правила не ограничивают пакет `domain.model`, а также `core` и `platform`.
 
+Пакет `api` и его подпакеты (`api.model`, `api.service`) содержат все публичные контракты фичи. Обязательно только имя с префиксом `<Feature>`; суффикс роли действует, когда объявление исполняет роль: рядом с `EditorStore` допустимы `EditorNote` и `EditorService`.
+
 Исключения:
 
 - Доменные модели в `domain.model` называются по предметной области: `Note`.
@@ -1025,7 +1040,7 @@ CI должен отклонять изменения, нарушающие за
 - `Default` означает реализацию по умолчанию, а не обязательный префикс: специализированная реализация называется по технологии — `SqlDelightNoteRepository`.
 - Маппер может быть набором top-level extension-функций в файле `NoteMappers.kt`; отдельный класс `*Mapper` нужен, только когда у преобразования есть состояние.
 
-Видимость: `public` для внешних контрактов, `internal` для деталей реализации, `private` для локальных вспомогательных объявлений. Контракты `api`-модулей компилируются в explicit API mode, и их публичность проверяется в `architectureCheck`. Типы, которые видит финальный граф Metro, остаются `public`, поэтому видимость деталей `impl` определяет ревью.
+Видимость: `public` для внешних контрактов, `internal` для деталей реализации, `private` для локальных вспомогательных объявлений. Контракты `api`-модулей компилируются в explicit API mode, и их публичность проверяется Konsist-тестом. Детали `impl` — DTO, mapper-функции, реализация Store и реализация Component — обязаны быть `internal`. `public` остаётся у типов, которые видит финальный граф Metro (`@Inject`, `@ContributesBinding`, `@ContributesTo`, `@Provides`, `@SingleIn`), и у публичных контрактов, в сигнатурах которых они участвуют; проверку выполняет Konsist-тест `implementationDetailsAreInternal`.
 
 ### Результирующий стандарт фичи
 
@@ -1062,12 +1077,12 @@ features/<feature>/
 | HB-ARCH-017 | Design System не должна зависеть от фич, Metro или Decompose; компоненты с бизнес-семантикой остаются в UI фичи. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка графа зависимостей `designsystem`. |
 | HB-ARCH-018 | Модули `core` должны содержать только техническую инфраструктуру: без Feature-specific Repository, бизнес-моделей, UseCase, экранного состояния и навигации. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает зависимости `core` от `features`; ревью содержимого. |
 | HB-ARCH-019 | Фичи должны взаимодействовать только через публичные `api`; допустимы headless-фичи без UI и Presentation. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает `impl → features:*:impl`; наличие headless-фичи подтверждается отсутствием UI-модулей. |
-| HB-ARCH-020 | Система сборки должна отклонять запрещённые зависимости из раздела «Запрещённые зависимости», включая транзитивное появление Decompose в `impl`. | Согласованная архитектура от 7 ноября 2026 | Задача `heartbeat-architecture-check`; негативный сценарий с временной запрещённой зависимостью падает. |
+| HB-ARCH-020 | Система сборки должна отклонять зависимости, которых нет в allowlist раздела «Запрещённые зависимости», включая транзитивное появление UI-фреймворков и Metro. | Согласованная архитектура от 7 ноября 2026 и третье код-ревью PR #20 | Задача `heartbeat-architecture-check`; негативные сценарии `presentation:decompose → impl` и `core:network → Compose` падают. |
 | HB-ARCH-021 | Универсальные модули должны объявлять обязательный набор targets: android, jvm, iosArm64, iosSimulatorArm64, iosX64, macosArm64, macosX64, mingwX64, linuxX64, linuxArm64. | Согласованная архитектура от 7 ноября 2026 | Сверить `kotlin.targets` модулей с набором; сборка каждого target на поддерживающем хосте. |
 | HB-ARCH-022 | Модули должны следовать матрице targets по типу: Decompose-адаптеры без Windows Native, Compose UI без Linux и Windows Native. | Согласованная архитектура от 7 ноября 2026 | Сверить targets модулей с матрицей раздела «KMP Targets». |
 | HB-ARCH-023 | Пока BLoC framework не реализован, `presentation/block`, `frameworks/block` и нативные UI-каталоги не должны подключаться к Gradle. | Согласованная архитектура от 7 ноября 2026 | Проверить, что `settings.gradle.kts` не содержит block-модулей. |
 | HB-ARCH-024 | Соглашения сборки должны задаваться precompiled-плагинами `buildSrc`: `heartbeat-kmp-universal`, `heartbeat-kmp-decompose`, `heartbeat-kmp-compose`, `heartbeat-kmp-api`, `heartbeat-metro`, `heartbeat-compose-designsystem`, `heartbeat-architecture-check`; версии — только в `gradle/libs.versions.toml`. | Согласованная архитектура от 7 ноября 2026 и buildSrc/AGENTS.md | Сверить файлы плагинов и версии каталога; сборка модулей применяет плагины по идентификатору без версии. |
-| HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен выполнять архитектурные проверки. | Согласованная архитектура от 7 ноября 2026 | Запустить тесты модулей и архитектурные проверки в CI. |
+| HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен на каждом PR выполнять архитектурные проверки, статический анализ, компиляцию обязательных KMP targets и тесты. | Согласованная архитектура от 7 ноября 2026 и третье код-ревью PR #20 | Workflow `quality.yml`: `architectureCheck`, `detektAll`, компиляция Linux/Windows и Apple targets, `jvmTest`; статус `architecture-check` обязателен для слияния. |
 | HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
 | HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
 | HB-ARCH-028 | Публичный API Design System должен иметь префикс `Hb`: кастомные UI-компоненты, токены и тема, например `HbButton`, `HbTextField`, `HbTypography`, `HbShapes`, `HbSpacing`, `HbColors`, `HbTheme`. | Запрос владельца от 7 ноября 2026 | Konsist-тест `designSystemApiUsesHbPrefix` проверяет публичные объявления `designsystem`; композаблы, токены и тема используются в фичах. |
@@ -1078,10 +1093,12 @@ features/<feature>/
 | HB-ARCH-033 | Публичный контракт состояния фичи должен называться `<Feature>Store`, реализация — `Default<Feature>Store`, фабрика — `<Feature>StoreFactory`; Store, State, Action и Effect размещаются в `features/<feature>/api`, реализация Store — в `features/<feature>/impl`; Store не зависит от Compose, Decompose, BLoC, AndroidX ViewModel и платформенных UI API. | Запрос владельца от 7 ноября 2026 | Сверить имена типов и модули размещения; архитектурная проверка подтверждает отсутствие UI-фреймворков в зависимостях `impl`, `api` проверяется ревью. |
 | HB-ARCH-034 | Ошибка загрузки должна отражаться в UI State и не блокировать Store навсегда; должна быть доступна повторная загрузка, а отмена не должна считаться ошибкой. | Второе код-ревью PR #20 от 7 ноября 2026 | Тесты: ошибка загрузки выставляет `loadError` и снимает `isLoading`; `Reload` загружает данные; правка после ошибки игнорируется. |
 | HB-ARCH-035 | `Save` должен фиксировать снимок состояния в момент действия, а правки во время сохранения не должны теряться. | Второе код-ревью PR #20 от 7 ноября 2026 | Тест: правка во время сохранения игнорируется, сохраняется и остаётся в состоянии именно снимок на момент `Save`. |
-| HB-ARCH-036 | Архитектурная проверка должна анализировать объявленные зависимости, разрешённые compile/runtime графы JVM, Android и Kotlin/Native, явно сообщать о неразрешимой конфигурации и проверять исходники универсальных модулей на запрещённые импорты. | Второе код-ревью PR #20 от 7 ноября 2026 | Негативный сценарий для импорта Compose падает; unit-тесты правил в `buildSrc`; `gradlew build` выполняет `architectureCheck`. |
+| HB-ARCH-036 | Архитектурная проверка должна анализировать объявленные зависимости, разрешённые compile/runtime графы JVM, Android и Kotlin/Native, явно сообщать о неразрешимой конфигурации и проверять импорты по роли модуля. | Второе код-ревью PR #20 от 7 ноября 2026 и третье код-ревью PR #20 | Негативный сценарий для импорта Compose падает; unit-тесты правил в `buildSrc`; `gradlew build` выполняет `architectureCheck`. |
+| HB-ARCH-041 | Проверка зависимостей должна строиться на allowlist ролей модулей (`platform`, `shell:*`, `features/*/api`, `features/*/impl`, `features/*/presentation/*`, `features/*/ui/*`, `di:api`, `core/*`, `designsystem/*`): ребро вне таблицы и запрещённая группа артефактов по роли — нарушение. | Третье код-ревью PR #20 от 7 ноября 2026 | Unit-тест `everyRolePairFollowsTheAllowlist` покрывает каждое ребро матрицы; объявленные и транзитивные зависимости проверяются задачей `architectureCheck`. |
+| HB-ARCH-042 | Каждый pull request должен проходить обязательные `architectureCheck` и `detektAll`, а также компиляцию обязательных KMP targets на подходящих runner-ах и тесты JVM. | Третье код-ревью PR #20 от 7 ноября 2026 | Workflow `quality.yml`; статус `architecture-check` добавлен владельцем в обязательные проверки ruleset. |
 | HB-ARCH-037 | Konsist-тесты в модуле `:architecture-tests` должны проверять, что каждая реализация `Default<Contract>` реализует одноимённый интерфейс `Contract`, и что пакеты-роли фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`) соблюдают направление импортов; тесты должны выполняться в задаче `architectureCheck`. | Запрос владельца от 7 ноября 2026 | `gradlew architectureCheck` выполняет `:architecture-tests:test`; негативный сценарий с реализацией без контракта или запрещённым импортом между ролями падает. |
 | HB-ARCH-038 | Модули `features/*/api`, `shell:api` и `di:api` должны компилироваться в explicit API mode (`explicitApi()`): публичные объявления указывают видимость, публичные свойства и функции — тип. | Запрос владельца от 7 ноября 2026 | Сборка api-модулей в strict explicit API mode без ошибок; публичное объявление без модификатора не компилируется. |
-| HB-ARCH-039 | Имена и размещение архитектурных ролей фичи должны соответствовать таблице «Имена архитектурных ролей»: роль определяется пакетом, имя — обязательным суффиксом (`UseCase`, `Repository`, `DataSource`, `Dto`, `Mapper`, `Store`, `StoreFactory`, `Component`, `ComponentFactory`, `State`, `Action`, `Effect`, `Screen`); `Default` означает реализацию по умолчанию; доменные модели, вложенные Action/Effect и top-level mapper-функции не подчиняются роли. | Запрос владельца от 7 ноября 2026 | Konsist-тест `declarationsFollowNamingStandard` падает на `LoadNote` в `domain.usecase`; unit-тесты `NamingRulesTest` покрывают позитивный и негативный случай каждого правила. |
-| HB-ARCH-040 | Публичные контракты `features/*/api` должны быть `public`; детали реализации — `internal` или `private`, кроме типов, которые видит финальный граф Metro. | Запрос владельца от 7 ноября 2026 | Konsist-тест `apiContractsArePublic`; explicit API mode api-модулей; ревью видимости типов `impl`. |
+| HB-ARCH-039 | Имена и размещение архитектурных ролей фичи должны соответствовать таблице «Имена архитектурных ролей»: в пакетах ролей имя получает обязательный суффикс (`UseCase`, `Repository`, `DataSource`, `Dto`, `Mapper`, `Store`, `StoreFactory`, `Component`, `ComponentFactory`, `State`, `Action`, `Effect`, `Screen`), в `api` и его подпакетах — префикс `<Feature>`, поэтому публичные модели и сервисы фичи сохраняют свои имена; `Default` означает реализацию по умолчанию; доменные модели, вложенные Action/Effect и top-level mapper-функции не подчиняются роли. | Запрос владельца от 7 ноября 2026 и третье код-ревью PR #20 | Konsist-тест `declarationsFollowNamingStandard` падает на `LoadNote` в `domain.usecase`; unit-тесты `NamingRulesTest` покрывают позитивный и негативный случай каждого правила. |
+| HB-ARCH-040 | Публичные контракты `features/*/api` должны быть `public`; детали реализации — `internal` или `private`, кроме типов, которые видит финальный граф Metro. | Запрос владельца от 7 ноября 2026 и третье код-ревью PR #20 | Konsist-тесты `apiContractsArePublic` и `implementationDetailsAreInternal`; unit-тесты `VisibilityRulesTest`; explicit API mode api-модулей. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.

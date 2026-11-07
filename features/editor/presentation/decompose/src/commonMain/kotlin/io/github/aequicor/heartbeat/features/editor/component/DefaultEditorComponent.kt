@@ -14,8 +14,11 @@ import kotlinx.coroutines.cancel
  * when the component is destroyed, which stops pending business operations.
  * The UI dispatcher comes from the platform host, so the adapter compiles and
  * runs on every Decompose target, including Linux Native.
+ *
+ * The implementation is internal: the shell binds [EditorComponent] and creates
+ * it through [EditorComponentFactory].
  */
-class DefaultEditorComponent(
+internal class DefaultEditorComponent(
     componentContext: ComponentContext,
     noteId: String,
     factory: EditorStoreFactory,

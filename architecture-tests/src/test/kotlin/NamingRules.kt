@@ -19,9 +19,6 @@ internal object NamingRules {
     /** State holders are Stores; these names belong to other presentation frameworks. */
     private val foreignStateHolderSuffixes = listOf("Controller", "ViewModel")
 
-    /** Contracts that live in the feature `api` package. */
-    private val contractSuffixes = listOf("StoreFactory", "Store", "State", "Action", "Effect")
-
     private val mapperFunction = Regex("""to[A-Z]\w*""")
 
     /**
@@ -51,11 +48,38 @@ internal object NamingRules {
         declarationName: String,
         annotations: List<String>,
     ): String? {
-        val path = featurePackagePath(packageName) ?: return null
-        val feature = path.first().replaceFirstChar { it.uppercaseChar() }
-        return when (path.drop(1)) {
-            listOf("api") -> apiContractViolation(feature, declarationName)
+        val path = featurePath(packageName)
+        return when {
+            path == null -> null
+            // The api package holds every public contract: Store, State, Action, Effect, models
+            // and services. Only the feature prefix is mandatory, so a model keeps its own name.
+            path.drop(1).firstOrNull() == "api" ->
+                apiContractViolation(featureName(path), declarationName)
 
+            else -> roleViolation(path, declarationKind, declarationName, annotations)
+        }
+    }
+
+    /**
+     * The `api` package is the feature's public surface, not only its Store contracts, so the
+     * rule fixes the feature prefix and leaves the rest of the name to the role or the domain:
+     * `EditorNote` and `EditorService` are valid declarations next to `EditorStore`.
+     */
+    private fun apiContractViolation(feature: String, declarationName: String): String? =
+        if (declarationName.startsWith(feature)) {
+            null
+        } else {
+            "api declaration must start with $feature: $declarationName"
+        }
+
+    private fun roleViolation(
+        path: List<String>,
+        declarationKind: DeclarationKind,
+        declarationName: String,
+        annotations: List<String>,
+    ): String? {
+        val feature = featureName(path)
+        return when (path.drop(1)) {
             listOf("domain", "usecase") -> suffixViolation(
                 role = "use case",
                 suffix = "UseCase",
@@ -116,17 +140,6 @@ internal object NamingRules {
         } else {
             null
         }
-
-    private fun apiContractViolation(feature: String, declarationName: String): String? = when {
-        !declarationName.startsWith(feature) ->
-            "api contract must start with $feature: $declarationName"
-
-        contractSuffixes.none(declarationName::endsWith) ->
-            "api contract must be <Feature>Store, <Feature>StoreFactory, <Feature>State, " +
-                "<Feature>Action or <Feature>Effect: $declarationName"
-
-        else -> null
-    }
 
     private fun repositoryContractViolation(
         declarationName: String,
@@ -227,8 +240,12 @@ internal object NamingRules {
         else -> null
     }
 
-    /** Package segments after `...heartbeat.features.<feature>`; `null` outside a feature. */
-    private fun featurePackagePath(packageName: String): List<String>? {
+    /** Capitalised feature segment: `editor` becomes `Editor`. */
+    private fun featureName(path: List<String>): String =
+        path.first().replaceFirstChar { it.uppercaseChar() }
+
+    /** Segments of `...heartbeat.features.<feature>.<role>`; `null` outside a feature. */
+    internal fun featurePath(packageName: String): List<String>? {
         val prefix = "$FEATURE_PACKAGE."
         if (!packageName.startsWith(prefix)) {
             return null
@@ -241,3 +258,4 @@ internal object NamingRules {
         this == DeclarationKind.INTERFACE ||
         this == DeclarationKind.OBJECT
 }
+
