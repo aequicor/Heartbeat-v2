@@ -8,6 +8,12 @@
  * allowlist instead of a blocklist (HB-ARCH-040): only the roles that carry contracts or the
  * DI boundary may be public, every other declaration in a feature module must be `internal`
  * or `private`.
+ *
+ * This rule minimises the internal API; it does not replace the module boundary. The dependency
+ * graph in `architectureCheck` forbids `impl -> impl` and `presentation -> impl` edges, so a
+ * public domain model inside `impl` is not reachable from another module even while it stays
+ * public for DI, tests or inline API. Requiring `internal` for every domain model would conflict
+ * with those uses without making the boundary stronger.
  */
 internal object VisibilityRules {
 
