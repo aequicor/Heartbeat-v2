@@ -12,4 +12,7 @@ object HbThemeDefaults {
 
     /** Resolved motion preference set by [HbTheme]; animations read it to drop movement. */
     val LocalMotion = staticCompositionLocalOf { HbMotionPreference.Full }
+
+    /** Type styles resolved for the active text scale; see [HbTypography]. */
+    val LocalTypography = staticCompositionLocalOf { defaultTypeStyles(defaultTypeScale()) }
 }

@@ -16,8 +16,8 @@ import kotlin.test.assertTrue
  * Renders the catalog to PNG files for review (HB-DS-039, HB-DS-040).
  *
  * The scene is raster and offscreen, so the check runs without a desktop window. The images land in
- * `designsystem/compose/components/build/catalog`; both appearances and a compact width are
- * covered, and every image must be a non-empty PNG.
+ * `designsystem/compose/components/build/catalog`; both appearances, a compact width and the
+ * 150% text scale are covered, and every image must be a non-empty PNG.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class CatalogScreenshotTest {
@@ -37,14 +37,26 @@ class CatalogScreenshotTest {
         renderCatalog("catalog-compact-light", COMPACT_WIDTH, COMPACT_HEIGHT, HbAppearance.Light)
     }
 
+    @Test
+    fun rendersLargeTextCatalog() {
+        renderCatalog(
+            name = "catalog-large-text",
+            width = WIDE_WIDTH,
+            height = LARGE_TEXT_HEIGHT,
+            appearance = HbAppearance.Light,
+            textScale = 1.5f,
+        )
+    }
+
     private fun renderCatalog(
         name: String,
         width: Int,
         height: Int,
         appearance: HbAppearance,
+        textScale: Float = 1f,
     ) {
         val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
-            HbTheme(appearance = appearance) {
+            HbTheme(appearance = appearance, textScale = textScale) {
                 CatalogScreen()
             }
         }
@@ -66,6 +78,8 @@ class CatalogScreenshotTest {
         private const val WIDE_WIDTH = 1200
 
         private const val WIDE_HEIGHT = 2150
+
+        private const val LARGE_TEXT_HEIGHT = 3000
 
         private const val COMPACT_WIDTH = 390
 
