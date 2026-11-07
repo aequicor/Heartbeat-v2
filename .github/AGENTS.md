@@ -63,8 +63,8 @@ PR, менять правила защиты и обращаться к ключ
 2. `static-analysis.yml` по команде `/reviewed` выполняет `detektAll` и `architectureCheck` и
    публикует статусы `static-analysis` и `architecture-check` для проверенного коммита. Политика
    проекта: до команды `/reviewed` эти проверки в CI не запускаются.
-3. `cross-platform.yml` на открытом PR выполняет только проверки, недоступные на хосте владельца:
-   компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux на ubuntu.
+3. `cross-platform.yml` по команде `/reviewed` выполняет только проверки, недоступные на хосте
+   владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux на ubuntu.
 4. Метка `verify-platform` на PR запускает сборку и запуск точек входа на Windows, Linux, macOS,
    Android и iOS. Без метки этот workflow не выполняется.
 5. Каналы `alpha`, `beta` и `release` описаны в [спецификации выпуска](../docs/specs/releases.md).

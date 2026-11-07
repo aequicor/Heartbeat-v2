@@ -1,31 +1,35 @@
 name: Cross-platform checks
 
-# Project policy: CI runs only after the owner approved the commit with `/reviewed`, or for a
-# check that the owner's host cannot run at all. Apple targets and Linux native tests cannot run
-# on the Windows host, so this workflow validates them on the matching runners while the pull
-# request is open. Source-level gates stay in `static-analysis.yml` and run only for a reviewed
-# commit. Platform entry points stay on demand in `verify-platform.yml`.
+# Project policy: every CI gate runs only for a commit the owner approved with `/reviewed`.
+# Apple targets and Linux native tests cannot run on the Windows host, so this workflow
+# validates them on the matching runners for the reviewed commit, next to the source-level
+# gates in `static-analysis.yml`. Platform entry points stay on demand in `verify-platform.yml`.
 on:
-  pull_request:
-    branches: [master]
-    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
 
 concurrency:
-  group: cross-platform-${{ github.event.pull_request.number }}
+  group: cross-platform-${{ github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
   linux-native:
     name: linux-native
-    if: ${{ !github.event.pull_request.draft }}
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      github.event.issue.pull_request &&
+      github.event.comment.user.id == github.event.repository.owner.id &&
+      (startsWith(github.event.comment.body, '/reviewed') ||
+       startsWith(github.event.comment.body, '/revied'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
           persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
@@ -42,12 +46,18 @@ jobs:
 
   apple-native:
     name: apple-native
-    if: ${{ !github.event.pull_request.draft }}
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      github.event.issue.pull_request &&
+      github.event.comment.user.id == github.event.repository.owner.id &&
+      (startsWith(github.event.comment.body, '/reviewed') ||
+       startsWith(github.event.comment.body, '/revied'))
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
           persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:

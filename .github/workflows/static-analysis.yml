@@ -1,10 +1,9 @@
 name: Static analysis
 
-# Project policy: CI runs only for a commit the owner approved with `/reviewed`, or for a check
-# that the owner's host cannot run at all — the latter lives in `cross-platform.yml`. This
-# workflow runs the two source-level gates for the reviewed commit and publishes
-# `static-analysis` and `architecture-check` statuses, so branch protection can require them next
-# to `owner-review`. Pull requests never run these gates before the review command.
+# Project policy: every CI gate runs only for a commit the owner approved with `/reviewed`.
+# This workflow runs the two source-level gates and publishes `static-analysis` and
+# `architecture-check` statuses; `cross-platform.yml` runs the Apple/Linux native checks for the
+# same reviewed commit. Branch protection can require these statuses next to `owner-review`.
 on:
   issue_comment:
     types: [created]
