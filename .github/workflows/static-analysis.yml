@@ -1,8 +1,11 @@
 name: Static analysis
 
-# detekt runs only for a commit the owner approved with `/reviewed`. The result is published
-# as the `static-analysis` status on that commit, so branch protection can require it next to
-# `owner-review`. Pull requests never run static analysis before the review command.
+# Project policy: every CI gate runs only for a commit the owner approved with `/reviewed`.
+# `resolve` parses the command, verifies the named commit against the PR head and pins the SHA;
+# every gate checks out that SHA and publishes its status for it, so a result always belongs to
+# the reviewed commit even when the head moves during the run. `cross-platform.yml` follows the
+# same policy for the Apple/Linux native checks. Branch protection can require these statuses
+# next to `owner-review`.
 on:
   issue_comment:
     types: [created]
@@ -10,64 +13,126 @@ on:
 permissions:
   contents: read
 
-# A repeated review command waits for the running analysis instead of cancelling it, so a
-# required status is never left pending.
-concurrency:
-  group: static-analysis-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
-  detekt:
+  resolve:
+    name: resolve-commit
     if: >-
       github.ref == 'refs/heads/master' &&
       github.event.issue.pull_request &&
       github.event.comment.user.id == github.event.repository.owner.id &&
-      (startsWith(github.event.comment.body, '/reviewed') ||
-       startsWith(github.event.comment.body, '/revied'))
+      (github.event.comment.body == '/reviewed' ||
+       startsWith(github.event.comment.body, '/reviewed ') ||
+       github.event.comment.body == '/revied' ||
+       startsWith(github.event.comment.body, '/revied '))
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      statuses: write
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: refs/pull/${{ github.event.issue.number }}/head
           persist-credentials: false
-      - name: Record the reviewed commit
+      - name: Verify the reviewed commit
+        # The command argument selects the commit that must be tested. An argument that is not a
+        # prefix of the current PR head is rejected, so the gates never analyse another commit.
         id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          review_command="$(printf '%s' "$BODY" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [[ "$review_command" == *$'\n'* || ! "$review_command" =~ ^/(reviewed|revied)([[:space:]]+.+)?$ ]]; then
+            echo "::error::Expected one line: /reviewed or /reviewed <SHA or link>."
+            exit 1
+          fi
+          argument="${review_command#/}"
+          argument="${argument#reviewed}"
+          argument="${argument#revied}"
+          argument="$(printf '%s' "$argument" | sed -e 's/^[[:space:]]*//')"
+          if [[ -n "$argument" ]]; then
+            target="$(printf '%s' "$argument" | grep -oE '[0-9a-fA-F]{7,40}' | tail -n1)"
+            target="${target,,}"
+            if [[ -z "$target" ]]; then
+              echo "::error::The argument must contain the commit SHA or a link to the commit."
+              exit 1
+            fi
+            if [[ "$head_sha" != "$target"* ]]; then
+              echo "::error::Reviewed commit $target differs from the PR head $head_sha. Re-issue /reviewed for the current head."
+              exit 1
+            fi
+          fi
+          echo "sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+  gates:
+    name: ${{ matrix.name }}
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      statuses: write
+    # A repeated review command waits for the running analysis instead of cancelling it, so a
+    # required status is never left pending. Each gate has its own group.
+    concurrency:
+      group: ${{ matrix.name }}-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: static-analysis
+            task: detektAll
+            description: detekt
+          - name: architecture-check
+            task: architectureCheck
+            description: architecture
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
       - name: Publish the pending status
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ steps.sha.outputs.sha }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: ${{ matrix.name }}
+          DESCRIPTION: ${{ matrix.description }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-            -f state=pending -f context=static-analysis \
-            -f description="detekt is running" \
+            -f state=pending -f context="$CONTEXT" \
+            -f description="$DESCRIPTION is running" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        env:
+          # setup-java reads GITHUB_TOKEN for the JetBrains distribution API. Without it the
+          # calls are anonymous and hit the GitHub API rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           distribution: jetbrains
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
-      - name: Run detekt
-        run: ./gradlew detektAll --no-daemon
+      - name: Run the gate
+        env:
+          GRADLE_TASK: ${{ matrix.task }}
+        run: ./gradlew "$GRADLE_TASK" --no-daemon
       - name: Publish the result
-        if: always() && steps.sha.outputs.sha != ''
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ steps.sha.outputs.sha }}
+          SHA: ${{ needs.resolve.outputs.sha }}
+          CONTEXT: ${{ matrix.name }}
+          DESCRIPTION: ${{ matrix.description }}
           OUTCOME: ${{ job.status }}
         run: |
           if [ "$OUTCOME" = success ]; then
             state=success
-            description="detekt passed"
+            description="$DESCRIPTION passed"
           else
             state=failure
-            description="detekt failed"
+            description="$DESCRIPTION failed"
           fi
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-            -f state="$state" -f context=static-analysis \
+            -f state="$state" -f context="$CONTEXT" \
             -f description="$description" \
             -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

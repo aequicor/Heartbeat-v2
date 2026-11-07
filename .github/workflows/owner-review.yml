@@ -17,8 +17,10 @@ jobs:
       github.ref == 'refs/heads/master' &&
       github.event.issue.pull_request &&
       github.event.comment.user.id == github.event.repository.owner.id &&
-      (startsWith(github.event.comment.body, '/reviewed') ||
-       startsWith(github.event.comment.body, '/revied'))
+      (github.event.comment.body == '/reviewed' ||
+       startsWith(github.event.comment.body, '/reviewed ') ||
+       github.event.comment.body == '/revied' ||
+       startsWith(github.event.comment.body, '/revied '))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: owner-review

@@ -21,6 +21,13 @@ naming:
   FunctionNaming:
     ignoreAnnotated:
       - Composable
+  # Filename rule of the naming standard: a file with a single non-private top-level class or
+  # object is named after it, so `LoadNoteUseCase.kt` holds `LoadNoteUseCase`. Files with several
+  # declarations and files of top-level extension functions (for example `NoteMappers.kt`) stay
+  # exempt. Role names and package placement are checked by the Konsist tests in
+  # `:architecture-tests`.
+  MatchingDeclarationName:
+    active: true
   TopLevelPropertyNaming:
     constantPattern: '[A-Z][A-Za-z0-9]*'
 
@@ -30,6 +37,20 @@ style:
   UnusedPrivateFunction:
     ignoreAnnotated:
       - Preview
+  ForbiddenImport:
+    active: true
+    forbiddenImports:
+      - 'com.arkivanov.decompose.*'
+      - 'org.jetbrains.compose.*'
+      - 'androidx.compose.*'
+      - 'androidx.lifecycle.ViewModel'
+    excludes:
+      - '**/presentation/decompose/**'
+      - '**/designsystem/**'
+      - '**/platform/**'
+      - '**/shell/presentation/**'
+      - '**/shell/ui/**'
+      - '**/ui/**'
 
 # mrmans0n/compose-rules: https://github.com/mrmans0n/compose-rules
 Compose:
@@ -43,6 +64,8 @@ Compose:
     active: true
   CompositionLocalAllowlist:
     active: true
+    allowedCompositionLocals:
+      - LocalColors
   CompositionLocalNaming:
     active: true
   ConditionHoist:

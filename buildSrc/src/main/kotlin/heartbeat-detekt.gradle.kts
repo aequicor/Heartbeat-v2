@@ -1,3 +1,4 @@
+import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
 import org.gradle.api.GradleException
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -33,8 +34,16 @@ subprojects {
     }
 }
 
-tasks.register("detektAll") {
+val detektAll = tasks.register("detektAll") {
     group = "verification"
     description = "Runs detekt analysis in every module."
-    dependsOn(subprojects.map { "${it.path}:detekt" })
+}
+
+// Analysis tasks cover the plain `detekt` task, Android variant tasks and one
+// `detekt<SourceSet>SourceSet` task per Kotlin Multiplatform source set; the latter are the only
+// tasks that see sources of a KMP module. Config generation and baseline tasks have other types
+// and stay out of the gate.
+subprojects.forEach { subproject ->
+    val analysisTasks = subproject.tasks.withType(Detekt::class.java)
+    detektAll.configure { dependsOn(analysisTasks) }
 }
