@@ -169,6 +169,7 @@ class DefaultEditorStoreTest {
     }
 
     @Test
+    @Suppress("InjectDispatcher")
     fun concurrentSaveStartsOnlyOnce() = runTest {
         val repository = FakeEditorRepository(saveDelayMillis = 1_000)
         val store = store(repository, "n1")
