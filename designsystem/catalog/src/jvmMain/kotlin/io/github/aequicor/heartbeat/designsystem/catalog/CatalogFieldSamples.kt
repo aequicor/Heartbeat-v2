@@ -3,10 +3,12 @@ package io.github.aequicor.heartbeat.designsystem.catalog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
 import io.github.aequicor.heartbeat.designsystem.components.HbCombobox
@@ -20,8 +22,15 @@ import io.github.aequicor.heartbeat.designsystem.components.HbSecretField
 import io.github.aequicor.heartbeat.designsystem.components.HbSegmentedControl
 import io.github.aequicor.heartbeat.designsystem.components.HbSelect
 import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
+import io.github.aequicor.heartbeat.designsystem.components.HbTextArea
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
+import io.github.aequicor.heartbeat.designsystem.foundation.HbSpace
+import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
+import io.github.aequicor.heartbeat.designsystem.components.HbColumn
+import io.github.aequicor.heartbeat.designsystem.components.HbFlowRow
+import io.github.aequicor.heartbeat.designsystem.components.HbRow
+import io.github.aequicor.heartbeat.designsystem.components.HbChip
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -83,29 +92,7 @@ internal fun Fields() {
                 noResultsText = "Ничего не найдено",
             )
         }
-        HbFormField(label = "Поиск") {
-            HbSearchField(
-                value = "heartbeat",
-                onValueChange = {},
-                clearDescription = "Очистить поиск",
-                label = "Поиск",
-            )
-        }
-        HbFormField(label = "Ключ доступа", helpText = "Хранится в профиле устройства") {
-            HbSecretField(
-                value = "sk-1234567890",
-                onValueChange = {},
-                label = "Ключ доступа",
-                revealLabel = "Показать",
-                hideLabel = "Скрыть",
-            )
-        }
-        HbTextField(
-            value = "Недоступное значение",
-            onValueChange = {},
-            label = "Отключено",
-            enabled = false,
-        )
+        SecurityFieldSamples()
     }
 }
 
@@ -141,5 +128,76 @@ internal fun Selection() {
             onSelect = {},
             tabLabel = { it },
         )
+    }
+}
+
+/** Layout primitives with spacing tokens (HB-DS-009). */
+@Composable
+internal fun LayoutSamples(colors: HbColors) {
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+        HbFlowRow(modifier = Modifier.width(FLOW_WIDTH)) {
+            listOf("Принято", "В очереди", "Ошибка", "Три вложения", "Модель heartbeat-fast", "Проект").forEach {
+                HbChip(label = it)
+            }
+        }
+        HbRow(spacing = HbSpace.Six) {
+            HbAvatar(initials = "HB", contentDescription = "Рабочая область")
+            BasicText(
+                text = "Строка с зазором из шкалы",
+                style = HbTypography.Label,
+                color = { colors.text.primary },
+            )
+        }
+        HbColumn(spacing = HbSpace.Four) {
+            BasicText("Первый пункт колонки", style = HbTypography.Label, color = { colors.text.primary })
+            BasicText("Второй пункт колонки", style = HbTypography.Label, color = { colors.text.secondary })
+        }
+    }
+}
+
+private val FLOW_WIDTH = 420.dp
+
+@Composable
+private fun DisabledFieldSample(modifier: Modifier = Modifier) {
+    HbTextField(
+        value = "Недоступное значение",
+        onValueChange = {},
+        label = "Отключено",
+        enabled = false,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun SecurityFieldSamples(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+    ) {
+        HbFormField(label = "Поиск") {
+            HbSearchField(
+                value = "heartbeat",
+                onValueChange = {},
+                clearDescription = "Очистить поиск",
+                label = "Поиск",
+            )
+        }
+        HbFormField(label = "Ключ доступа", helpText = "Хранится в профиле устройства") {
+            HbSecretField(
+                value = "sk-1234567890",
+                onValueChange = {},
+                label = "Ключ доступа",
+                revealLabel = "Показать",
+                hideLabel = "Скрыть",
+            )
+        }
+        HbFormField(label = "Описание", helpText = "Видно в карточке диалога") {
+            HbTextArea(
+                value = "Короткое описание проекта и его ограничений.",
+                onValueChange = {},
+                label = "Описание",
+            )
+        }
+        DisabledFieldSample()
     }
 }

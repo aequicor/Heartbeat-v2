@@ -51,6 +51,7 @@ internal fun CatalogScreen(modifier: Modifier = Modifier) {
         CatalogSection("Действия") { Actions(colors) }
         CatalogSection("Поля") { Fields() }
         CatalogSection("Выбор") { Selection() }
+        CatalogSection("Раскладка") { LayoutSamples(colors) }
         CatalogSection("Навигация и списки") { NavigationAndLists(colors) }
         CatalogSection("Структура") { Structure() }
         CatalogSection("Метаданные") { Metadata(colors) }
