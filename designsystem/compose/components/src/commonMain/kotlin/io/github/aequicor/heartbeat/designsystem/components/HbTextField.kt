@@ -19,6 +19,7 @@ fun HbTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "",
+    enabled: Boolean = true,
 ) {
     val colors = HbThemeDefaults.LocalColors.current
 
@@ -31,6 +32,7 @@ fun HbTextField(
             .padding(horizontal = Spacing.S, vertical = Spacing.Xs),
         textStyle = Typography.Body,
         singleLine = true,
+        enabled = enabled,
         decorationBox = { innerTextField ->
             if (value.isEmpty()) {
                 BasicText(

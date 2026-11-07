@@ -19,6 +19,7 @@ fun HbButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val colors = HbThemeDefaults.LocalColors.current
 
@@ -26,7 +27,7 @@ fun HbButton(
         modifier = modifier
             .clip(Shapes.Medium)
             .background(colors.primary)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = Spacing.M, vertical = Spacing.S),
     ) {
         BasicText(
