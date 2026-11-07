@@ -75,8 +75,7 @@ fun <T> HbSelect(
 
         if (expanded) {
             Popup(
-                alignment = Alignment.TopStart,
-                offset = IntOffset(0, popupOffset),
+                popupPositionProvider = remember { HbAnchoredPopupPositionProvider(gap = popupOffset) },
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {

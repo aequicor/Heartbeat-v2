@@ -117,8 +117,7 @@ private fun <T> ComboboxPopup(
     onDismiss: () -> Unit,
 ) {
     Popup(
-        alignment = Alignment.TopStart,
-        offset = IntOffset(0, offset),
+        popupPositionProvider = HbAnchoredPopupPositionProvider(gap = offset),
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {

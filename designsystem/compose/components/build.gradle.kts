@@ -7,4 +7,7 @@ kotlin {
         implementation(project(":designsystem:foundation"))
         implementation(project(":designsystem:compose:theme"))
     }
+    sourceSets.jvmTest.dependencies {
+        implementation(libs.compose.ui)
+    }
 }
