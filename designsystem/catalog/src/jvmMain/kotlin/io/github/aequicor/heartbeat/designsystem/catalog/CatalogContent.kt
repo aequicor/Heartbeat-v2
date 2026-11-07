@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -44,6 +47,7 @@ internal fun CatalogScreen(modifier: Modifier = Modifier) {
     ) {
         CatalogSection("Палитра") { Palette(colors) }
         CatalogSection("Типографика") { TypographySamples(colors) }
+        CatalogSection("Иконки") { Icons(colors) }
         CatalogSection("Действия") { Actions(colors) }
         CatalogSection("Поля") { Fields() }
         CatalogSection("Выбор") { Selection() }
@@ -171,3 +175,25 @@ private fun TypographySamples(colors: HbColors) {
 private val SWATCH_WIDTH = 96.dp
 
 private val SWATCH_HEIGHT = 28.dp
+
+@Composable
+private fun Icons(colors: HbColors) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HbIconGlyph.entries.forEach { glyph ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
+            ) {
+                HbIcon(glyph = glyph, size = 24.dp, tint = colors.text.primary)
+                BasicText(
+                    text = glyph.name,
+                    style = HbTypography.Metadata,
+                    color = { colors.text.secondary },
+                )
+            }
+        }
+    }
+}

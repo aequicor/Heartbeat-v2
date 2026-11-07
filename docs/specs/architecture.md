@@ -589,6 +589,7 @@ designsystem/
 │   └── src/commonMain/kotlin/
 │       ├── HbColor.kt
 │       ├── HbColorScheme.kt
+│       ├── HbIconGlyph.kt
 │       ├── HbContrastPreference.kt
 │       ├── HbContrastSchemes.kt
 │       ├── HbTypography.kt

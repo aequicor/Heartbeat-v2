@@ -1,8 +1,5 @@
-@file:Suppress("MagicNumber")
-
 package io.github.aequicor.heartbeat.designsystem.components
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -21,13 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
@@ -38,7 +34,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * accessible name, so the state is announced with its meaning.
  *
  * States: unchecked, checked and [indeterminate]; disabled dims the mark and the label; keyboard
- * focus draws the focus outline around the row, which stays visible over selection.
+ * focus draws the focus outline around the row, which stays visible over selection. The mark is
+ * drawn with the shared icon vocabulary.
  */
 @Composable
 fun HbCheckbox(
@@ -56,13 +53,6 @@ fun HbCheckbox(
         checked -> ToggleableState.On
         else -> ToggleableState.Off
     }
-    val marked = state != ToggleableState.Off
-    val markBackground = when {
-        !enabled -> colors.text.disabled
-        marked -> colors.accent.brand
-        else -> colors.surface.input
-    }
-    val markForeground = if (enabled) colors.surface.base else colors.surface.input
     val labelColor = if (enabled) colors.text.primary else colors.text.primary.copy(HbEffects.DisabledContent)
 
     Row(
@@ -80,25 +70,11 @@ fun HbCheckbox(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
-        Box(
-            modifier = Modifier
-                .size(checkboxSize)
-                .clip(HbShapes.Small)
-                .background(markBackground)
-                .then(
-                    if (marked) {
-                        Modifier
-                    } else {
-                        Modifier.border(checkboxBorder, colors.border.control, HbShapes.Small)
-                    },
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            when {
-                state == ToggleableState.Indeterminate -> IndeterminateMark(color = markForeground)
-                state == ToggleableState.On -> CheckMark(color = markForeground)
-            }
-        }
+        CheckboxMark(
+            state = state,
+            enabled = enabled,
+            borderColor = colors.border.control,
+        )
         BasicText(
             text = label,
             style = HbTypography.Label,
@@ -108,34 +84,50 @@ fun HbCheckbox(
 }
 
 @Composable
-private fun CheckMark(
-    color: Color,
+private fun CheckboxMark(
+    state: ToggleableState,
+    enabled: Boolean,
+    borderColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    Canvas(modifier = modifier.size(markSize)) {
-        val stroke = size.minDimension * MarkStrokeRatio
-        val start = Offset(size.width * MarkStartX, size.height * MarkStartY)
-        val middle = Offset(size.width * MarkMiddleX, size.height * MarkMiddleY)
-        val end = Offset(size.width * MarkEndX, size.height * MarkEndY)
-
-        drawLine(color, start, middle, strokeWidth = stroke, cap = StrokeCap.Round)
-        drawLine(color, middle, end, strokeWidth = stroke, cap = StrokeCap.Round)
+    val colors = HbThemeDefaults.LocalColors.current
+    val marked = state != ToggleableState.Off
+    val background = when {
+        !enabled -> colors.text.disabled
+        marked -> colors.accent.brand
+        else -> colors.surface.input
     }
-}
+    val foreground = if (enabled) colors.surface.base else colors.surface.input
 
-@Composable
-private fun IndeterminateMark(
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier.size(markSize)) {
-        drawLine(
-            color = color,
-            start = Offset(size.width * MarkStartX, size.height / 2f),
-            end = Offset(size.width * MarkEndX, size.height / 2f),
-            strokeWidth = size.minDimension * MarkStrokeRatio,
-            cap = StrokeCap.Round,
-        )
+    Box(
+        modifier = modifier
+            .size(checkboxSize)
+            .clip(HbShapes.Small)
+            .background(background)
+            .then(
+                if (marked) {
+                    Modifier
+                } else {
+                    Modifier.border(checkboxBorder, borderColor, HbShapes.Small)
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (state) {
+            ToggleableState.Indeterminate -> HbIcon(
+                glyph = HbIconGlyph.Minus,
+                tint = foreground,
+                size = markSize,
+            )
+
+            ToggleableState.On -> HbIcon(
+                glyph = HbIconGlyph.Check,
+                tint = foreground,
+                size = markSize,
+            )
+
+            ToggleableState.Off -> Unit
+        }
     }
 }
 
@@ -144,17 +136,3 @@ private val checkboxSize = 18.dp
 private val markSize = 12.dp
 
 private val checkboxBorder = 1.dp
-
-private const val MarkStrokeRatio = 0.16f
-
-private const val MarkStartX = 0.18f
-
-private const val MarkStartY = 0.52f
-
-private const val MarkMiddleX = 0.4f
-
-private const val MarkMiddleY = 0.74f
-
-private const val MarkEndX = 0.82f
-
-private const val MarkEndY = 0.26f
