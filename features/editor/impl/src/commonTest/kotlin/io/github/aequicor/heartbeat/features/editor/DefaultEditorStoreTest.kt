@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -156,6 +157,20 @@ class DefaultEditorStoreTest {
     }
 
     @Test
+    fun editDoesNotClearSaveError() = runTest {
+        val repository = FakeEditorRepository(saveFailure = IllegalStateException("disk full"))
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+        store.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+
+        store.dispatch(EditorAction.TitleChanged("Правка после ошибки"))
+
+        assertEquals("Правка после ошибки", store.state.value.title)
+        assertEquals("disk full", store.state.value.saveError)
+    }
+
+    @Test
     fun repeatedSaveRunsOnce() = runTest {
         val repository = FakeEditorRepository()
         val store = store(repository, "n1")
@@ -256,6 +271,21 @@ class DefaultEditorStoreTest {
 
         assertEquals("Снимок", store.state.value.title)
         assertEquals("Снимок", repository.load("n1").title)
+    }
+
+    @Test
+    fun savedEffectIsNotReplayedToALateCollector() = runTest {
+        val store = store(FakeEditorRepository(), "n1")
+        advanceUntilIdle()
+        store.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+
+        // The store documented effects as best-effort hints: a subscriber that arrives after
+        // the save must not receive the past Saved event and act on stale navigation.
+        val late = async { withTimeoutOrNull(1) { store.effects.first() } }
+        advanceUntilIdle()
+
+        assertNull(late.await())
     }
 
     @Test
