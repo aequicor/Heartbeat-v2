@@ -599,12 +599,12 @@ designsystem/
 │       ├── HbLayout.kt
 │       └── HbWorkspaceLayout.kt
 │
-├── catalog/
+├── sandbox/
 │   └── src/jvmMain/kotlin/
-│       ├── HbCatalogEntry.kt
-│       ├── CatalogContent.kt
-│       ├── CatalogFieldSamples.kt
-│       └── CatalogSectionSamples.kt
+│       ├── HbSandboxEntry.kt
+│       ├── SandboxContent.kt
+│       ├── SandboxFieldSamples.kt
+│       └── SandboxSectionSamples.kt
 │
 ├── compose/
 │   ├── theme/
@@ -640,7 +640,7 @@ designsystem/
 - Публичный API Design System имеет префикс `Hb`: компоненты (`HbButton`, `HbTextField`, `HbDialog`), токены и тема (`HbColors`, `HbTheme`).
 - `foundation` хранит портативную схему и значения токенов: цвета sRGB, логические размеры, масштабируемую типографику, длительности, кривые и идентификаторы иконок. Модуль не импортирует Compose и не содержит типов `Color`, `Dp`, `TextStyle`, объектов навигации, DI и клиентов среды исполнения.
 - `compose` разрешает портативные токены в типы Compose; `theme` и `resources` внутри него Compose-ориентированы.
-- `catalog` содержит исполняемые примеры кита: приложение каталога и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:catalog:runCatalog`.
+- `sandbox` содержит исполняемые примеры кита: приложение песочницы и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:sandbox:runSandbox`.
 - Продуктовые паттерны (composer, транскрипт, подтверждения) принадлежат UI соответствующих фич, а не общему киту; контракт оформления для них задан в [спецификации дизайн-системы](design-system.md).
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
