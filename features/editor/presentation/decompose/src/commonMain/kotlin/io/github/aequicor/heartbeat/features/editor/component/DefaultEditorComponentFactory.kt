@@ -3,13 +3,13 @@ package io.github.aequicor.heartbeat.features.editor.component
 import com.arkivanov.decompose.ComponentContext
 import dev.zacsweers.metro.ContributesBinding
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.editor.api.EditorControllerFactory
+import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
 import kotlinx.coroutines.CoroutineDispatcher
 
 /** Metro bindings of the Decompose adapter. */
 @ContributesBinding(AppScope::class)
 class DefaultEditorComponentFactory(
-    private val controllerFactory: EditorControllerFactory,
+    private val storeFactory: EditorStoreFactory,
 ) : EditorComponentFactory {
 
     override fun create(
@@ -17,5 +17,5 @@ class DefaultEditorComponentFactory(
         noteId: String,
         dispatcher: CoroutineDispatcher,
     ): EditorComponent =
-        DefaultEditorComponent(componentContext, noteId, controllerFactory, dispatcher)
+        DefaultEditorComponent(componentContext, noteId, storeFactory, dispatcher)
 }

@@ -136,28 +136,30 @@ Gradle path: `:features:<feature>:api`
 
 Содержит:
 
-- Публичные интерфейсы контроллеров.
+- Публичные интерфейсы Store.
 - Контракты фабрик.
 - UI State.
 - Actions и Effects.
 - Бизнес-модели, которые должны использовать другие модули.
 - Публичные бизнес-сервисы, если фича предоставляет их другим фичам.
 
+Публичный контракт называется `<Feature>Store`, реализация — `Default<Feature>Store`, фабрика — `<Feature>StoreFactory`. Термины `Controller` и `ViewModel` не используются для универсального State/Action-хранилища фичи; названия платформенных API (например, AndroidX ViewModel) этим правилом не затрагиваются.
+
 Пример:
 
 ```kotlin
-interface EditorController {
+interface EditorStore {
     val state: StateFlow<EditorState>
     val effects: Flow<EditorEffect>
 
     fun dispatch(action: EditorAction)
 }
 
-interface EditorControllerFactory {
+interface EditorStoreFactory {
     fun create(
         noteId: String,
         scope: CoroutineScope,
-    ): EditorController
+    ): EditorStore
 }
 
 data class EditorState(
@@ -207,7 +209,7 @@ impl/
     │       │   └── mapper/
     │       │
     │       ├── presentation/
-    │       │   ├── DefaultEditorController.kt
+    │       │   ├── DefaultEditorStore.kt
     │       │   └── EditorStateMapper.kt
     │       │
     │       └── di/
@@ -251,7 +253,7 @@ Domain, Data и Presentation — внутренние пакеты **одног�
 
 Presentation внутри `impl` не управляет платформенной навигацией, окнами или жизненным циклом UI-фреймворка.
 
-Пока данные загружаются, контроллер не принимает правки, которые может перезаписать загрузка. Ошибка операции отражается в UI State, а признак выполнения сбрасывается при успехе, ошибке и отмене; отмена не трактуется как ошибка операции.
+Пока данные загружаются, Store не принимает правки, которые может перезаписать загрузка. Ошибка операции отражается в UI State, а признак выполнения сбрасывается при успехе, ошибке и отмене; отмена не трактуется как ошибка операции.
 
 Допускаются Metro-аннотации и registrations, если они совместимы со всеми обязательными targets. Это означает независимость от UI-фреймворков, а не полный запрет DI-инструментов.
 
@@ -261,7 +263,7 @@ Presentation внутри `impl` не управляет платформенн�
 
 Gradle path: `:features:<feature>:presentation:decompose`
 
-Содержит адаптер бизнес-контроллера к Decompose.
+Содержит адаптер Store к Decompose.
 
 ```text
 presentation/decompose/
@@ -280,7 +282,7 @@ presentation/decompose/
 - Lifecycle.
 - State restoration.
 - Back handling.
-- Управление временем жизни контроллера.
+- Управление временем жизни Store.
 - Обработка выходных Effects.
 - Создание компонентов через Metro.
 
@@ -288,13 +290,13 @@ presentation/decompose/
 
 ```kotlin
 interface EditorComponent {
-    val controller: EditorController
+    val store: EditorStore
 }
 ```
 
-Реализация получает `EditorControllerFactory` и создаёт контроллер с нужными параметрами и lifecycle-aware `CoroutineScope`. UI-диспетчер передаёт платформенный host: Kotlin/Native targets без Darwin main loop не имеют `Dispatchers.Main`, поэтому универсальный адаптер не создаёт его сам.
+Реализация получает `EditorStoreFactory` и создаёт Store с нужными параметрами и lifecycle-aware `CoroutineScope`. UI-диспетчер передаёт платформенный host: Kotlin/Native targets без Darwin main loop не имеют `Dispatchers.Main`, поэтому универсальный адаптер не создаёт его сам.
 
-Decompose не должен дублировать состояние и бизнес-логику `DefaultEditorController`.
+Decompose не должен дублировать состояние и бизнес-логику `DefaultEditorStore`.
 
 **Targets: только совместимые с Decompose платформы.**
 
@@ -318,7 +320,7 @@ presentation/block/
 Ответственность:
 
 - Интеграция с собственным BLoC framework.
-- Жизненный цикл контроллеров.
+- Жизненный цикл Store.
 - Навигационные события.
 - Связь с платформенным event loop.
 - Управление подписками и освобождением ресурсов.
@@ -348,14 +350,14 @@ ui/
 ```kotlin
 @Composable
 fun EditorScreen(
-    controller: EditorController,
+    store: EditorStore,
 ) {
-    val state by controller.state.collectAsState()
+    val state by store.state.collectAsState()
 
     HbTextField(
         value = state.title,
         onValueChange = {
-            controller.dispatch(
+            store.dispatch(
                 EditorAction.TitleChanged(it)
             )
         },
@@ -432,7 +434,7 @@ shell/
 - Отрисовку навигационного дерева.
 - Подключение Compose UI фич.
 - Общий layout приложения.
-- Передачу контроллеров в экраны фич.
+- Передачу Store в экраны фич.
 
 Это интеграционный UI-модуль, поэтому ему разрешена зависимость от `shell:presentation:decompose` и API Decompose-адаптеров фич. При этом сами `features/*/ui/compose` от Decompose не зависят.
 
@@ -508,7 +510,7 @@ di/
 
 | Расположение | Что регистрируется |
 | --- | --- |
-| `features/editor/impl` | ControllerFactory, Repository, UseCase |
+| `features/editor/impl` | StoreFactory, Repository, UseCase |
 | `features/editor/presentation/decompose` | Decompose ComponentFactory |
 | `features/editor/presentation/block` | BLoC factory |
 | `core/network` | HTTP services |
@@ -555,9 +557,9 @@ interface AndroidGraph {
 | --- | --- |
 | `AppScope` | Время жизни экземпляра приложения |
 | `SessionScope` | Время жизни пользовательской сессии |
-| Controller / Component | Время жизни конкретного экземпляра Presentation |
+| Store / Component | Время жизни конкретного экземпляра Presentation |
 
-Жизненным циклом экранных контроллеров управляет Presentation-адаптер.
+Жизненным циклом экранных Store управляет Presentation-адаптер.
 
 Metro не заменяет Decompose lifecycle.
 
@@ -706,7 +708,7 @@ feature:presentation:block
     └── Metro
 ```
 
-Обе Presentation-реализации получают бизнес-контроллеры через API-фабрики.
+Обе Presentation-реализации получают Store через API-фабрики.
 
 ### UI
 
@@ -803,7 +805,7 @@ Win32 / Linux Native UI
 Presentation BLoC
           |
           v
-Universal EditorController
+Universal EditorStore
           |
           v
 Domain + Data
@@ -921,7 +923,7 @@ Convention Plugins должны обеспечивать единые верси
 
 - Тестирование навигации.
 - Тестирование жизненного цикла.
-- Корректность создания и уничтожения контроллеров.
+- Корректность создания и уничтожения Store.
 - Проверка State restoration.
 - Тесты интеграции с Metro.
 - Контрактные тесты одинаковых сценариев для Decompose и BLoC.
@@ -967,6 +969,9 @@ CI должен отклонять изменения, нарушающие за
 | `designsystem` | UI Kit по технологиям |
 | `core` | Универсальная техническая инфраструктура |
 | `buildSrc` | Precompiled-плагины соглашений сборки |
+| `<Feature>Store` | Публичный контракт состояния фичи в `api` |
+| `Default<Feature>Store` | Реализация Store в `impl` |
+| `<Feature>StoreFactory` | Фабрика Store для Presentation-адаптеров |
 
 ### Результирующий стандарт фичи
 
@@ -994,12 +999,12 @@ features/<feature>/
 | HB-ARCH-008 | Каждая фича должна следовать стандартной структуре `api`, `impl`, `presentation/*`, `ui/*`; внутри `impl` пакеты `domain`, `data`, `presentation` находятся в одном Gradle-модуле. | Согласованная архитектура от 7 ноября 2026 | Проверить дерево модулей фичи и пакеты `src/commonMain/kotlin` её `impl`. |
 | HB-ARCH-009 | Модуль `api` фичи не должен содержать типов Decompose, Compose, Metro или BLoC; Coroutines и Flow допустимы. | Согласованная архитектура от 7 ноября 2026 | Собрать `api` для всех targets и проверить его транзитивные зависимости архитектурной проверкой. |
 | HB-ARCH-010 | Модуль `impl` фичи должен компилироваться для всех обязательных KMP targets, включая `mingwX64` и Linux Native. | Согласованная архитектура от 7 ноября 2026 | Скомпилировать `impl` для каждого обязательного target на поддерживающем хосте. |
-| HB-ARCH-011 | Presentation-адаптеры должны получать бизнес-контроллеры через фабрики `api` и не дублировать состояние и бизнес-логику `impl`. | Согласованная архитектура от 7 ноября 2026 | Сверить граф зависимостей адаптера и отсутствие копий UseCase/репозиториев в его коде. |
+| HB-ARCH-011 | Presentation-адаптеры должны получать Store через фабрики `api` и не дублировать состояние и бизнес-логику `impl`. | Согласованная архитектура от 7 ноября 2026 | Сверить граф зависимостей адаптера и отсутствие копий UseCase/репозиториев в его коде. |
 | HB-ARCH-012 | Модуль `ui/compose` фичи не должен зависеть от `feature:impl` и от Presentation-фреймворков; экраны принимают контракты `api`. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка и сборка `ui/compose` без зависимости от Decompose. |
 | HB-ARCH-013 | Модули `shell:api` и `shell:impl` не должны зависеть от Decompose или BLoC; `shell:presentation:decompose` должен зависеть от адаптеров фич только через их API. | Согласованная архитектура от 7 ноября 2026 | Сверить зависимости shell-модулей архитектурной проверкой. |
 | HB-ARCH-014 | Финальный Metro `@DependencyGraph` должен располагаться в платформенной компиляции, чтобы видеть весь набор registrations. | Согласованная архитектура от 7 ноября 2026 и документация Metro | Объявить граф в платформенном модуле и убедиться, что компилятор видит contributions всех модулей. |
 | HB-ARCH-015 | DI должен использовать Metro с constructor injection и `@ContributesBinding`; runtime-параметры должны передаваться через фабрики или Assisted Injection. | Согласованная архитектура от 7 ноября 2026 | Собрать модули с Metro; тест графа в `commonTest` возвращает связанные зависимости. |
-| HB-ARCH-016 | Области видимости `AppScope`, `SessionScope` и время жизни Controller должны задаваться Presentation-адаптером; Metro не заменяет Decompose lifecycle. | Согласованная архитектура от 7 ноября 2026 | Проверить определения scope в `di:api` и уничтожение контроллера при завершении компонента. |
+| HB-ARCH-016 | Области видимости `AppScope`, `SessionScope` и время жизни Store должны задаваться Presentation-адаптером; Metro не заменяет Decompose lifecycle. | Согласованная архитектура от 7 ноября 2026 | Проверить определения scope в `di:api` и уничтожение Store при завершении компонента. |
 | HB-ARCH-017 | Design System не должна зависеть от фич, Metro или Decompose; компоненты с бизнес-семантикой остаются в UI фичи. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка графа зависимостей `designsystem`. |
 | HB-ARCH-018 | Модули `core` должны содержать только техническую инфраструктуру: без Feature-specific Repository, бизнес-моделей, UseCase, экранного состояния и навигации. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает зависимости `core` от `features`; ревью содержимого. |
 | HB-ARCH-019 | Фичи должны взаимодействовать только через публичные `api`; допустимы headless-фичи без UI и Presentation. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка запрещает `impl → features:*:impl`; наличие headless-фичи подтверждается отсутствием UI-модулей. |
@@ -1012,9 +1017,10 @@ features/<feature>/
 | HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
 | HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
 | HB-ARCH-028 | Публичный API Design System должен иметь префикс `Hb`: кастомные UI-компоненты, токены и тема, например `HbButton`, `HbTextField`, `HbColors`, `HbTheme`. | Запрос владельца от 7 ноября 2026 | Проверить имена композаблов, токенов и темы в `designsystem/compose` и их использование в фичах. |
-| HB-ARCH-029 | Пока данные загружаются, Presentation-контроллер не должен принимать правки, которые может перезаписать завершающаяся загрузка. | Код-ревью PR #20 от 7 ноября 2026 | Тест: правка до завершения загрузки игнорируется, после загрузки состояние соответствует загруженным данным. |
-| HB-ARCH-030 | Presentation-контроллер должен отражать ошибку операции в UI State и сбрасывать признак выполнения при успехе, ошибке и отмене; отмена не должна трактоваться как ошибка. | Код-ревью PR #20 от 7 ноября 2026 | Тесты: ошибка сохранения выставляет поле ошибки и снимает признак сохранения; повторный Save до запуска coroutine выполняется один раз. |
+| HB-ARCH-029 | Пока данные загружаются, Store не должен принимать правки, которые может перезаписать завершающаяся загрузка. | Код-ревью PR #20 от 7 ноября 2026 | Тест: правка до завершения загрузки игнорируется, после загрузки состояние соответствует загруженным данным. |
+| HB-ARCH-030 | Store должен отражать ошибку операции в UI State и сбрасывать признак выполнения при успехе, ошибке и отмене; отмена не должна трактоваться как ошибка. | Код-ревью PR #20 от 7 ноября 2026 | Тесты: ошибка сохранения выставляет поле ошибки и снимает признак сохранения; повторный Save до запуска coroutine выполняется один раз. |
 | HB-ARCH-031 | Presentation-адаптер не должен создавать платформенный UI-диспетчер; диспетчер передаёт платформенный host или фабрика lifecycle scope. | Код-ревью PR #20 от 7 ноября 2026 | Проверить сигнатуру фабрики компонента и отсутствие `Dispatchers.Main` в универсальном адаптере; тест уничтожения компонента отменяет scope. |
 | HB-ARCH-032 | Система сборки должна запускать архитектурную проверку при `gradlew build` и `check` и проверять транзитивные зависимости `impl`, а не только объявленные. | Код-ревью PR #20 от 7 ноября 2026 | `gradlew build` выполняет `architectureCheck`; негативный сценарий с Compose через `core` падает с сообщением о транзитивном нарушении. |
+| HB-ARCH-033 | Публичный контракт состояния фичи должен называться `<Feature>Store`, реализация — `Default<Feature>Store`, фабрика — `<Feature>StoreFactory`; Store, State, Action и Effect размещаются в `features/<feature>/api`, реализация Store — в `features/<feature>/impl`; Store не зависит от Compose, Decompose, BLoC, AndroidX ViewModel и платформенных UI API. | Запрос владельца от 7 ноября 2026 | Сверить имена типов и модули размещения; архитектурная проверка подтверждает отсутствие UI-фреймворков в зависимостях `impl`, `api` проверяется ревью. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.

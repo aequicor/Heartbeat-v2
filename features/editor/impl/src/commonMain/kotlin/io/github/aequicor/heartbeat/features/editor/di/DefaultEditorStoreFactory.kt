@@ -2,11 +2,11 @@ package io.github.aequicor.heartbeat.features.editor.di
 
 import dev.zacsweers.metro.ContributesBinding
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.editor.api.EditorController
-import io.github.aequicor.heartbeat.features.editor.api.EditorControllerFactory
+import io.github.aequicor.heartbeat.features.editor.api.EditorStore
+import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
-import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorController
+import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -15,11 +15,11 @@ import kotlinx.coroutines.CoroutineScope
  * the dependency graph.
  */
 @ContributesBinding(AppScope::class)
-class DefaultEditorControllerFactory(
+class DefaultEditorStoreFactory(
     private val loadNote: LoadNote,
     private val saveNote: SaveNote,
-) : EditorControllerFactory {
+) : EditorStoreFactory {
 
-    override fun create(noteId: String, scope: CoroutineScope): EditorController =
-        DefaultEditorController(loadNote, saveNote, noteId, scope)
+    override fun create(noteId: String, scope: CoroutineScope): EditorStore =
+        DefaultEditorStore(loadNote, saveNote, noteId, scope)
 }

@@ -1,11 +1,11 @@
 package io.github.aequicor.heartbeat.features.editor.component
 
-import io.github.aequicor.heartbeat.features.editor.api.EditorController
+import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 
 /**
- * Decompose adapter of the editor controller. The component owns the
- * controller lifetime; it does not duplicate state or business logic.
+ * Decompose adapter of the editor store. The component owns the store lifetime;
+ * it does not duplicate state or business logic.
  */
 interface EditorComponent {
-    val controller: EditorController
+    val store: EditorStore
 }

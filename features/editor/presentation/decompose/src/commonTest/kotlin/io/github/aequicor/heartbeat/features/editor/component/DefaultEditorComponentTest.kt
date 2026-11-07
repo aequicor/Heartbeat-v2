@@ -5,10 +5,10 @@ import com.arkivanov.essenty.lifecycle.LifecycleRegistry
 import com.arkivanov.essenty.lifecycle.create
 import com.arkivanov.essenty.lifecycle.destroy
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
-import io.github.aequicor.heartbeat.features.editor.api.EditorController
-import io.github.aequicor.heartbeat.features.editor.api.EditorControllerFactory
 import io.github.aequicor.heartbeat.features.editor.api.EditorEffect
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
+import io.github.aequicor.heartbeat.features.editor.api.EditorStore
+import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -26,20 +26,20 @@ import kotlin.test.assertTrue
 class DefaultEditorComponentTest {
 
     @Test
-    fun destroysControllerScopeWithComponent() {
+    fun destroysStoreScopeWithComponent() {
         val lifecycle = LifecycleRegistry()
         val context = DefaultComponentContext(lifecycle)
-        var controllerScope: CoroutineScope? = null
-        val factory = object : EditorControllerFactory {
-            override fun create(noteId: String, scope: CoroutineScope): EditorController {
-                controllerScope = scope
-                return FakeController()
+        var storeScope: CoroutineScope? = null
+        val factory = object : EditorStoreFactory {
+            override fun create(noteId: String, scope: CoroutineScope): EditorStore {
+                storeScope = scope
+                return FakeStore()
             }
         }
 
         DefaultEditorComponent(context, "n1", factory, UnconfinedTestDispatcher())
 
-        val scope = assertNotNull(controllerScope)
+        val scope = assertNotNull(storeScope)
         assertTrue(scope.isActive)
 
         lifecycle.create()
@@ -48,7 +48,7 @@ class DefaultEditorComponentTest {
         assertFalse(scope.isActive)
     }
 
-    private class FakeController : EditorController {
+    private class FakeStore : EditorStore {
         override val state: StateFlow<EditorState> = MutableStateFlow(EditorState())
         override val effects: Flow<EditorEffect> = emptyFlow()
 

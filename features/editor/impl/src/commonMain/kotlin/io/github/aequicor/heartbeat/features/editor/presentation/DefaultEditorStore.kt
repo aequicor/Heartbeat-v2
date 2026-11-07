@@ -1,9 +1,9 @@
 package io.github.aequicor.heartbeat.features.editor.presentation
 
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
-import io.github.aequicor.heartbeat.features.editor.api.EditorController
 import io.github.aequicor.heartbeat.features.editor.api.EditorEffect
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
+import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
 import kotlinx.coroutines.CancellationException
@@ -18,20 +18,20 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Universal editor controller: owns the state, runs use cases and emits
- * effects. It knows nothing about Decompose, Compose or BLoC — the caller
- * provides the [CoroutineScope] that defines its lifetime.
+ * Universal editor store: owns the state, runs use cases and emits effects. It
+ * knows nothing about Decompose, Compose or BLoC — the caller provides the
+ * [CoroutineScope] that defines its lifetime.
  *
  * Edits are ignored until the note is loaded, so the asynchronous load cannot
  * overwrite text the user already typed. A failed save sets [EditorState.saveError]
  * and always clears [EditorState.isSaving]; cancellation is not a save error.
  */
-class DefaultEditorController(
+class DefaultEditorStore(
     private val loadNote: LoadNote,
     private val saveNote: SaveNote,
     private val noteId: String,
     private val scope: CoroutineScope,
-) : EditorController {
+) : EditorStore {
 
     private val mutableState = MutableStateFlow(EditorState())
     override val state: StateFlow<EditorState> = mutableState.asStateFlow()
@@ -60,7 +60,7 @@ class DefaultEditorController(
         }
     }
 
-    // The controller is the boundary that turns any persistence failure into UI state:
+    // The store is the boundary that turns any persistence failure into UI state:
     // storage implementations may throw arbitrary exceptions, so the catch stays generic.
     @Suppress("TooGenericExceptionCaught")
     private fun save() {

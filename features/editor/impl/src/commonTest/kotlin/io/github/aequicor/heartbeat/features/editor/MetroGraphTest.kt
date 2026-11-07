@@ -4,8 +4,8 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.createGraph
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
-import io.github.aequicor.heartbeat.features.editor.api.EditorControllerFactory
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
+import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -22,7 +22,7 @@ import kotlin.test.assertNotNull
  */
 @DependencyGraph(AppScope::class)
 internal interface EditorTestGraph {
-    val editorControllerFactory: EditorControllerFactory
+    val editorStoreFactory: EditorStoreFactory
     val repository: EditorRepository
 }
 
@@ -35,24 +35,24 @@ class MetroGraphTest {
 
         assertNotNull(graph.repository)
 
-        val controller = graph.editorControllerFactory.create("n1", this)
+        val store = graph.editorStoreFactory.create("n1", this)
         advanceUntilIdle()
 
-        assertEquals(EditorState(title = "", content = "", isLoading = false), controller.state.value)
-        assertFalse(controller.state.value.isLoading)
+        assertEquals(EditorState(title = "", content = "", isLoading = false), store.state.value)
+        assertFalse(store.state.value.isLoading)
     }
 
     @Test
-    fun savedNoteIsVisibleToNextController() = runTest {
+    fun savedNoteIsVisibleToNextStore() = runTest {
         val graph = createGraph<EditorTestGraph>()
-        val first = graph.editorControllerFactory.create("n1", this)
+        val first = graph.editorStoreFactory.create("n1", this)
         advanceUntilIdle()
 
         first.dispatch(EditorAction.TitleChanged("Сохранено"))
         first.dispatch(EditorAction.Save)
         advanceUntilIdle()
 
-        val second = graph.editorControllerFactory.create("n1", this)
+        val second = graph.editorStoreFactory.create("n1", this)
         advanceUntilIdle()
 
         assertEquals("Сохранено", second.state.value.title)

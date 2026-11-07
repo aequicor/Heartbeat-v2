@@ -9,36 +9,36 @@ import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
-import io.github.aequicor.heartbeat.features.editor.api.EditorController
+import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 
 /**
- * Editor screen bound to the [EditorController] contract only: it works with
+ * Editor screen bound to the [EditorStore] contract only: it works with
  * any presentation adapter (Decompose component, BLoC) that exposes the
- * controller. The integration layer binds the component to this screen.
+ * store. The integration layer binds the component to this screen.
  */
 @Composable
 fun EditorScreen(
-    controller: EditorController,
+    store: EditorStore,
     modifier: Modifier = Modifier,
 ) {
-    val state by controller.state.collectAsState()
+    val state by store.state.collectAsState()
 
     Column(modifier = modifier) {
         HbTextField(
             value = state.title,
-            onValueChange = { controller.dispatch(EditorAction.TitleChanged(it)) },
+            onValueChange = { store.dispatch(EditorAction.TitleChanged(it)) },
             placeholder = "Заголовок",
             enabled = !state.isLoading,
         )
         HbTextField(
             value = state.content,
-            onValueChange = { controller.dispatch(EditorAction.ContentChanged(it)) },
+            onValueChange = { store.dispatch(EditorAction.ContentChanged(it)) },
             placeholder = "Содержимое",
             enabled = !state.isLoading,
         )
         HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
-            onClick = { controller.dispatch(EditorAction.Save) },
+            onClick = { store.dispatch(EditorAction.Save) },
             enabled = !state.isLoading && !state.isSaving,
         )
         state.saveError?.let { error ->

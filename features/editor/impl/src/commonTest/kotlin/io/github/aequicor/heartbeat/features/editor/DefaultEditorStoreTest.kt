@@ -8,7 +8,7 @@ import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
-import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorController
+import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
@@ -19,41 +19,42 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class DefaultEditorControllerTest {
+class DefaultEditorStoreTest {
 
     @Test
-    fun editorStartsInLoadingState() = runTest {
-        val controller = controller(repositoryWith(), "n1")
+    fun storeStartsInLoadingState() = runTest {
+        val store = store(repositoryWith(), "n1")
 
-        assertTrue(controller.state.value.isLoading)
+        assertTrue(store.state.value.isLoading)
 
         advanceUntilIdle()
 
-        assertFalse(controller.state.value.isLoading)
+        assertFalse(store.state.value.isLoading)
     }
 
     @Test
     fun loadsNoteOnCreate() = runTest {
         val repository = repositoryWith(Note("n1", "Заголовок", "Содержимое"))
-        val controller = controller(repository, "n1")
+        val store = store(repository, "n1")
 
         advanceUntilIdle()
 
-        assertEquals("Заголовок", controller.state.value.title)
-        assertEquals("Содержимое", controller.state.value.content)
+        assertEquals("Заголовок", store.state.value.title)
+        assertEquals("Содержимое", store.state.value.content)
     }
 
     @Test
     fun missingNoteHasEmptyContent() = runTest {
-        val controller = controller(repositoryWith(), "n1")
+        val store = store(repositoryWith(), "n1")
 
         advanceUntilIdle()
 
-        assertEquals("", controller.state.value.title)
-        assertFalse(controller.state.value.isLoading)
+        assertEquals("", store.state.value.title)
+        assertFalse(store.state.value.isLoading)
     }
 
     @Test
@@ -61,63 +62,63 @@ class DefaultEditorControllerTest {
         val repository = FakeEditorRepository(loadDelayMillis = 1_000).apply {
             seed(Note("n1", "Загруженный", ""))
         }
-        val controller = controller(repository, "n1")
+        val store = store(repository, "n1")
 
-        controller.dispatch(EditorAction.TitleChanged("Ранняя правка"))
+        store.dispatch(EditorAction.TitleChanged("Ранняя правка"))
         advanceUntilIdle()
 
-        assertEquals("Загруженный", controller.state.value.title)
+        assertEquals("Загруженный", store.state.value.title)
     }
 
     @Test
     fun titleChangeUpdatesState() = runTest {
-        val controller = controller(repositoryWith(), "n1")
+        val store = store(repositoryWith(), "n1")
         advanceUntilIdle()
 
-        controller.dispatch(EditorAction.TitleChanged("Новый заголовок"))
+        store.dispatch(EditorAction.TitleChanged("Новый заголовок"))
 
-        assertEquals("Новый заголовок", controller.state.value.title)
+        assertEquals("Новый заголовок", store.state.value.title)
     }
 
     @Test
     fun savePersistsAndEmitsEffect() = runTest {
         val repository = repositoryWith()
-        val controller = controller(repository, "n1")
+        val store = store(repository, "n1")
         advanceUntilIdle()
-        controller.dispatch(EditorAction.TitleChanged("Заголовок"))
-        controller.dispatch(EditorAction.ContentChanged("Текст"))
+        store.dispatch(EditorAction.TitleChanged("Заголовок"))
+        store.dispatch(EditorAction.ContentChanged("Текст"))
 
-        val effect = async { controller.effects.first() }
-        controller.dispatch(EditorAction.Save)
+        val effect = async { store.effects.first() }
+        store.dispatch(EditorAction.Save)
         advanceUntilIdle()
 
         assertEquals(EditorEffect.Saved, effect.await())
         assertEquals(Note("n1", "Заголовок", "Текст"), repository.load("n1"))
-        assertFalse(controller.state.value.isSaving)
-        assertEquals(null, controller.state.value.saveError)
+        assertFalse(store.state.value.isSaving)
+        assertNull(store.state.value.saveError)
     }
 
     @Test
     fun saveFailureSetsErrorAndClearsSaving() = runTest {
         val repository = FakeEditorRepository(saveFailure = IllegalStateException("disk full"))
-        val controller = controller(repository, "n1")
+        val store = store(repository, "n1")
         advanceUntilIdle()
 
-        controller.dispatch(EditorAction.Save)
+        store.dispatch(EditorAction.Save)
         advanceUntilIdle()
 
-        assertEquals("disk full", controller.state.value.saveError)
-        assertFalse(controller.state.value.isSaving)
+        assertEquals("disk full", store.state.value.saveError)
+        assertFalse(store.state.value.isSaving)
     }
 
     @Test
     fun repeatedSaveRunsOnce() = runTest {
         val repository = FakeEditorRepository()
-        val controller = controller(repository, "n1")
+        val store = store(repository, "n1")
         advanceUntilIdle()
 
-        controller.dispatch(EditorAction.Save)
-        controller.dispatch(EditorAction.Save)
+        store.dispatch(EditorAction.Save)
+        store.dispatch(EditorAction.Save)
         advanceUntilIdle()
 
         assertEquals(1, repository.saveCalls)
@@ -131,11 +132,11 @@ class DefaultEditorControllerTest {
         return repository
     }
 
-    private fun TestScope.controller(
+    private fun TestScope.store(
         repository: EditorRepository,
         noteId: String,
-    ): DefaultEditorController =
-        DefaultEditorController(
+    ): DefaultEditorStore =
+        DefaultEditorStore(
             loadNote = LoadNote(repository),
             saveNote = SaveNote(repository),
             noteId = noteId,
