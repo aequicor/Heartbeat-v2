@@ -122,8 +122,8 @@ Chromium. Ты разрабатываешь Heartbeat — KMP AI Studio для �
 ## Спецификация проекта и порядок работы
 
 Heartbeat использует Kotlin Multiplatform. Целевые платформы — Android, iOS, Linux, Windows и macOS.
-Расширение Chromium использует Kotlin/Wasm. На desktop лёгкая платформа показывает заставку и
-прогресс, запускает JVM и подключает бандлы. Launcher обновляет бандлы и себя. Android и iOS
+Расширение Chromium использует Kotlin/Wasm. На desktop платформа на JVM с Compose Multiplatform
+показывает заставку и прогресс и подключает бандлы. Launcher обновляет бандлы и себя. Android и iOS
 поставляются как самостоятельные приложения. [Архитектура](docs/specs/architecture.md)
 
 Канал `alpha` автоматически публикует затронутые desktop-бандлы после изменений в `master` без

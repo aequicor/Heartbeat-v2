@@ -7,8 +7,8 @@
 Установи актуальную стабильную версию [Android Studio](https://developer.android.com/studio). IDE
 включает JetBrains Runtime 21, эмулятор и инструменты Android SDK.
 
-На macOS установи также Xcode: Kotlin/Native берёт из него SDK и фреймворки для таргетов
-`macosArm64` и `platform/ios`. Запусти Xcode один раз, чтобы принять лицензию.
+На macOS установи также Xcode: он нужен для сборки iOS из `platform/ios`. Запусти Xcode один раз,
+чтобы принять лицензию.
 
 Поддерживаемые хосты desktop: Windows 10 или новее на x64, Linux x64, macOS на Apple Silicon.
 Android требует устройства или эмулятора с API 23 или новее. iOS собирается только на macOS.
@@ -23,7 +23,7 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 - **Tools → SDK Manager**: установлены SDK Platform 36 и Platform-Tools.
 - **Settings → Build, Execution, Deployment → Build Tools → Gradle**: Gradle JDK — `Embedded JDK
   (JetBrains Runtime 21)`, дистрибутив — из `gradle-wrapper.properties`. Обёртка скачает
-  Gradle 9.5.1.
+  Gradle 9.8.2.
 
 ## Шаг 4. Запусти desktop-приложение
 
@@ -40,9 +40,14 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 | `runDevLinux` | Linux x64 |
 | `runDevMacos` | macOS ARM64 |
 
-Первый запуск скачивает Kotlin/Native 2.4.20 в `~/.konan`; на Windows — также LLVM и
-MinGW-тулчейн. Нужна сеть, загрузка занимает несколько минут; MSYS2 и MinGW вручную не
-устанавливаются.
+Desktop-приложение работает на JVM и использует Compose Multiplatform. Первый запуск скачивает
+зависимости Compose и Gradle; нужна сеть.
+
+Установщик текущей ОС собирает `gradlew :platform:desktop:packageDistributionForCurrentOS`.
+На Windows это установщик Inno Setup: `Heartbeat-<версия>-setup.exe` в
+`platform/desktop/build/compose/binaries/main/innosetup`. Нужен Inno Setup 6.3 или новее; компилятор
+`ISCC.exe` ищется в `ISCC`, `INNO_SETUP_HOME`, стандартном каталоге установки или в `PATH`. Образ приложения с
+`Heartbeat.exe` собирает `gradlew :platform:desktop:createDistributable`.
 
 ## Шаг 5. Запусти приложение на Android
 

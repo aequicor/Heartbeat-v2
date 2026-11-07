@@ -16,7 +16,7 @@ run {
  * @property osPrefix prefix of the `os.name` value that identifies the host.
  * @property archs `os.arch` values that can run the target.
  * @property module Gradle path of the platform module.
- * @property runTask task that builds and runs the debug executable of the module.
+ * @property runTask task that builds and runs the application of the module.
  * @property label operating system name for descriptions and error messages.
  */
 data class EntryPoint(
@@ -48,24 +48,24 @@ class DevRuns(private val project: Project) {
             taskName = "runDevWindows",
             osPrefix = "windows",
             archs = setOf("amd64", "x86_64"),
-            module = ":platform:windows",
-            runTask = "runDebugExecutableMingwX64",
+            module = ":platform:desktop",
+            runTask = "runDistributable",
             label = "Windows x64",
         ),
         EntryPoint(
             taskName = "runDevLinux",
             osPrefix = "linux",
             archs = setOf("amd64", "x86_64"),
-            module = ":platform:linux",
-            runTask = "runDebugExecutableLinuxX64",
+            module = ":platform:desktop",
+            runTask = "runDistributable",
             label = "Linux x64",
         ),
         EntryPoint(
             taskName = "runDevMacos",
             osPrefix = "mac",
             archs = setOf("aarch64"),
-            module = ":platform:macos",
-            runTask = "runDebugExecutableMacosArm64",
+            module = ":platform:desktop",
+            runTask = "runDistributable",
             label = "macOS ARM64",
         ),
     )

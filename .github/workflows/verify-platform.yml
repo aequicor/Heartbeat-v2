@@ -29,16 +29,16 @@ jobs:
         include:
           - platform: Windows x64
             runner: windows-2025
-            task: :platform:windows:linkDebugExecutableMingwX64
-            executable: platform/windows/build/bin/mingwX64/debugExecutable/heartbeat.exe
+            task: :platform:desktop:classes
+            desktop: true
           - platform: Linux x64
             runner: ubuntu-24.04
-            task: :platform:linux:linkDebugExecutableLinuxX64
-            executable: platform/linux/build/bin/linuxX64/debugExecutable/heartbeat.kexe
+            task: :platform:desktop:classes
+            desktop: true
           - platform: macOS ARM64
             runner: macos-15
-            task: :platform:macos:linkDebugExecutableMacosArm64
-            executable: platform/macos/build/bin/macosArm64/debugExecutable/heartbeat.kexe
+            task: :platform:desktop:classes
+            desktop: true
           - platform: Android Emulator
             runner: ubuntu-24.04
             task: :platform:android:assembleDebug
@@ -54,20 +54,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-read-only: false
-      - name: Read Xcode build version
-        id: xcode
-        if: runner.os == 'macOS'
-        env:
-          DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-        run: |
-          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          xcodebuild -version | awk '/^Build version / {print "build=" $3}' >> "$GITHUB_OUTPUT"
-      - name: Cache Kotlin/Native toolchain
-        if: matrix.executable != ''
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.build }}-${{ hashFiles('build.gradle.kts') }}
       - name: Build entry point
         shell: pwsh
         env:
@@ -76,16 +62,18 @@ jobs:
         run: |
           & $env:GRADLE_WRAPPER $env:GRADLE_TASK --no-daemon
           exit $LASTEXITCODE
-      - name: Launch desktop executable
-        if: matrix.executable != ''
+      - name: Launch desktop app
+        if: matrix.desktop
         shell: pwsh
         env:
-          EXECUTABLE: ${{ matrix.executable }}
+          GRADLE_TASK: :platform:desktop:runDistributable
+          GRADLE_WRAPPER: ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }}
         run: |
-          $output = & "./$env:EXECUTABLE"
+          $output = & $env:GRADLE_WRAPPER $env:GRADLE_TASK --console=plain --no-daemon 2>&1
           $exitCode = $LASTEXITCODE
-          $output
-          if ($exitCode -ne 0 -or ($output -join [Environment]::NewLine) -cne 'Heartbeat started') {
+          $text = $output -join "`n"
+          $text
+          if ($exitCode -ne 0 -or $text -notmatch '(?m)^Heartbeat started\r?$') {
             throw "Unexpected startup output or exit code ($exitCode)"
           }
       - name: Launch Android app
