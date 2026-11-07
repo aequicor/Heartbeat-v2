@@ -46,16 +46,11 @@ fun HbButton(
     val pressed by interactionSource.collectIsPressedAsState()
     var focused by remember { mutableStateOf(false) }
 
-    val containerColor = if (enabled) {
-        colors.action.primaryBackground
-    } else {
-        colors.text.primary.copy(alpha = HbEffects.DisabledContainer)
-    }
-    val contentColor = if (enabled) {
-        colors.action.primaryForeground
-    } else {
-        colors.text.primary.copy(alpha = HbEffects.DisabledContent)
-    }
+    // A disabled action leaves the primary pair entirely: a dimmed copy of a light dark-theme
+    // fill would still look enabled, so the muted state uses the subtle surface and the
+    // disabled text role.
+    val containerColor = if (enabled) colors.action.primaryBackground else colors.surface.subtle
+    val contentColor = if (enabled) colors.action.primaryForeground else colors.text.disabled
 
     Box(
         modifier = modifier
@@ -65,7 +60,7 @@ fun HbButton(
             .then(
                 if (enabled && pressed) {
                     Modifier.background(
-                        colors.action.primaryForeground.copy(alpha = HbEffects.DisabledContainer),
+                        colors.action.primaryForeground.copy(alpha = HbEffects.PressedLayer),
                     )
                 } else {
                     Modifier

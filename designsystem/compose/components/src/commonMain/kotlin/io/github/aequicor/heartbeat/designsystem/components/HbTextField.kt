@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -65,10 +66,18 @@ fun HbTextField(
         colors.text.primary.copy(alpha = HbEffects.DisabledContent)
     }
     val placeholderColor = if (isError) colors.status.error.foreground else colors.text.secondary
+    // The input surface is the same color as the canvas, so the field keeps a required
+    // control boundary (HB-DS-004): 1 unit at rest, the focus or error width when it applies.
     val borderColor = when {
         isError -> colors.status.error.foreground
         enabled && focused -> colors.focus
-        else -> null
+        !enabled -> colors.border.subtle
+        else -> colors.border.control
+    }
+    val borderWidth = if (isError || (enabled && focused)) {
+        HbComponentStates.focusedBorderWidth
+    } else {
+        FIELD_BORDER_WIDTH
     }
 
     BasicTextField(
@@ -82,17 +91,7 @@ fun HbTextField(
             }
             .clip(HbShapes.Medium)
             .background(colors.surface.input)
-            .then(
-                if (borderColor != null) {
-                    Modifier.border(
-                        width = HbComponentStates.focusedBorderWidth,
-                        color = borderColor,
-                        shape = HbShapes.Medium,
-                    )
-                } else {
-                    Modifier
-                },
-            )
+            .border(width = borderWidth, color = borderColor, shape = HbShapes.Medium)
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         textStyle = HbTypography.Body.copy(color = contentColor),
         cursorBrush = SolidColor(contentColor),
@@ -112,6 +111,7 @@ fun HbTextField(
         },
     )
 }
+private val FIELD_BORDER_WIDTH = 1.dp
 
 @Composable
 private fun HbFieldDecoration(

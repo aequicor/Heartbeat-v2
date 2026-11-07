@@ -79,7 +79,7 @@ fun HbProgress(
                 },
         ) {
             val corner = CornerRadius(size.height / 2f)
-            drawRoundRect(color = colors.surface.subtle, size = size, cornerRadius = corner)
+            drawRoundRect(color = colors.border.subtle, size = size, cornerRadius = corner)
             if (fraction != null) {
                 drawRoundRect(
                     color = colors.accent.brand,

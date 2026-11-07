@@ -15,9 +15,12 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 /**
  * Form field structure: persistent label, control and help or error text (HB-DS-016).
  *
- * The label stays visible, so the control is never identified only by a placeholder. An error
- * replaces the help text, uses the error foreground role and is announced politely, so the state is
- * not encoded by color alone. The control keeps its own semantics, validation and error association.
+ * The label stays visible, so the control is never identified only by a placeholder. The control
+ * receives the same text as its accessible name, which is how the visible label and the editable
+ * receives the same text as its accessible name, which is how the visible label and the editable
+ * node stay associated without merging the trailing actions of the control. An error replaces the
+ * help text, uses the error foreground role and is announced politely, so the state is not encoded
+ * by color alone. The control keeps its own validation and error association.
  */
 @Composable
 fun HbFormField(

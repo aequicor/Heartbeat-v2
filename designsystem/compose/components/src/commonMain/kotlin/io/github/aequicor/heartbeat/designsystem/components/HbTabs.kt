@@ -1,13 +1,9 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -20,8 +16,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
@@ -33,9 +30,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 /**
  * Tab strip that switches peer content in the same context (HB-DS-019).
  *
- * Selection is exposed by the `selectable` semantics and marked by an underline, so it is not
- * encoded by color alone. A long strip scrolls horizontally instead of shrinking its labels; the
- * owner of the content preserves the state of each tab.
+ * Selection is exposed by the `selectable` semantics and marked by an underline drawn across the
+ * measured tab, so it is not encoded by color alone and a horizontally scrolling strip keeps the
+ * indicator aligned. A long strip scrolls instead of shrinking its labels; the owner of the content
+ * preserves the state of each tab.
  */
 @Composable
 fun <T> HbTabs(
@@ -88,20 +86,25 @@ private fun HbTab(
                 role = Role.Tab,
                 onClick = onClick,
             )
-            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
+            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs)
+            .drawBehind {
+                if (selected) {
+                    val stroke = TAB_INDICATOR.toPx()
+                    val y = size.height - stroke / 2f
+                    drawLine(
+                        color = colors.accent.foreground,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = stroke,
+                    )
+                }
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         BasicText(
             text = label,
             style = HbTypography.Label,
             color = { contentColor },
-        )
-        Box(
-            modifier = Modifier
-                .padding(top = HbSpacing.Xs)
-                .fillMaxWidth()
-                .height(TAB_INDICATOR)
-                .background(if (selected) colors.accent.foreground else Color.Transparent),
         )
     }
 }
