@@ -59,6 +59,7 @@ class PatternsScreenshotTest {
             val file = File(directory, "$name.png")
             file.writeBytes(data.bytes)
             assertTrue(file.length() > 0, "Empty screenshot $name")
+            GoldenImage.verify(name = name, png = data.bytes)
         } finally {
             scene.close()
         }

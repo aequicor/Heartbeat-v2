@@ -35,6 +35,7 @@ class ScaffoldScreenshotTest {
             val file = File(directory, "patterns-scaffold-light.png")
             file.writeBytes(data.bytes)
             assertTrue(file.length() > 0, "Empty scaffold screenshot")
+            GoldenImage.verify(name = "patterns-scaffold-light", png = data.bytes)
         } finally {
             scene.close()
         }

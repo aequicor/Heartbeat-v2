@@ -35,6 +35,7 @@ class AdaptiveScreenshotTest {
             val file = File(directory, "catalog-adaptive-light.png")
             file.writeBytes(data.bytes)
             assertTrue(file.length() > 0, "Empty adaptive screenshot")
+            GoldenImage.verify(name = "catalog-adaptive-light", png = data.bytes)
         } finally {
             scene.close()
         }
