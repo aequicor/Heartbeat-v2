@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.designsystem.foundation
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * Color of the portable token contract: sRGB with an explicit alpha channel, without renderer
@@ -31,14 +32,35 @@ public data class HbColor(
             (green.toLong() shl GREEN_SHIFT) or
             blue.toLong()
 
+    /** Composites this color over an opaque [background] and returns the resulting opaque color. */
+    public fun compositedOver(background: HbColor): HbColor {
+        require(background.alpha == OPAQUE_ALPHA) { "The background must be opaque." }
+        if (alpha == OPAQUE_ALPHA) return this
+        val source = alpha / OPAQUE_ALPHA.toDouble()
+        return HbColor(
+            red = blendChannel(red, background.red, source),
+            green = blendChannel(green, background.green, source),
+            blue = blendChannel(blue, background.blue, source),
+        )
+    }
+
     /** WCAG 2.2 relative luminance in the range 0 to 1. */
     public fun relativeLuminance(): Double =
         LUMINANCE_RED * linearChannel(red) +
             LUMINANCE_GREEN * linearChannel(green) +
             LUMINANCE_BLUE * linearChannel(blue)
 
-    /** WCAG 2.2 contrast ratio against [other], from 1 to 21; the argument order does not matter. */
+    /**
+     * WCAG 2.2 contrast ratio against [other], from 1 to 21; the argument order does not matter.
+     *
+     * Both colors must be opaque: WCAG defines contrast for composited colors, so a translucent
+     * color is rejected instead of returning a value that ignores its alpha. Composite it first with
+     * [compositedOver] using the known background.
+     */
     public fun contrastRatio(other: HbColor): Double {
+        require(alpha == OPAQUE_ALPHA && other.alpha == OPAQUE_ALPHA) {
+            "Contrast requires opaque colors; composite a translucent color over its background first."
+        }
         val first = relativeLuminance()
         val second = other.relativeLuminance()
         return (max(first, second) + CONTRAST_OFFSET) / (min(first, second) + CONTRAST_OFFSET)
@@ -82,6 +104,9 @@ public data class HbColor(
             green = (rgb shr GREEN_SHIFT).toInt() and MAX_CHANNEL,
             blue = rgb.toInt() and MAX_CHANNEL,
         )
+
+        private fun blendChannel(source: Int, background: Int, alpha: Double): Int =
+            (source * alpha + background * (1 - alpha)).roundToInt().coerceIn(CHANNEL_RANGE)
 
         private fun linearChannel(channel: Int): Double {
             val value = channel / MAX_CHANNEL.toDouble()

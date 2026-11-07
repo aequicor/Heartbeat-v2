@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -73,7 +74,7 @@ fun HbTooltip(
     Box(
         modifier = modifier
             .hoverable(triggerInteraction)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.hasFocus }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && visible) {
                     visible = false
@@ -87,7 +88,7 @@ fun HbTooltip(
         if (visible) {
             Popup(
                 alignment = Alignment.TopCenter,
-                offset = IntOffset(0, -TooltipOffset),
+                offset = IntOffset(0, -with(LocalDensity.current) { TooltipOffset.roundToPx() }),
                 onDismissRequest = { visible = false },
                 properties = PopupProperties(focusable = false),
             ) {
@@ -113,6 +114,6 @@ fun HbTooltip(
 
 private val TOOLTIP_MAX_WIDTH = 280.dp
 
-private const val TooltipOffset = 32
+private val TooltipOffset = 32.dp
 
 private val TOOLTIP_BORDER = 1.dp

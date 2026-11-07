@@ -1,6 +1,12 @@
 package io.github.aequicor.heartbeat.designsystem.foundation
 
-/** Semantic color roles of the supported appearances. */
+/**
+ * Semantic color roles of the supported appearances.
+ *
+ * Every role resolves to a reference token of [HbReferenceColors]; no role repeats a channel
+ * literal, so a change in the reference layer propagates through the semantic layer in one
+ * direction (HB-DS-002). Components consume only the semantic roles.
+ */
 public object HbColorPalettes {
 
     /**
@@ -12,56 +18,56 @@ public object HbColorPalettes {
      */
     public val Light: HbColorScheme = HbColorScheme(
         surface = HbSurfaceColors(
-            canvas = HbColor.hex(0xFFFFFF),
-            base = HbColor.hex(0xFFFFFF),
-            subtle = HbColor.hex(0xF4F4F5),
-            raised = HbColor.hex(0xFFFFFF),
-            input = HbColor.hex(0xFFFFFF),
+            canvas = HbReferenceColors.White,
+            base = HbReferenceColors.White,
+            subtle = HbReferenceColors.Paper,
+            raised = HbReferenceColors.White,
+            input = HbReferenceColors.White,
         ),
         text = HbTextColors(
-            primary = HbColor.hex(0x242426),
-            secondary = HbColor.hex(0x66636C),
-            disabled = HbColor.hex(0x98949F),
+            primary = HbReferenceColors.Ink,
+            secondary = HbReferenceColors.InkSoft,
+            disabled = HbReferenceColors.InkMuted,
         ),
         border = HbBorderColors(
-            subtle = HbColor.hex(0xE3E3E5),
-            control = HbColor.hex(0x817B88),
+            subtle = HbReferenceColors.Cloud,
+            control = HbReferenceColors.Steel,
         ),
         accent = HbAccentColors(
-            brand = HbColor.hex(0x7B6D9A),
-            foreground = HbColor.hex(0x6A587C),
-            container = HbColor.hex(0xE9E5EF),
+            brand = HbReferenceColors.Violet,
+            foreground = HbReferenceColors.VioletInk,
+            container = HbReferenceColors.Mist,
         ),
         action = HbActionColors(
-            primaryBackground = HbColor.hex(0x353238),
-            primaryForeground = HbColor.hex(0xFFFFFF),
-            primaryHoverBackground = HbColor.hex(0x45404B),
-            primaryPressedBackground = HbColor.hex(0x29252F),
+            primaryBackground = HbReferenceColors.GraphiteAction,
+            primaryForeground = HbReferenceColors.White,
+            primaryHoverBackground = HbReferenceColors.GraphiteActionHover,
+            primaryPressedBackground = HbReferenceColors.GraphiteActionPressed,
         ),
         selection = HbSelectionColors(
-            background = HbColor.hex(0xE9E5EF),
-            foreground = HbColor.hex(0x6A587C),
-            indicator = HbColor.hex(0x6A587C),
+            background = HbReferenceColors.Mist,
+            foreground = HbReferenceColors.VioletInk,
+            indicator = HbReferenceColors.VioletInk,
         ),
         status = HbStatusPalette(
             success = HbStatusColors(
-                foreground = HbColor.hex(0x226A46),
-                container = HbColor.hex(0xE9F6EE),
+                foreground = HbReferenceColors.Green,
+                container = HbReferenceColors.GreenWash,
             ),
             warning = HbStatusColors(
-                foreground = HbColor.hex(0x805500),
-                container = HbColor.hex(0xFFF4DC),
+                foreground = HbReferenceColors.Amber,
+                container = HbReferenceColors.AmberWash,
             ),
             error = HbStatusColors(
-                foreground = HbColor.hex(0xB42318),
-                container = HbColor.hex(0xFFF0ED),
+                foreground = HbReferenceColors.Red,
+                container = HbReferenceColors.Fog,
             ),
             information = HbStatusColors(
-                foreground = HbColor.hex(0x245EA4),
-                container = HbColor.hex(0xEDF4FF),
+                foreground = HbReferenceColors.Blue,
+                container = HbReferenceColors.BlueWash,
             ),
         ),
-        focus = HbColor.hex(0x6A587C),
+        focus = HbReferenceColors.VioletInk,
     )
 
     /**
@@ -70,55 +76,55 @@ public object HbColorPalettes {
      */
     public val Dark: HbColorScheme = HbColorScheme(
         surface = HbSurfaceColors(
-            canvas = HbColor.hex(0x202022),
-            base = HbColor.hex(0x242426),
-            subtle = HbColor.hex(0x28282B),
-            raised = HbColor.hex(0x303034),
-            input = HbColor.hex(0x2A2A2D),
+            canvas = HbReferenceColors.Charcoal,
+            base = HbReferenceColors.Graphite,
+            subtle = HbReferenceColors.Slate,
+            raised = HbReferenceColors.Basalt,
+            input = HbReferenceColors.Coal,
         ),
         text = HbTextColors(
-            primary = HbColor.hex(0xEEEEF0),
-            secondary = HbColor.hex(0xB8B4C0),
-            disabled = HbColor.hex(0x8A8790),
+            primary = HbReferenceColors.Snow,
+            secondary = HbReferenceColors.SnowSoft,
+            disabled = HbReferenceColors.SnowMuted,
         ),
         border = HbBorderColors(
-            subtle = HbColor.hex(0x424246),
-            control = HbColor.hex(0x87818F),
+            subtle = HbReferenceColors.SlateLine,
+            control = HbReferenceColors.SteelLine,
         ),
         accent = HbAccentColors(
-            brand = HbColor.hex(0xBAAFD0),
-            foreground = HbColor.hex(0xC5B8DC),
-            container = HbColor.hex(0x3B3547),
+            brand = HbReferenceColors.Lilac,
+            foreground = HbReferenceColors.LilacInk,
+            container = HbReferenceColors.Plum,
         ),
         action = HbActionColors(
-            primaryBackground = HbColor.hex(0xDCD4E8),
-            primaryForeground = HbColor.hex(0x29252F),
-            primaryHoverBackground = HbColor.hex(0xE8DFF4),
-            primaryPressedBackground = HbColor.hex(0xC9BED8),
+            primaryBackground = HbReferenceColors.Pearl,
+            primaryForeground = HbReferenceColors.GraphiteActionPressed,
+            primaryHoverBackground = HbReferenceColors.PearlHover,
+            primaryPressedBackground = HbReferenceColors.PearlPressed,
         ),
         selection = HbSelectionColors(
-            background = HbColor.hex(0x3B3547),
-            foreground = HbColor.hex(0xC5B8DC),
-            indicator = HbColor.hex(0xC5B8DC),
+            background = HbReferenceColors.Plum,
+            foreground = HbReferenceColors.LilacInk,
+            indicator = HbReferenceColors.LilacInk,
         ),
         status = HbStatusPalette(
             success = HbStatusColors(
-                foreground = HbColor.hex(0x9AD9B1),
-                container = HbColor.hex(0x223B2C),
+                foreground = HbReferenceColors.GreenLight,
+                container = HbReferenceColors.GreenLightWash,
             ),
             warning = HbStatusColors(
-                foreground = HbColor.hex(0xF5D18A),
-                container = HbColor.hex(0x40351E),
+                foreground = HbReferenceColors.AmberLight,
+                container = HbReferenceColors.AmberLightWash,
             ),
             error = HbStatusColors(
-                foreground = HbColor.hex(0xFFB4AB),
-                container = HbColor.hex(0x482A2A),
+                foreground = HbReferenceColors.RedLight,
+                container = HbReferenceColors.RedLightWash,
             ),
             information = HbStatusColors(
-                foreground = HbColor.hex(0xB0CFFF),
-                container = HbColor.hex(0x25344B),
+                foreground = HbReferenceColors.BlueLight,
+                container = HbReferenceColors.BlueLightWash,
             ),
         ),
-        focus = HbColor.hex(0xC5B8DC),
+        focus = HbReferenceColors.LilacInk,
     )
 }

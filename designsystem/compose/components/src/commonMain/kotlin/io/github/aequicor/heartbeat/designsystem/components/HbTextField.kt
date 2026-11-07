@@ -2,18 +2,21 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -22,9 +25,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
+import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -33,13 +39,15 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * Text input built on foundation, without a Material dependency. Single-line by default.
  *
  * Accessibility: [label] is the accessible name of the field, independent of [placeholder], which
- * disappears after input; [errorMessage] both marks the field as invalid for accessibility
+ * disappears after input; when the field is used inside [HbFormField] without its own label, the
+ * label and the error of the form field are read from the composition and become the accessible
+ * name and error of the field. [errorMessage] both marks the field as invalid for accessibility
  * services and drives the error visuals, so the message is not encoded only in the border color.
  *
  * States: the value uses the primary text role, so it stays readable in both appearances; disabled
  * dims the value; the placeholder uses the secondary text role rather than the disabled role;
- * focused draws the focus outline; a non-null [errorMessage] draws an error border in the
- * [io.github.aequicor.heartbeat.designsystem.theme.HbStatusPalette.error] role.
+ * focused draws the separate focus outline outside the field; a non-null error keeps the error
+ * border, so focused and invalid are visible at the same time.
  */
 @Composable
 fun HbTextField(
@@ -58,59 +66,80 @@ fun HbTextField(
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val isError = errorMessage != null
-
-    val contentColor = if (enabled) {
-        colors.text.primary
+    val formLabel = HbFormFieldLocals.LocalLabel.current
+    val effectiveLabel = label.ifEmpty { formLabel.orEmpty() }
+    val effectiveError = errorMessage ?: HbFormFieldLocals.LocalError.current
+    val border = fieldBorder(effectiveError, enabled, colors)
+    val contentColor = if (enabled) colors.text.primary else colors.text.primary.copy(alpha = HbEffects.DisabledContent)
+    val placeholderColor = if (effectiveError != null) {
+        colors.status.error.foreground
     } else {
-        colors.text.primary.copy(alpha = HbEffects.DisabledContent)
-    }
-    val placeholderColor = if (isError) colors.status.error.foreground else colors.text.secondary
-    // The input surface is the same color as the canvas, so the field keeps a required
-    // control boundary (HB-DS-004): 1 unit at rest, the focus or error width when it applies.
-    val borderColor = when {
-        isError -> colors.status.error.foreground
-        enabled && focused -> colors.focus
-        !enabled -> colors.border.subtle
-        else -> colors.border.control
-    }
-    val borderWidth = if (isError || (enabled && focused)) {
-        HbComponentStates.focusedBorderWidth
-    } else {
-        FIELD_BORDER_WIDTH
+        colors.text.secondary
     }
 
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier
-            .onFocusChanged { focused = it.isFocused }
-            .semantics {
-                if (label.isNotEmpty()) contentDescription = label
-                if (errorMessage != null) error(errorMessage)
-            }
-            .clip(HbShapes.Medium)
-            .background(colors.surface.input)
-            .border(width = borderWidth, color = borderColor, shape = HbShapes.Medium)
-            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
-        textStyle = HbTypography.Body.copy(color = contentColor),
-        cursorBrush = SolidColor(contentColor),
-        singleLine = singleLine,
-        minLines = minLines,
-        maxLines = maxLines,
-        visualTransformation = visualTransformation,
-        enabled = enabled,
-        decorationBox = { innerTextField ->
-            HbFieldDecoration(
-                value = value,
-                placeholder = placeholder,
-                placeholderColor = placeholderColor,
-                trailing = trailing,
-                innerTextField = innerTextField,
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
+    ) {
+        if (label.isNotEmpty() && formLabel == null) {
+            BasicText(
+                text = label,
+                style = HbTypography.Label,
+                color = { colors.text.secondary },
             )
-        },
-    )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .onFocusChanged { focused = it.isFocused }
+                .hbFocusRing(
+                    focused = enabled && focused,
+                    shape = HbShapes.Medium,
+                    color = colors.focus,
+                )
+                .fieldSemantics(label = effectiveLabel, error = effectiveError)
+                .clip(HbShapes.Medium)
+                .background(colors.surface.input)
+                .border(width = border.width, color = border.color, shape = HbShapes.Medium)
+                .heightIn(min = HbSizes.controlHeight)
+                .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
+            textStyle = HbTypography.Body.copy(color = contentColor),
+            cursorBrush = SolidColor(contentColor),
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
+            visualTransformation = visualTransformation,
+            enabled = enabled,
+            decorationBox = { innerTextField ->
+                HbFieldDecoration(
+                    value = value,
+                    placeholder = placeholder,
+                    placeholderColor = placeholderColor,
+                    trailing = trailing,
+                    innerTextField = innerTextField,
+                )
+            },
+        )
+    }
 }
+
+private data class FieldBorder internal constructor(
+    val color: Color,
+    val width: Dp,
+)
+
+private fun fieldBorder(error: String?, enabled: Boolean, colors: HbColors): FieldBorder = when {
+    error != null -> FieldBorder(colors.status.error.foreground, HbComponentStates.focusedBorderWidth)
+    !enabled -> FieldBorder(colors.border.subtle, FIELD_BORDER_WIDTH)
+    else -> FieldBorder(colors.border.control, FIELD_BORDER_WIDTH)
+}
+
+private fun Modifier.fieldSemantics(label: String, error: String?): Modifier = semantics {
+    if (label.isNotEmpty()) contentDescription = label
+    if (error != null) this.error(error)
+}
+
 private val FIELD_BORDER_WIDTH = 1.dp
 
 @Composable

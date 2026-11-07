@@ -4,8 +4,8 @@ plugins {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation(project(":designsystem:foundation"))
-        implementation(project(":designsystem:compose:theme"))
+        api(project(":designsystem:foundation"))
+        api(project(":designsystem:compose:theme"))
     }
     sourceSets.jvmTest.dependencies {
         implementation(libs.compose.ui)

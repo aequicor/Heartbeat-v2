@@ -81,7 +81,7 @@ public object HbPaneGeometry {
     /** Width of one pane separator, counted twice in [TwoPaneWithSidebar]. */
     private const val SeparatorThickness: Int = 1
 
-    /** Width required by two split panes, a sidebar and two separators. */
+    /** Width required by the navigation rail, two split panes, a sidebar and two separators. */
     public const val TwoPaneWithSidebar: Int =
-        SidebarPreferred + 2 * SplitPaneMin + 2 * SeparatorThickness
+        NavigationRail + SidebarPreferred + 2 * SplitPaneMin + 2 * SeparatorThickness
 }

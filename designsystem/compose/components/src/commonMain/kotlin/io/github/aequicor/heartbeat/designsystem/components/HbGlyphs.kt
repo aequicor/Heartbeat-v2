@@ -11,10 +11,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /** Close glyph of a dismissible surface; the accessible name comes from the action, not the glyph. */
@@ -25,9 +26,9 @@ internal fun HbCloseGlyph(
 ) {
     HbIcon(
         glyph = HbIconGlyph.Close,
-        modifier = modifier.size(controlGlyphSize),
+        modifier = modifier.size(HbSizes.controlGlyph),
         tint = color,
-        size = controlGlyphSize,
+        size = HbSizes.controlGlyph,
     )
 }
 
@@ -57,10 +58,8 @@ internal fun HbChevronGlyph(
         glyph = HbIconGlyph.ChevronDown,
         modifier = modifier.rotate(rotation),
         tint = color,
-        size = controlGlyphSize,
+        size = HbSizes.controlGlyph,
     )
 }
-
-private val controlGlyphSize = 10.dp
 
 private const val ChevronExpandedDegrees = 180f

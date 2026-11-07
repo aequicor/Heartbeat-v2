@@ -37,7 +37,7 @@ class HbWindowWidthTest {
 
     @Test
     fun twoPaneWithSidebarMatchesTheDocumentedSum() {
-        assertEquals(986, HbPaneGeometry.TwoPaneWithSidebar)
+        assertEquals(1038, HbPaneGeometry.TwoPaneWithSidebar)
     }
 
     @Test

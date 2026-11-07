@@ -1,3 +1,5 @@
+@file:Suppress("NoNullableLambdaWithDefaultNull")
+
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.clickable
@@ -22,57 +24,72 @@ import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
- * Expandable row of a tree (HB-DS-019).
+ * Row of a tree (HB-DS-019).
  *
- * The row exposes the expanded state through `expand` and `collapse` actions, and [depth] indents
- * the label without encoding the hierarchy in color. [stateDescription] carries the localized state
- * name. A tree is used only where the hierarchy helps; a flat grouped list uses [HbNavigationGroup].
+ * A row with children exposes the expanded state through `expand` and `collapse` actions; a leaf
+ * row passes `onExpandedChange = null`, so it has no chevron and no false expandable action. [depth]
+ * indents the label without encoding the hierarchy in color. [stateDescription] carries the
+ * localized state name. A tree is used only where the hierarchy helps; a flat grouped list uses
+ * [HbNavigationGroup].
  */
 @Composable
 fun HbTreeItem(
     label: String,
     depth: Int,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    expanded: Boolean = false,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
     stateDescription: String? = null,
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
+    val expandable = onExpandedChange != null
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = HbSizes.controlHeight)
-            .clip(HbShapes.Small)
-            .onFocusChanged { focused = it.isFocused }
-            .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
-            .clickable(role = Role.Button) { onExpandedChange(!expanded) }
-            .semantics {
+    val rowModifier = modifier
+        .fillMaxWidth()
+        .heightIn(min = HbSizes.controlHeight)
+        .clip(HbShapes.Small)
+        .onFocusChanged { focused = it.isFocused }
+        .hbFocusRing(focused = expandable && focused, shape = HbShapes.Small, color = colors.focus)
+        .then(
+            if (onExpandedChange != null) {
+                Modifier.clickable(role = Role.Button) { onExpandedChange(!expanded) }
+            } else {
+                Modifier
+            },
+        )
+        .semantics {
+            if (onExpandedChange != null) {
                 if (expanded) {
                     collapse { onExpandedChange(false); true }
                 } else {
                     expand { onExpandedChange(true); true }
                 }
-                stateDescription?.let { this.stateDescription = it }
             }
-            .padding(
-                start = INDENT_STEP * depth.toFloat() + HbSpacing.Xs,
-                end = HbSpacing.Xs,
-                top = HbSpacing.Xxs,
-                bottom = HbSpacing.Xxs,
-            ),
+            stateDescription?.let { this.stateDescription = it }
+        }
+        .padding(
+            start = INDENT_STEP * depth.toFloat() + HbSpacing.Xs,
+            end = HbSpacing.Xs,
+            top = HbSpacing.Xxs,
+            bottom = HbSpacing.Xxs,
+        )
+
+    Row(
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
     ) {
-        HbChevronGlyph(color = colors.text.secondary, expanded = expanded)
+        if (expandable) {
+            HbChevronGlyph(color = colors.text.secondary, expanded = expanded)
+        }
         BasicText(
             text = label,
             style = HbTypography.Label,
@@ -80,6 +97,5 @@ fun HbTreeItem(
         )
     }
 }
-
 
 private val INDENT_STEP = 16.dp

@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -15,12 +17,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 /**
  * Form field structure: persistent label, control and help or error text (HB-DS-016).
  *
- * The label stays visible, so the control is never identified only by a placeholder. The control
- * receives the same text as its accessible name, which is how the visible label and the editable
- * receives the same text as its accessible name, which is how the visible label and the editable
- * node stay associated without merging the trailing actions of the control. An error replaces the
- * help text, uses the error foreground role and is announced politely, so the state is not encoded
- * by color alone. The control keeps its own validation and error association.
+ * The label stays visible, so the control is never identified only by a placeholder. The label and
+ * the error are provided to the control through composition locals, so a control without its own
+ * label still gets a programmatic association instead of relying on visual proximity. An error
+ * replaces the help text, uses the error foreground role and is announced politely, so the state is
+ * not encoded by color alone.
  */
 @Composable
 fun HbFormField(
@@ -42,7 +43,11 @@ fun HbFormField(
             style = HbTypography.Label,
             color = { colors.text.secondary },
         )
-        content()
+        CompositionLocalProvider(
+            HbFormFieldLocals.LocalLabel provides label,
+            HbFormFieldLocals.LocalError provides errorMessage,
+            content = content,
+        )
         if (supportText != null) {
             BasicText(
                 text = supportText,

@@ -52,9 +52,7 @@ fun <T> HbCombobox(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var activeIndex by remember { mutableIntStateOf(0) }
-    val popupOffset = with(LocalDensity.current) {
-        HbSizes.controlHeight.roundToPx() + POPUP_OFFSET.roundToPx()
-    }
+    val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
 
     Box(modifier = modifier) {
         HbTextField(

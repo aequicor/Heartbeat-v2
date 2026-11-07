@@ -11,4 +11,7 @@ internal object HbComponentStates {
 
     /** Solid focus outline with a 2-unit width (HB-DS-012). */
     val focusedBorderWidth = 2.dp
+
+    /** Gap between the control boundary and the focus outline (HB-DS-005). */
+    val focusGap = 2.dp
 }

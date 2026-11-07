@@ -37,9 +37,34 @@ object HbSizes {
     val paneHeaderHeight: Dp
         @Composable
         @ReadOnlyComposable
-        get() = if (HbThemeDefaults.LocalGeometry.current.controlHeight >= HbGeometries.Touch.controlHeight) {
+        get() = if (isTouch) {
             HbPaneGeometry.PaneHeaderTouch.dp
         } else {
             HbPaneGeometry.PaneHeaderDense.dp
         }
+
+    /** Size of a standalone icon: the dense glyph stays compact, the touch glyph is larger. */
+    val iconSize: Dp
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isTouch) TouchIconSize else DenseIconSize
+
+    /** Size of the glyph inside a control, such as a chevron or a close mark. */
+    val controlGlyph: Dp
+        @Composable
+        @ReadOnlyComposable
+        get() = if (isTouch) TouchControlGlyph else DenseControlGlyph
+
+    private val isTouch: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = HbThemeDefaults.LocalGeometry.current.controlHeight >= HbGeometries.Touch.controlHeight
 }
+
+private val DenseIconSize = 18.dp
+
+private val TouchIconSize = 24.dp
+
+private val DenseControlGlyph = 10.dp
+
+private val TouchControlGlyph = 12.dp

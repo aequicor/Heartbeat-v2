@@ -69,6 +69,8 @@ Compose:
       - LocalMotion
       - LocalTypography
       - LocalGeometry
+      - LocalLabel
+      - LocalError
   CompositionLocalNaming:
     active: true
   ConditionHoist:

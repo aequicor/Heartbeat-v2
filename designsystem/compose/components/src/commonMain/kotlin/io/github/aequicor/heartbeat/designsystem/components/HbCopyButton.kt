@@ -15,10 +15,13 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import kotlinx.coroutines.delay
 
 /**
- * Copy action with local confirmation (HB-DS-015). The caller performs the copy, so the component
- * does not depend on a clipboard API of a specific renderer; after [onCopy] the label changes to
- * [copiedLabel] for the copy-feedback duration and the change is announced politely without moving
- * the focus.
+ * Copy action with confirmation (HB-DS-015). The caller performs the copy, so the component does not
+ * depend on a clipboard API of a specific renderer.
+ *
+ * When [copied] is `null`, the component shows [copiedLabel] for the copy-feedback duration after a
+ * click; this is the self-managed mode for a copy that cannot fail. When the owner passes [copied],
+ * the component only reflects the confirmed result of [onCopy], so a failed copy never announces
+ * success. The change is announced politely without moving the focus.
  */
 @Composable
 fun HbCopyButton(
@@ -27,22 +30,24 @@ fun HbCopyButton(
     onCopy: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    copied: Boolean? = null,
 ) {
-    var copied by remember { mutableStateOf(false) }
+    var localCopied by remember { mutableStateOf(false) }
+    val shownCopied = copied ?: localCopied
 
-    LaunchedEffect(copied) {
-        if (copied) {
+    LaunchedEffect(localCopied) {
+        if (localCopied) {
             delay(HbMotions.Default.copyFeedbackMs.toLong())
-            copied = false
+            localCopied = false
         }
     }
 
     Box(modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         HbButton(
-            text = if (copied) copiedLabel else label,
+            text = if (shownCopied) copiedLabel else label,
             onClick = {
                 onCopy()
-                copied = true
+                if (copied == null) localCopied = true
             },
             enabled = enabled,
         )

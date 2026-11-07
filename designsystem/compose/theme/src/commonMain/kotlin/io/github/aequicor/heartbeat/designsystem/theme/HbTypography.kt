@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScale
@@ -81,8 +82,8 @@ internal fun HbTypeScale.toStyles(textScale: Float): HbTypeStyles = HbTypeStyles
     readingBody = readingBody.scaled(textScale),
     uiLabel = uiLabel.scaled(textScale),
     caption = caption.scaled(textScale),
-    code = code.scaled(textScale),
-    metadata = metadata.scaled(textScale),
+    code = code.scaled(textScale).copy(fontFamily = FontFamily.Monospace),
+    metadata = metadata.scaled(textScale).copy(fontFeatureSettings = "tnum"),
 )
 
 internal fun HbTypeStyle.scaled(textScale: Float): TextStyle = TextStyle(

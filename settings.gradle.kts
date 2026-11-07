@@ -20,6 +20,7 @@ include(":core:platform-api", ":core:network", ":core:database", ":core:filesyst
 include(
     ":designsystem:foundation",
     ":designsystem:sandbox",
+    ":designsystem:consumer",
     ":designsystem:compose:theme",
     ":designsystem:compose:resources",
     ":designsystem:compose:components",

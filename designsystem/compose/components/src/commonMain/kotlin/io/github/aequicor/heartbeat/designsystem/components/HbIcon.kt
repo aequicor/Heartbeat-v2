@@ -6,8 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
 /**
@@ -23,7 +24,7 @@ fun HbIcon(
     glyph: HbIconGlyph,
     modifier: Modifier = Modifier,
     tint: Color = HbTheme.colors.text.secondary,
-    size: Dp = DenseGlyphSize,
+    size: Dp = HbSizes.iconSize,
 ) {
     Canvas(modifier = modifier.size(size)) {
         when (glyph) {
@@ -44,5 +45,3 @@ fun HbIcon(
         }
     }
 }
-
-private val DenseGlyphSize = 18.dp

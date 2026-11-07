@@ -5,6 +5,6 @@ plugins {
 kotlin {
     sourceSets.commonMain.dependencies {
         implementation(libs.compose.ui)
-        implementation(project(":designsystem:foundation"))
+        api(project(":designsystem:foundation"))
     }
 }

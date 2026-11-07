@@ -59,7 +59,7 @@ fun <T> HbTabs(
             .horizontalScroll(rememberScrollState())
             .focusGroup()
             .onPreviewKeyEvent { event ->
-                if (!enabled || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (!enabled || tabs.isEmpty() || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val current = tabs.indexOf(selected)
                 val target = when (event.key) {
                     Key.DirectionRight -> (current + 1) % tabs.size
