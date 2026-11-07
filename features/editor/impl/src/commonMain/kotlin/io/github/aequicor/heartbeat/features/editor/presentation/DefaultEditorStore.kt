@@ -8,12 +8,13 @@ import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCa
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -29,8 +30,11 @@ import kotlinx.coroutines.launch
  * loading or a save is running, so the async work cannot overwrite user input
  * and a save always persists the snapshot taken at the moment of the action.
  * Cancellation is not a failure.
+ *
+ * The implementation is internal: the feature exposes [EditorStore], and the
+ * store factory creates the instance inside the module.
  */
-class DefaultEditorStore(
+internal class DefaultEditorStore(
     private val loadNote: LoadNoteUseCase,
     private val saveNote: SaveNoteUseCase,
     private val noteId: String,
@@ -40,8 +44,16 @@ class DefaultEditorStore(
     private val mutableState = MutableStateFlow(EditorState())
     override val state: StateFlow<EditorState> = mutableState.asStateFlow()
 
-    private val effectsChannel = Channel<EditorEffect>(Channel.BUFFERED)
-    override val effects: Flow<EditorEffect> = effectsChannel.receiveAsFlow()
+    /**
+     * Effects are one-shot hints for the UI: a save never waits for a collector and never
+     * keeps [EditorState.isSaving] set because nobody listens. A slow collector loses the
+     * oldest hint instead of suspending the store.
+     */
+    private val mutableEffects = MutableSharedFlow<EditorEffect>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val effects: Flow<EditorEffect> = mutableEffects.asSharedFlow()
 
     init {
         load()
@@ -49,9 +61,21 @@ class DefaultEditorStore(
 
     override fun dispatch(action: EditorAction) {
         when (action) {
-            EditorAction.Reload -> load()
+            EditorAction.Reload -> reload()
             else -> dispatchEdit(action)
         }
+    }
+
+    /**
+     * Reload exists to retry a failed load ([EditorState.loadError]), so it runs only when no
+     * operation is active. A reload during a save would replace the state the save is working on.
+     */
+    private fun reload() {
+        val current = mutableState.value
+        if (current.isLoading || current.isSaving || current.loadError == null) {
+            return
+        }
+        load()
     }
 
     private fun dispatchEdit(action: EditorAction) {
@@ -101,7 +125,7 @@ class DefaultEditorStore(
             try {
                 saveNote(snapshot.toNote(noteId))
                 mutableState.update { it.copy(saveError = null) }
-                effectsChannel.send(EditorEffect.Saved)
+                mutableEffects.tryEmit(EditorEffect.Saved)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {

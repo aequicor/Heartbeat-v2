@@ -182,6 +182,54 @@ class DefaultEditorStoreTest {
         assertEquals("Снимок", repository.load("n1").title)
     }
 
+    @Test
+    fun savesWithoutEffectCollectorDoNotBlock() = runTest {
+        val repository = FakeEditorRepository()
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+
+        repeat(100) { attempt ->
+            store.dispatch(EditorAction.TitleChanged("Заголовок $attempt"))
+            store.dispatch(EditorAction.Save)
+            advanceUntilIdle()
+
+            assertFalse(store.state.value.isSaving)
+        }
+
+        assertEquals(100, repository.saveCalls)
+    }
+
+    @Test
+    fun reloadWithoutLoadErrorIsIgnored() = runTest {
+        val store = store(repositoryWith(), "n1")
+        advanceUntilIdle()
+        store.dispatch(EditorAction.TitleChanged("Правка"))
+
+        store.dispatch(EditorAction.Reload)
+        advanceUntilIdle()
+
+        assertEquals("Правка", store.state.value.title)
+    }
+
+    @Test
+    fun reloadDuringSaveDoesNotOverwriteState() = runTest {
+        val repository = FakeEditorRepository(saveDelayMillis = 1_000)
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+        store.dispatch(EditorAction.TitleChanged("Снимок"))
+
+        store.dispatch(EditorAction.Save)
+        advanceTimeBy(100)
+        assertTrue(store.state.value.isSaving)
+
+        store.dispatch(EditorAction.Reload)
+        advanceUntilIdle()
+
+        assertEquals("Снимок", store.state.value.title)
+        assertFalse(store.state.value.isSaving)
+        assertEquals(1, repository.saveCalls)
+    }
+
     private suspend fun repositoryWith(vararg notes: Note): DefaultEditorRepository {
         val repository = DefaultEditorRepository(EditorDataSource())
         for (note in notes) {
