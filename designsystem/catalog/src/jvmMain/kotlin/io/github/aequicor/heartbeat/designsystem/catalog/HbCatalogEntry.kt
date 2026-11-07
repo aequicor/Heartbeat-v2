@@ -66,6 +66,7 @@ private fun CatalogHost(modifier: Modifier = Modifier) {
                 CatalogTab.Patterns -> PatternsCatalogScreen()
                 CatalogTab.Workspace -> ScaffoldCatalogScreen()
                 CatalogTab.Adaptive -> AdaptiveCatalogScreen()
+                CatalogTab.Studio -> StudioCatalogScreen()
             }
         }
     }
@@ -76,4 +77,5 @@ private enum class CatalogTab(val title: String) {
     Patterns("Паттерны"),
     Workspace("Рабочая область"),
     Adaptive("Адаптивность"),
+    Studio("Студия"),
 }
