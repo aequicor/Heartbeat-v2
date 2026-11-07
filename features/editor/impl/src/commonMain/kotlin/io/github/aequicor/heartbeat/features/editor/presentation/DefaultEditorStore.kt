@@ -117,10 +117,19 @@ internal class DefaultEditorStore(
     // storage implementations may throw arbitrary exceptions, so the catch stays generic.
     @Suppress("TooGenericExceptionCaught")
     private fun save() {
-        // The snapshot is taken synchronously: edits dispatched while the save is
-        // running are ignored, so the persisted note always matches what the user saw.
+        // The snapshot is taken and the running flag is set in one atomic
+        // compare-and-set: two concurrent Save actions cannot both observe
+        // `isSaving == false` and start two saves, because only the first
+        // compare-and-set succeeds. The snapshot is synchronous, so edits
+        // dispatched while the save is running are ignored and the persisted
+        // note always matches what the user saw.
         val snapshot = mutableState.value
-        mutableState.update { it.copy(isSaving = true, saveError = null) }
+        if (snapshot.isLoading || snapshot.isSaving || snapshot.loadError != null) {
+            return
+        }
+        if (!mutableState.compareAndSet(snapshot, snapshot.copy(isSaving = true, saveError = null))) {
+            return
+        }
         scope.launch {
             try {
                 saveNote(snapshot.toNote(noteId))

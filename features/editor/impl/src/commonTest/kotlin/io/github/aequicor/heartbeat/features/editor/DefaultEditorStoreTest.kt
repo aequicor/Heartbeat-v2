@@ -9,10 +9,14 @@ import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepo
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNoteUseCase
 import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorStore
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -162,6 +166,31 @@ class DefaultEditorStoreTest {
         advanceUntilIdle()
 
         assertEquals(1, repository.saveCalls)
+    }
+
+    @Test
+    fun concurrentSaveStartsOnlyOnce() = runTest {
+        val repository = FakeEditorRepository(saveDelayMillis = 1_000)
+        val store = store(repository, "n1")
+        advanceUntilIdle()
+
+        // Release many dispatchers on a real thread pool at once: the atomic
+        // check-and-set in the store must let exactly one save through.
+        val attempts = 16
+        val start = CompletableDeferred<Unit>()
+        coroutineScope {
+            repeat(attempts) {
+                launch(Dispatchers.Default) {
+                    start.await()
+                    store.dispatch(EditorAction.Save)
+                }
+            }
+            start.complete(Unit)
+        }
+        advanceUntilIdle()
+
+        assertEquals(1, repository.saveCalls)
+        assertFalse(store.state.value.isSaving)
     }
 
     @Test
