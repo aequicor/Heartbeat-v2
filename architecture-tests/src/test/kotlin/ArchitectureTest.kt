@@ -56,13 +56,39 @@ class ArchitectureTest {
     @Test
     fun apiContractsArePublic() {
         val violations = featureScope.files
-            .filter { file -> file.packagee?.name?.endsWith(".api") == true }
-            .flatMap { file ->
+            .map { file -> file to file.packagee?.name.orEmpty() }
+            .filter { (_, packageName) -> NamingRules.isApiPackage(packageName) }
+            .flatMap { (file, packageName) ->
                 file.declarations(includeNested = false, includeLocal = false)
                     .filter { it.kind() != DeclarationKind.OTHER }
-                    .filterNot { it.isExplicitlyPublic() }
-                    .map { "${file.projectPath}: api contract must be public: ${it.nameOrNull()}" }
+                    .mapNotNull { declaration ->
+                        val name = declaration.nameOrNull() ?: return@mapNotNull null
+                        VisibilityRules.apiContractViolation(
+                            packageName = packageName,
+                            declarationName = name,
+                            isPublic = declaration.isExplicitlyPublic(),
+                        )?.let { "${file.projectPath}: $it" }
+                    }
             }
+
+        Assert.assertEquals(listOf<String>(), violations)
+    }
+
+    @Test
+    fun modulePackagesMatchTheGradleModule() {
+        val files = featureScope.files + designSystemScope.files
+        val paths = files.map { it.projectPath.replace('\\', '/') }
+        // The rule derives the module from the path, so a path without the `/src/` part, or a
+        // path that does not start at the repository directory, would silently disable the check.
+        Assert.assertTrue(
+            "Expected repo-relative source paths: ${paths.take(3)}",
+            paths.all { it.contains("/src/") },
+        )
+
+        val violations = files.mapNotNull { file ->
+            ModulePackageRules.violation(file.projectPath, file.packagee?.name.orEmpty())
+                ?.let { "${file.projectPath}: $it" }
+        }
 
         Assert.assertEquals(listOf<String>(), violations)
     }

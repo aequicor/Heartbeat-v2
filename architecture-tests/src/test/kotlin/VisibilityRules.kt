@@ -47,10 +47,26 @@ internal object VisibilityRules {
         return when {
             !isPublic || role == null -> null
             metroAnnotations.any(annotations::contains) -> null
-            role.firstOrNull() == "api" -> null
+            NamingRules.isApiPackage(packageName) -> null
             role in publicContractRoles -> null
             role == listOf("component") && !declarationName.startsWith("Default") -> null
             else -> "implementation detail must be internal: $declarationName"
         }
+    }
+
+    /**
+     * The `api` role and its subpackages make up the feature's public surface, so every
+     * declaration there must be explicitly `public` (HB-ARCH-040). [violation] skips the role
+     * because its contracts are public by default; this check closes the subpackages, which
+     * `endsWith(".api")` would miss.
+     */
+    fun apiContractViolation(
+        packageName: String,
+        declarationName: String,
+        isPublic: Boolean,
+    ): String? = when {
+        !NamingRules.isApiPackage(packageName) -> null
+        isPublic -> null
+        else -> "api contract must be public: $declarationName"
     }
 }

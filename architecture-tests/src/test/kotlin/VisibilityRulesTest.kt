@@ -102,4 +102,27 @@ class VisibilityRulesTest {
             violation("io.github.aequicor.heartbeat.designsystem.theme", "HbColors"),
         )
     }
+
+    @Test
+    fun apiSubpackageContractsMustBePublic() {
+        Assert.assertNull(VisibilityRules.apiContractViolation(api, "EditorStore", isPublic = true))
+        Assert.assertNull(
+            VisibilityRules.apiContractViolation("$api.model", "EditorNote", isPublic = true),
+        )
+        Assert.assertEquals(
+            "api contract must be public: EditorNote",
+            VisibilityRules.apiContractViolation("$api.model", "EditorNote", isPublic = false),
+        )
+        Assert.assertEquals(
+            "api contract must be public: EditorStore",
+            VisibilityRules.apiContractViolation(api, "EditorStore", isPublic = false),
+        )
+        Assert.assertNull(
+            VisibilityRules.apiContractViolation(domainModel, "Note", isPublic = false),
+        )
+        // An unrelated package is not an api contract even when it holds an internal type.
+        Assert.assertNull(
+            VisibilityRules.apiContractViolation("com.example.unrelated", "Note", isPublic = false),
+        )
+    }
 }

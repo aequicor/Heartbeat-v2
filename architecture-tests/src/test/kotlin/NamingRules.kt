@@ -53,7 +53,7 @@ internal object NamingRules {
             path == null -> null
             // The api package holds every public contract: Store, State, Action, Effect, models
             // and services. Only the feature prefix is mandatory, so a model keeps its own name.
-            path.drop(1).firstOrNull() == "api" ->
+            isApiPackage(packageName) ->
                 apiContractViolation(featureName(path), declarationName)
 
             else -> roleViolation(path, declarationKind, declarationName, annotations)
@@ -253,6 +253,13 @@ internal object NamingRules {
         val segments = packageName.removePrefix(prefix).split(".")
         return if (segments.size < 2) null else segments
     }
+
+    /**
+     * True for the feature `api` role and its subpackages (`api.model`, `api.service`): the whole
+     * public surface of a feature, not only the package that ends with `.api`.
+     */
+    internal fun isApiPackage(packageName: String): Boolean =
+        featurePath(packageName)?.getOrNull(1) == "api"
 
     private fun DeclarationKind.isType(): Boolean = this == DeclarationKind.CLASS ||
         this == DeclarationKind.INTERFACE ||

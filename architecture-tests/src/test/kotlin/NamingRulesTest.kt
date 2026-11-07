@@ -71,6 +71,15 @@ class NamingRulesTest {
     }
 
     @Test
+    fun apiRoleCoversSubpackages() {
+        Assert.assertTrue(NamingRules.isApiPackage(api))
+        Assert.assertTrue(NamingRules.isApiPackage("$api.model"))
+        Assert.assertTrue(NamingRules.isApiPackage("$api.contract"))
+        Assert.assertFalse(NamingRules.isApiPackage(domainModel))
+        Assert.assertFalse(NamingRules.isApiPackage("com.example.unrelated"))
+    }
+
+    @Test
     fun useCasesEndWithUseCase() {
         Assert.assertNull(violation(domainUseCase, DeclarationKind.CLASS, "LoadNoteUseCase"))
         Assert.assertNull(violation(domainUseCase, DeclarationKind.CLASS, "SaveNoteUseCase"))

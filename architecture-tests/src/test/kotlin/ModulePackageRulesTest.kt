@@ -1,0 +1,116 @@
+import org.junit.Assert
+import org.junit.Test
+
+/**
+ * Unit tests of the module placement rule (HB-ARCH-043): a source in a Gradle module may
+ * declare only the package roles of that module, so an unrelated package cannot escape the
+ * naming and visibility rules.
+ */
+class ModulePackageRulesTest {
+
+    private val feature = "io.github.aequicor.heartbeat.features.editor"
+    private val designSystem = "io.github.aequicor.heartbeat.designsystem"
+
+    private val apiModule = "features/editor/api/src/commonMain/kotlin/EditorStore.kt"
+    private val implModule = "features/editor/impl/src/commonMain/kotlin/Note.kt"
+    private val adapterModule =
+        "features/editor/presentation/decompose/src/commonMain/kotlin/EditorComponent.kt"
+    private val uiModule = "features/editor/ui/compose/src/commonMain/kotlin/EditorScreen.kt"
+    private val themeModule = "designsystem/compose/theme/src/commonMain/kotlin/HbColors.kt"
+
+    private fun assertViolation(
+        projectPath: String,
+        packageName: String,
+        modulePath: String,
+        vararg fragments: String,
+    ) {
+        val message = ModulePackageRules.violation(projectPath, packageName)
+            ?: error("Expected a violation for $packageName in $projectPath")
+        Assert.assertTrue(
+            "Wrong message: $message",
+            message.startsWith("package $packageName does not belong to module $modulePath: "),
+        )
+        fragments.forEach { fragment ->
+            Assert.assertTrue("Missing '$fragment' in: $message", fragment in message)
+        }
+    }
+
+    @Test
+    fun apiModuleDeclaresTheApiRoleAndItsSubpackages() {
+        Assert.assertNull(ModulePackageRules.violation(apiModule, "$feature.api"))
+        Assert.assertNull(ModulePackageRules.violation(apiModule, "$feature.api.model"))
+        Assert.assertNull(ModulePackageRules.violation(apiModule, "$feature.api.contract"))
+
+        assertViolation(apiModule, "$feature.impl", "features/editor/api", "$feature.api")
+    }
+
+    @Test
+    fun implModuleDeclaresTheUniversalRoles() {
+        listOf(".domain.usecase", ".data.repository", ".presentation", ".presentation.mapper", ".di")
+            .forEach { suffix -> Assert.assertNull(ModulePackageRules.violation(implModule, "$feature$suffix")) }
+
+        assertViolation(implModule, "$feature.api", "features/editor/impl", "$feature.api")
+        assertViolation(implModule, "$feature.component", "features/editor/impl", "$feature.component")
+        assertViolation(implModule, feature, "features/editor/impl", feature)
+    }
+
+    @Test
+    fun unrelatedPackageInFeatureImplIsAViolation() {
+        assertViolation(
+            implModule,
+            "com.example.unrelated",
+            "features/editor/impl",
+            "com.example.unrelated",
+        )
+    }
+
+    @Test
+    fun adapterAndUiModulesDeclareTheirOwnRoles() {
+        Assert.assertNull(ModulePackageRules.violation(adapterModule, "$feature.component"))
+        assertViolation(adapterModule, "$feature.presentation", "features/editor/presentation/decompose")
+
+        Assert.assertNull(ModulePackageRules.violation(uiModule, "$feature.ui"))
+        assertViolation(uiModule, "$feature.component", "features/editor/ui/compose")
+    }
+
+    @Test
+    fun designSystemModuleDeclaresThePackageOfItsRole() {
+        Assert.assertNull(ModulePackageRules.violation(themeModule, "$designSystem.theme"))
+        Assert.assertNull(ModulePackageRules.violation(themeModule, "$designSystem.theme.tokens"))
+        assertViolation(themeModule, "$designSystem.components", "designsystem/compose/theme")
+    }
+
+    @Test
+    fun unknownFeatureModuleRoleIsAViolation() {
+        Assert.assertEquals(
+            "unknown feature module role: features/editor/extra",
+            ModulePackageRules.violation(
+                "features/editor/extra/src/commonMain/kotlin/Something.kt",
+                "$feature.presentation",
+            ),
+        )
+    }
+
+    @Test
+    fun pathsOutsideFeatureAndDesignSystemModulesHaveNoRule() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "core/network/src/commonMain/kotlin/HttpClient.kt",
+                "io.github.aequicor.heartbeat.core.network",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation("buildSrc/src/main/kotlin/Plugin.gradle.kts", "plugin"),
+        )
+    }
+
+    @Test
+    fun windowsSeparatorsAreNormalized() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "features\\editor\\impl\\src\\commonMain\\kotlin\\Note.kt",
+                "$feature.domain.model",
+            ),
+        )
+    }
+}
