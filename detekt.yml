@@ -43,6 +43,8 @@ Compose:
     active: true
   CompositionLocalAllowlist:
     active: true
+    allowedCompositionLocals:
+      - LocalColors
   CompositionLocalNaming:
     active: true
   ConditionHoist:

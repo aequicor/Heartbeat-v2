@@ -7,7 +7,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import io.github.aequicor.heartbeat.designsystem.theme.AppColors
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.Shapes
 import io.github.aequicor.heartbeat.designsystem.theme.Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.Typography
@@ -20,12 +20,14 @@ fun HbTextField(
     modifier: Modifier = Modifier,
     placeholder: String = "",
 ) {
+    val colors = HbThemeDefaults.LocalColors.current
+
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
             .clip(Shapes.Small)
-            .background(AppColors.surface)
+            .background(colors.surface)
             .padding(horizontal = Spacing.S, vertical = Spacing.Xs),
         textStyle = Typography.Body,
         singleLine = true,
@@ -33,7 +35,7 @@ fun HbTextField(
             if (value.isEmpty()) {
                 BasicText(
                     text = placeholder,
-                    color = { AppColors.onSurface },
+                    color = { colors.onSurface },
                     style = Typography.Caption,
                 )
             }

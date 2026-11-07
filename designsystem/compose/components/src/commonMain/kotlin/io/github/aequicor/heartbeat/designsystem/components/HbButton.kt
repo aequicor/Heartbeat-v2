@@ -8,7 +8,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import io.github.aequicor.heartbeat.designsystem.theme.AppColors
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.Shapes
 import io.github.aequicor.heartbeat.designsystem.theme.Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.Typography
@@ -20,16 +20,18 @@ fun HbButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = HbThemeDefaults.LocalColors.current
+
     Box(
         modifier = modifier
             .clip(Shapes.Medium)
-            .background(AppColors.primary)
+            .background(colors.primary)
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.M, vertical = Spacing.S),
     ) {
         BasicText(
             text = text,
-            color = { AppColors.onPrimary },
+            color = { colors.onPrimary },
             style = Typography.Body,
         )
     }
