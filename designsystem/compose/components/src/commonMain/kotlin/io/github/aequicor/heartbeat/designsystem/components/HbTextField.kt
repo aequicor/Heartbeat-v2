@@ -18,9 +18,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -30,9 +31,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * disappears after input; [errorMessage] both marks the field as invalid for accessibility
  * services and drives the error visuals, so the message is not encoded only in the border color.
  *
- * States: the value always uses [HbThemeDefaults.LocalColors] `onSurface`, so the input stays
- * readable on a dark palette; disabled dims the value and the placeholder; focused draws a
- * primary border; a non-null [errorMessage] draws an error border and colors the placeholder.
+ * States: the value uses the primary text role, so it stays readable in both appearances; disabled
+ * dims the value; the placeholder uses the secondary text role rather than the disabled role;
+ * focused draws the focus outline; a non-null [errorMessage] draws an error border in the
+ * [io.github.aequicor.heartbeat.designsystem.theme.HbStatusPalette.error] role.
  */
 @Composable
 fun HbTextField(
@@ -52,14 +54,14 @@ fun HbTextField(
     val isError = errorMessage != null
 
     val contentColor = if (enabled) {
-        colors.onSurface
+        colors.text.primary
     } else {
-        colors.onSurface.copy(alpha = HbComponentStates.DISABLED_CONTENT_ALPHA)
+        colors.text.primary.copy(alpha = HbEffects.DisabledContent)
     }
-    val placeholderColor = if (isError) colors.error else contentColor
+    val placeholderColor = if (isError) colors.status.error.foreground else colors.text.secondary
     val borderColor = when {
-        isError -> colors.error
-        enabled && focused -> colors.primary
+        isError -> colors.status.error.foreground
+        enabled && focused -> colors.focus
         else -> null
     }
 
@@ -72,14 +74,14 @@ fun HbTextField(
                 if (label.isNotEmpty()) contentDescription = label
                 if (errorMessage != null) error(errorMessage)
             }
-            .clip(HbShapes.Small)
-            .background(colors.surface)
+            .clip(HbShapes.Medium)
+            .background(colors.surface.input)
             .then(
                 if (borderColor != null) {
                     Modifier.border(
                         width = HbComponentStates.focusedBorderWidth,
                         color = borderColor,
-                        shape = HbShapes.Small,
+                        shape = HbShapes.Medium,
                     )
                 } else {
                     Modifier

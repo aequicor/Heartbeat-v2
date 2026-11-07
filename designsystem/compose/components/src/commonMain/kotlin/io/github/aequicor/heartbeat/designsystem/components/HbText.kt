@@ -6,7 +6,7 @@ import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
-/** Body text in the theme color, without a Material dependency. */
+/** Body text in the primary content role, without a Material dependency. */
 @Composable
 fun HbText(
     text: String,
@@ -17,7 +17,7 @@ fun HbText(
     BasicText(
         text = text,
         modifier = modifier,
-        color = { colors.onSurface },
+        color = { colors.text.primary },
         style = HbTypography.Body,
     )
 }

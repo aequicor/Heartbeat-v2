@@ -18,9 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
-import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
+import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
+import io.github.aequicor.heartbeat.designsystem.theme.HbThemeDefaults
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
@@ -28,9 +29,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * exposes the [Role.Button] semantics, so accessibility services announce an action button, not a
  * clickable container.
  *
- * States: default uses the primary container, disabled keeps the container muted and dims the
- * label, pressed lightens the container, focused draws a border in the container content color.
- * The component has no error state: a failed action belongs to the screen that owns the operation.
+ * States: default uses the primary action pair, disabled keeps the container muted and dims the
+ * label, pressed lightens the container, focused draws the design system focus outline in
+ * [io.github.aequicor.heartbeat.designsystem.theme.HbColors.focus]. The component has no error state:
+ * a failed action belongs to the screen that owns the operation.
  */
 @Composable
 fun HbButton(
@@ -45,25 +47,25 @@ fun HbButton(
     var focused by remember { mutableStateOf(false) }
 
     val containerColor = if (enabled) {
-        colors.primary
+        colors.action.primaryBackground
     } else {
-        colors.onSurface.copy(alpha = HbComponentStates.DISABLED_CONTAINER_ALPHA)
+        colors.text.primary.copy(alpha = HbEffects.DisabledContainer)
     }
     val contentColor = if (enabled) {
-        colors.onPrimary
+        colors.action.primaryForeground
     } else {
-        colors.onSurface.copy(alpha = HbComponentStates.DISABLED_CONTENT_ALPHA)
+        colors.text.primary.copy(alpha = HbEffects.DisabledContent)
     }
 
     Box(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
-            .clip(HbShapes.Medium)
+            .clip(HbShapes.Small)
             .background(containerColor)
             .then(
                 if (enabled && pressed) {
                     Modifier.background(
-                        colors.onPrimary.copy(alpha = HbComponentStates.PRESSED_OVERLAY_ALPHA),
+                        colors.action.primaryForeground.copy(alpha = HbEffects.DisabledContainer),
                     )
                 } else {
                     Modifier
@@ -73,8 +75,8 @@ fun HbButton(
                 if (enabled && focused) {
                     Modifier.border(
                         width = HbComponentStates.focusedBorderWidth,
-                        color = colors.onPrimary,
-                        shape = HbShapes.Medium,
+                        color = colors.focus,
+                        shape = HbShapes.Small,
                     )
                 } else {
                     Modifier
