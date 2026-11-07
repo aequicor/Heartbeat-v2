@@ -195,6 +195,52 @@ class DefaultEditorStoreTest {
     }
 
     @Test
+    @Suppress("InjectDispatcher")
+    fun concurrentEditAndSaveNeverApplyAnEditDuringTheSave() = runTest {
+        val editsDuringSave = mutableListOf<String>()
+        lateinit var editor: DefaultEditorStore
+        val repository = FakeEditorRepository(
+            onSave = { note ->
+                // The save coroutine runs only after the store claimed isSaving, so any edit that
+                // changed the title at this point violates the ignore-edits-during-save contract.
+                val state = editor.state.value
+                if (state.isSaving && state.title != note.title) {
+                    editsDuringSave += "saved '${note.title}' while state had '${state.title}'"
+                }
+            },
+        )
+        editor = store(repository, "n1")
+        advanceUntilIdle()
+
+        // Real threads release an edit and a save at the same moment. The edit must land either
+        // before the save claim (then the save persists it) or not at all, and the Save must never
+        // be dropped because an edit won the state race.
+        val attempts = 250
+        repeat(attempts) { attempt ->
+            editor.dispatch(EditorAction.TitleChanged("snapshot-$attempt"))
+
+            val start = CompletableDeferred<Unit>()
+            coroutineScope {
+                launch(Dispatchers.Default) {
+                    start.await()
+                    editor.dispatch(EditorAction.Save)
+                }
+                launch(Dispatchers.Default) {
+                    start.await()
+                    editor.dispatch(EditorAction.TitleChanged("concurrent-$attempt"))
+                }
+                start.complete(Unit)
+            }
+            advanceUntilIdle()
+
+            assertFalse(editor.state.value.isSaving, "attempt $attempt: save must finish")
+        }
+
+        assertTrue(editsDuringSave.isEmpty(), "edits during save: $editsDuringSave")
+        assertEquals(attempts, repository.saveCalls)
+    }
+
+    @Test
     fun savePersistsSnapshotAndIgnoresEditsWhileRunning() = runTest {
         val repository = FakeEditorRepository(saveDelayMillis = 1_000)
         val store = store(repository, "n1")
@@ -286,6 +332,7 @@ private class FakeEditorRepository(
     private val saveDelayMillis: Long = 0,
     private val saveFailure: Throwable? = null,
     loadFailures: Int = 0,
+    private val onSave: (Note) -> Unit = {},
 ) : EditorRepository {
 
     private val notes = mutableMapOf<String, Note>()
@@ -311,6 +358,7 @@ private class FakeEditorRepository(
 
     override suspend fun save(note: Note) {
         saveCalls++
+        onSave(note)
         if (saveDelayMillis > 0) {
             delay(saveDelayMillis)
         }

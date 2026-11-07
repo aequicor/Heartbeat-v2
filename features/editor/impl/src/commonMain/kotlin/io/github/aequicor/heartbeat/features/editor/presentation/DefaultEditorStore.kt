@@ -31,7 +31,9 @@ import kotlinx.coroutines.launch
  * and always clears [EditorState.isSaving]. Edits are ignored while data is
  * loading or a save is running, so the async work cannot overwrite user input
  * and a save always persists the snapshot taken at the moment of the action.
- * Cancellation is not a failure.
+ * Every decision and the state write it leads to happen in one atomic
+ * compare-and-set ([transition]), so a concurrent action cannot change the
+ * state between the check and the write. Cancellation is not a failure.
  *
  * The implementation is internal: the feature exposes [EditorStore], and the
  * store factory creates the instance inside the module.
@@ -58,14 +60,26 @@ internal class DefaultEditorStore(
     override val effects: Flow<EditorEffect> = mutableEffects.asSharedFlow()
 
     init {
-        load()
+        // EditorState starts in the loading state, so the constructor only launches the load.
+        startLoad()
     }
 
     override fun dispatch(action: EditorAction) {
         when (action) {
+            is EditorAction.TitleChanged -> edit { it.copy(title = action.value) }
+            is EditorAction.ContentChanged -> edit { it.copy(content = action.value) }
+            EditorAction.Save -> save()
             EditorAction.Reload -> reload()
-            else -> dispatchEdit(action)
         }
+    }
+
+    /**
+     * Admits an edit only while the editor is idle. The check and the write run in one
+     * [transition], so an edit that races with [save] is rejected instead of changing the state
+     * the save already snapshotted.
+     */
+    private fun edit(transform: (EditorState) -> EditorState) {
+        transition { state -> if (state.acceptsEdits) transform(state) else null }
     }
 
     /**
@@ -73,35 +87,36 @@ internal class DefaultEditorStore(
      * operation is active. A reload during a save would replace the state the save is working on.
      */
     private fun reload() {
-        val current = mutableState.value
-        if (current.isLoading || current.isSaving || current.loadError == null) {
-            return
-        }
-        load()
+        transition { state ->
+            when {
+                state.isLoading || state.isSaving || state.loadError == null -> null
+                else -> state.copy(isLoading = true, loadError = null)
+            }
+        } ?: return
+        startLoad()
     }
 
-    private fun dispatchEdit(action: EditorAction) {
-        val current = mutableState.value
-        if (current.isLoading || current.isSaving || current.loadError != null) {
-            return
-        }
-        when (action) {
-            is EditorAction.TitleChanged ->
-                mutableState.update { it.copy(title = action.value) }
-
-            is EditorAction.ContentChanged ->
-                mutableState.update { it.copy(content = action.value) }
-
-            EditorAction.Save -> save()
-
-            EditorAction.Reload -> Unit
+    /**
+     * Applies [transform] atomically and returns the state it replaced, or `null` when [transform]
+     * rejected the transition by returning `null`. A rejected transition does not write the state,
+     * so it cannot be re-evaluated later, when the blocking condition has cleared; an accepted
+     * transition re-runs [transform] on the latest state when another action wins the race, so the
+     * decision and the write always concern the same state.
+     */
+    private fun transition(transform: (EditorState) -> EditorState?): EditorState? {
+        while (true) {
+            val current = mutableState.value
+            val next = transform(current) ?: return null
+            if (mutableState.compareAndSet(current, next)) {
+                return current
+            }
         }
     }
 
     // Loading is the second boundary that turns an arbitrary storage failure into UI state.
+    // The loading flag is claimed before the launch: by the initial state or by reload().
     @Suppress("TooGenericExceptionCaught")
-    private fun load() {
-        mutableState.update { it.copy(isLoading = true, loadError = null) }
+    private fun startLoad() {
         scope.launch {
             try {
                 mutableState.value = loadNote(noteId).toEditorState()
@@ -119,19 +134,16 @@ internal class DefaultEditorStore(
     // storage implementations may throw arbitrary exceptions, so the catch stays generic.
     @Suppress("TooGenericExceptionCaught")
     private fun save() {
-        // The snapshot is taken and the running flag is set in one atomic
-        // compare-and-set: two concurrent Save actions cannot both observe
-        // `isSaving == false` and start two saves, because only the first
-        // compare-and-set succeeds. The snapshot is synchronous, so edits
-        // dispatched while the save is running are ignored and the persisted
-        // note always matches what the user saw.
-        val snapshot = mutableState.value
-        if (snapshot.isLoading || snapshot.isSaving || snapshot.loadError != null) {
-            return
-        }
-        if (!mutableState.compareAndSet(snapshot, snapshot.copy(isSaving = true, saveError = null))) {
-            return
-        }
+        // The snapshot and the running flag are claimed in one atomic transition: two concurrent
+        // Save actions cannot both observe `isSaving == false`, and an edit cannot land between
+        // the check and the claim, so the persisted note always matches the state the user saw.
+        val snapshot = transition { state ->
+            if (state.acceptsEdits) {
+                state.copy(isSaving = true, saveError = null)
+            } else {
+                null
+            }
+        } ?: return
         scope.launch {
             try {
                 saveNote(snapshot.toNote(noteId))
@@ -147,3 +159,7 @@ internal class DefaultEditorStore(
         }
     }
 }
+
+/** Edits are admitted only while no load or save can overwrite them. */
+private val EditorState.acceptsEdits: Boolean
+    get() = !isLoading && !isSaving && loadError == null
