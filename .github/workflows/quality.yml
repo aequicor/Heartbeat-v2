@@ -1,0 +1,76 @@
+name: Quality
+
+# Required pre-merge gate: architecture rules, detekt and compilation of the mandatory KMP
+# targets. It runs on every pull request, so a merge cannot bypass the checks that
+# `gradlew build` runs locally. Platform entry points stay on demand in verify-platform.yml.
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  architecture:
+    name: architecture-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: jetbrains
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - name: Run architecture and static analysis gates
+        run: ./gradlew architectureCheck detektAll --no-daemon
+
+  kmp:
+    name: kmp-${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Hosts that cannot build Apple binaries compile the Linux and Windows targets;
+          # the macOS host compiles the Apple targets. Tests run on the JVM target.
+          - name: linux
+            runner: ubuntu-24.04
+            tasks: >-
+              :features:editor:impl:jvmTest
+              :features:editor:impl:compileKotlinLinuxX64
+              :features:editor:impl:compileKotlinLinuxArm64
+              :features:editor:impl:compileKotlinMingwX64
+              :features:editor:presentation:decompose:jvmTest
+              :features:editor:ui:compose:compileKotlinJvm
+          - name: apple
+            runner: macos-15
+            tasks: >-
+              :features:editor:impl:jvmTest
+              :features:editor:impl:compileKotlinMacosArm64
+              :features:editor:impl:compileKotlinMacosX64
+              :features:editor:impl:compileKotlinIosArm64
+              :features:editor:impl:compileKotlinIosSimulatorArm64
+              :features:editor:impl:compileKotlinIosX64
+              :features:editor:presentation:decompose:jvmTest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: jetbrains
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+      - name: Compile KMP targets and run JVM tests
+        run: ./gradlew ${{ matrix.tasks }} --no-daemon

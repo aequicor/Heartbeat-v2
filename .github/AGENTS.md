@@ -60,11 +60,13 @@ PR, менять правила защиты и обращаться к ключ
 
 1. `docs.yml` собирает `docs-build` для готового к ревью PR и публикует Pages после push в `master`.
    Возврат PR в draft отменяет текущую сборку.
-2. Метка `verify-platform` на PR запускает сборку и запуск точек входа на Windows, Linux, macOS,
+2. `quality.yml` на каждом PR выполняет `architectureCheck`, `detektAll`, компиляцию обязательных
+   KMP targets и тесты JVM. Статус `architecture-check` входит в обязательные проверки ruleset.
+3. Метка `verify-platform` на PR запускает сборку и запуск точек входа на Windows, Linux, macOS,
    Android и iOS. Без метки этот workflow не выполняется.
-3. `static-analysis.yml` запускает `detekt` только по команде `/reviewed` и публикует статус
-   `static-analysis` для проверенного коммита. До команды статический анализ не выполняется.
-4. Каналы `alpha`, `beta` и `release` описаны в [спецификации выпуска](../docs/specs/releases.md).
+4. `static-analysis.yml` запускает `detekt` по команде `/reviewed` и публикует статус
+   `static-analysis` для проверенного коммита.
+5. Каналы `alpha`, `beta` и `release` описаны в [спецификации выпуска](../docs/specs/releases.md).
    При изменении конвейера обнови затронутые требования `HB-REL-*` и проверь соответствующий канал.
 
 ## Настройка GitHub владельцем
@@ -84,10 +86,10 @@ PR, менять правила защиты и обращаться к ключ
    **Require approval of the most recent reviewable push**. Запрети force push и удаление ветки. В
    настройках репозитория включи **Allow auto-merge** и **Automatically delete head branches**.
    Разреши только squash.
-4. Требуй успешные статусы `docs-build` от GitHub Actions и `owner-review` от установленного GitHub
-   App. Закрепи указанные источники в ruleset. App публикует `owner-review` для текущего HEAD после
-   подтверждения владельцем. Если интерфейс ещё не показывает контекст `owner-review`, сначала
-   открой пробный PR и опубликуй подтверждение вручную. До проверки всех правил пробный PR держи
-   открытым.
+4. Требуй успешные статусы `docs-build` и `architecture-check` от GitHub Actions и `owner-review` от
+   установленного GitHub App. Закрепи указанные источники в ruleset. App публикует `owner-review`
+   для текущего HEAD после подтверждения владельцем. Если интерфейс ещё не показывает контекст
+   `owner-review`, сначала открой пробный PR и опубликуй подтверждение вручную. До проверки всех
+   правил пробный PR держи открытым.
 
 [Правила защиты GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)

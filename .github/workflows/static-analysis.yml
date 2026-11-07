@@ -1,8 +1,8 @@
 name: Static analysis
 
-# detekt runs only for a commit the owner approved with `/reviewed`. The result is published
-# as the `static-analysis` status on that commit, so branch protection can require it next to
-# `owner-review`. Pull requests never run static analysis before the review command.
+# detekt runs on every pull request in `quality.yml`; this workflow repeats it for the commit the
+# owner approved with `/reviewed` and publishes the result as the `static-analysis` status on that
+# commit, so branch protection can require it next to `owner-review`.
 on:
   issue_comment:
     types: [created]
