@@ -590,7 +590,8 @@ designsystem/
 │       ├── HbColor.kt
 │       ├── HbColorScheme.kt
 │       ├── HbTypography.kt
-│       └── HbGeometry.kt
+│       ├── HbGeometry.kt
+│       └── HbLayout.kt
 │
 ├── compose/
 │   ├── theme/
