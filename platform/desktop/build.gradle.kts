@@ -1,4 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.gradle.jvm.toolchain.JavaLanguageVersion
+import org.gradle.jvm.toolchain.JvmVendorSpec
 import java.io.File
 import org.gradle.api.GradleException
 
@@ -12,16 +14,33 @@ val desktopVersion = "1.0.0"
 val isWindows = System.getProperty("os.name").lowercase().startsWith("windows")
 
 kotlin {
-    jvmToolchain(21)
+    // Jewel 0.42.0 is built for the IntelliJ Platform 2026.3 runtime and ships
+    // class files for Java 25, so the application must run on JBR 25.
+    jvmToolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+        vendor = JvmVendorSpec.JETBRAINS
+    }
 }
 
 dependencies {
-    implementation(compose.desktop.currentOs)
+    implementation(compose.desktop.currentOs) {
+        // Jewel provides the Int UI controls; keep Material off the desktop classpath.
+        exclude(group = "org.jetbrains.compose.material")
+    }
+    implementation(libs.jewel.int.ui.standalone)
+    implementation(libs.jewel.decorated.window)
 }
 
 compose.desktop {
     application {
         mainClass = "io.github.aequicor.heartbeat.MainKt"
+
+        // DecoratedWindow needs the JetBrains Runtime, including the runtime image
+        // that jpackage builds for the distributable.
+        javaHome = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(25)
+            vendor = JvmVendorSpec.JETBRAINS
+        }.get().metadata.installationPath.asFile.absolutePath
 
         nativeDistributions {
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the

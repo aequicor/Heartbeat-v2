@@ -2,6 +2,7 @@
 android-gradle-plugin = "9.5.1"
 kotlin = "2.4.21"
 compose-multiplatform = "1.12.2"
+jewel = "0.42.0-263.7307.200"
 detekt = "2.0.0-alpha.6"
 detekt-compose-rules = "0.6.8"
 kode-compose-rules = "2.1.2"
@@ -14,6 +15,8 @@ android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-compose-gradle-plugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 compose-gradle-plugin = { module = "org.jetbrains.compose:compose-gradle-plugin", version.ref = "compose-multiplatform" }
+jewel-int-ui-standalone = { module = "org.jetbrains.jewel:jewel-int-ui-standalone", version.ref = "jewel" }
+jewel-decorated-window = { module = "org.jetbrains.jewel:jewel-decorated-window", version.ref = "jewel" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "detekt-compose-rules" }
 kode-compose-rules = { module = "ru.kode:detekt-rules-compose-detekt2", version.ref = "kode-compose-rules" }

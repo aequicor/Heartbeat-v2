@@ -5,7 +5,8 @@
 ## Шаг 1. Установи инструменты
 
 Установи актуальную стабильную версию [Android Studio](https://developer.android.com/studio). IDE
-включает JetBrains Runtime 21, эмулятор и инструменты Android SDK.
+включает JetBrains Runtime 25, эмулятор и инструменты Android SDK. Jewel требует именно JetBrains
+Runtime, поэтому сборка desktop-модуля выбирает JDK с vendor `JETBRAINS`.
 
 На macOS установи также Xcode: он нужен для сборки iOS из `platform/ios`. Запусти Xcode один раз,
 чтобы принять лицензию.
@@ -22,14 +23,15 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 
 - **Tools → SDK Manager**: установлены SDK Platform 36 и Platform-Tools.
 - **Settings → Build, Execution, Deployment → Build Tools → Gradle**: Gradle JDK — `Embedded JDK
-  (JetBrains Runtime 21)`, дистрибутив — из `gradle-wrapper.properties`. Обёртка скачает
+  (JetBrains Runtime 25)`, дистрибутив — из `gradle-wrapper.properties`. Обёртка скачает
   Gradle 9.8.2.
 
 ## Шаг 4. Запусти desktop-приложение
 
 1. В окне **Gradle** открой **Heartbeat → Tasks → dev**.
 2. Дважды щёлкни `runDev`.
-3. В окне **Run** появится строка `Heartbeat started`, и приложение завершится с кодом 0.
+3. Откроется окно `Heartbeat`. В окне **Run** появится строка `Heartbeat started`. Закрой окно,
+   чтобы процесс завершился с кодом 0.
 
 `runDev` выбирает точку входа текущего хоста. Именованная задача собирает конкретную платформу,
 а на другом хосте завершается с подсказкой.
