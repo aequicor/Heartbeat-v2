@@ -2,15 +2,16 @@ package io.github.aequicor.heartbeat.features.editor
 
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorEffect
-import io.github.aequicor.heartbeat.features.editor.api.EditorState
 import io.github.aequicor.heartbeat.features.editor.data.datasource.EditorDataSource
 import io.github.aequicor.heartbeat.features.editor.data.repository.DefaultEditorRepository
 import io.github.aequicor.heartbeat.features.editor.domain.model.Note
+import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.LoadNote
 import io.github.aequicor.heartbeat.features.editor.domain.usecase.SaveNote
 import io.github.aequicor.heartbeat.features.editor.presentation.DefaultEditorController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -18,9 +19,21 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class DefaultEditorControllerTest {
+
+    @Test
+    fun editorStartsInLoadingState() = runTest {
+        val controller = controller(repositoryWith(), "n1")
+
+        assertTrue(controller.state.value.isLoading)
+
+        advanceUntilIdle()
+
+        assertFalse(controller.state.value.isLoading)
+    }
 
     @Test
     fun loadsNoteOnCreate() = runTest {
@@ -34,12 +47,26 @@ class DefaultEditorControllerTest {
     }
 
     @Test
-    fun missingNoteStartsWithEmptyState() = runTest {
+    fun missingNoteHasEmptyContent() = runTest {
         val controller = controller(repositoryWith(), "n1")
 
         advanceUntilIdle()
 
-        assertEquals(EditorState(), controller.state.value)
+        assertEquals("", controller.state.value.title)
+        assertFalse(controller.state.value.isLoading)
+    }
+
+    @Test
+    fun editBeforeLoadIsIgnored() = runTest {
+        val repository = FakeEditorRepository(loadDelayMillis = 1_000).apply {
+            seed(Note("n1", "Загруженный", ""))
+        }
+        val controller = controller(repository, "n1")
+
+        controller.dispatch(EditorAction.TitleChanged("Ранняя правка"))
+        advanceUntilIdle()
+
+        assertEquals("Загруженный", controller.state.value.title)
     }
 
     @Test
@@ -67,6 +94,33 @@ class DefaultEditorControllerTest {
         assertEquals(EditorEffect.Saved, effect.await())
         assertEquals(Note("n1", "Заголовок", "Текст"), repository.load("n1"))
         assertFalse(controller.state.value.isSaving)
+        assertEquals(null, controller.state.value.saveError)
+    }
+
+    @Test
+    fun saveFailureSetsErrorAndClearsSaving() = runTest {
+        val repository = FakeEditorRepository(saveFailure = IllegalStateException("disk full"))
+        val controller = controller(repository, "n1")
+        advanceUntilIdle()
+
+        controller.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+
+        assertEquals("disk full", controller.state.value.saveError)
+        assertFalse(controller.state.value.isSaving)
+    }
+
+    @Test
+    fun repeatedSaveRunsOnce() = runTest {
+        val repository = FakeEditorRepository()
+        val controller = controller(repository, "n1")
+        advanceUntilIdle()
+
+        controller.dispatch(EditorAction.Save)
+        controller.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.saveCalls)
     }
 
     private suspend fun repositoryWith(vararg notes: Note): DefaultEditorRepository {
@@ -78,7 +132,7 @@ class DefaultEditorControllerTest {
     }
 
     private fun TestScope.controller(
-        repository: DefaultEditorRepository,
+        repository: EditorRepository,
         noteId: String,
     ): DefaultEditorController =
         DefaultEditorController(
@@ -87,4 +141,36 @@ class DefaultEditorControllerTest {
             noteId = noteId,
             scope = this,
         )
+}
+
+/** In-memory repository with configurable load delay and save failure. */
+private class FakeEditorRepository(
+    private val loadDelayMillis: Long = 0,
+    private val saveFailure: Throwable? = null,
+) : EditorRepository {
+
+    private val notes = mutableMapOf<String, Note>()
+
+    var saveCalls = 0
+        private set
+
+    fun seed(note: Note) {
+        notes[note.id] = note
+    }
+
+    override suspend fun load(noteId: String): Note {
+        if (loadDelayMillis > 0) {
+            delay(loadDelayMillis)
+        }
+        return notes[noteId] ?: Note(id = noteId, title = "", content = "")
+    }
+
+    override suspend fun save(note: Note) {
+        saveCalls++
+        val failure = saveFailure
+        if (failure != null) {
+            throw failure
+        }
+        notes[note.id] = note
+    }
 }

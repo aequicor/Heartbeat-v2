@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.editor.data.repository
 
 import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.editor.data.datasource.EditorDataSource
 import io.github.aequicor.heartbeat.features.editor.data.mapper.toDto
@@ -9,6 +10,7 @@ import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 
 /** In-memory implementation of [EditorRepository]. */
+@SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 class DefaultEditorRepository(
     private val dataSource: EditorDataSource,

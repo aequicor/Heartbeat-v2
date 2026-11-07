@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorController
@@ -27,15 +28,21 @@ fun EditorScreen(
             value = state.title,
             onValueChange = { controller.dispatch(EditorAction.TitleChanged(it)) },
             placeholder = "Заголовок",
+            enabled = !state.isLoading,
         )
         HbTextField(
             value = state.content,
             onValueChange = { controller.dispatch(EditorAction.ContentChanged(it)) },
             placeholder = "Содержимое",
+            enabled = !state.isLoading,
         )
         HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
             onClick = { controller.dispatch(EditorAction.Save) },
+            enabled = !state.isLoading && !state.isSaving,
         )
+        state.saveError?.let { error ->
+            HbText(text = error)
+        }
     }
 }

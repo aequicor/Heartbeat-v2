@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.editor
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.createGraph
 import io.github.aequicor.heartbeat.di.AppScope
+import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorControllerFactory
 import io.github.aequicor.heartbeat.features.editor.api.EditorState
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
@@ -11,6 +12,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 
 /**
@@ -36,6 +38,23 @@ class MetroGraphTest {
         val controller = graph.editorControllerFactory.create("n1", this)
         advanceUntilIdle()
 
-        assertEquals(EditorState(), controller.state.value)
+        assertEquals(EditorState(title = "", content = "", isLoading = false), controller.state.value)
+        assertFalse(controller.state.value.isLoading)
+    }
+
+    @Test
+    fun savedNoteIsVisibleToNextController() = runTest {
+        val graph = createGraph<EditorTestGraph>()
+        val first = graph.editorControllerFactory.create("n1", this)
+        advanceUntilIdle()
+
+        first.dispatch(EditorAction.TitleChanged("Сохранено"))
+        first.dispatch(EditorAction.Save)
+        advanceUntilIdle()
+
+        val second = graph.editorControllerFactory.create("n1", this)
+        advanceUntilIdle()
+
+        assertEquals("Сохранено", second.state.value.title)
     }
 }
