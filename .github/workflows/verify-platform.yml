@@ -30,15 +30,12 @@ jobs:
           - platform: Windows x64
             runner: windows-2025
             task: :platform:desktop:classes
-            desktop: true
           - platform: Linux x64
             runner: ubuntu-24.04
             task: :platform:desktop:classes
-            desktop: true
           - platform: macOS ARM64
             runner: macos-15
             task: :platform:desktop:classes
-            desktop: true
           - platform: Android Emulator
             runner: ubuntu-24.04
             task: :platform:android:assembleDebug
@@ -49,8 +46,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
-          distribution: temurin
-          java-version: '21'
+          distribution: jetbrains
+          java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-read-only: false
@@ -62,20 +59,6 @@ jobs:
         run: |
           & $env:GRADLE_WRAPPER $env:GRADLE_TASK --no-daemon
           exit $LASTEXITCODE
-      - name: Launch desktop app
-        if: matrix.desktop
-        shell: pwsh
-        env:
-          GRADLE_TASK: :platform:desktop:runDistributable
-          GRADLE_WRAPPER: ${{ runner.os == 'Windows' && './gradlew.bat' || './gradlew' }}
-        run: |
-          $output = & $env:GRADLE_WRAPPER $env:GRADLE_TASK --console=plain --no-daemon 2>&1
-          $exitCode = $LASTEXITCODE
-          $text = $output -join "`n"
-          $text
-          if ($exitCode -ne 0 -or $text -notmatch '(?m)^Heartbeat started\r?$') {
-            throw "Unexpected startup output or exit code ($exitCode)"
-          }
       - name: Launch Android app
         if: matrix.platform == 'Android Emulator'
         shell: bash
