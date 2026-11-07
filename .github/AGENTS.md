@@ -64,7 +64,9 @@ PR, менять правила защиты и обращаться к ключ
    публикует статусы `static-analysis` и `architecture-check` для проверенного коммита. Политика
    проекта: до команды `/reviewed` эти проверки в CI не запускаются.
 3. `cross-platform.yml` по команде `/reviewed` выполняет только проверки, недоступные на хосте
-   владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux на ubuntu.
+   владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux и компиляцию
+   `linuxArm64` на ubuntu. Job фиксирует SHA в начале запуска и публикует статусы `linux-native` и
+   `apple-native` для проверенного SHA.
 4. Метка `verify-platform` на PR запускает сборку и запуск точек входа на Windows, Linux, macOS,
    Android и iOS. Без метки этот workflow не выполняется.
 5. Каналы `alpha`, `beta` и `release` описаны в [спецификации выпуска](../docs/specs/releases.md).
@@ -87,10 +89,10 @@ PR, менять правила защиты и обращаться к ключ
    **Require approval of the most recent reviewable push**. Запрети force push и удаление ветки. В
    настройках репозитория включи **Allow auto-merge** и **Automatically delete head branches**.
    Разреши только squash.
-4. Требуй успешные статусы `docs-build`, `static-analysis` и `architecture-check` от GitHub Actions
-   и `owner-review` от установленного GitHub App. Закрепи указанные источники в ruleset. App
-   публикует `owner-review` для текущего HEAD после подтверждения владельцем. Если интерфейс ещё не
-   показывает контекст `owner-review`, сначала открой пробный PR и опубликуй подтверждение вручную.
-   До проверки всех правил пробный PR держи открытым.
+4. Требуй успешные статусы `docs-build`, `static-analysis`, `architecture-check`, `linux-native` и
+   `apple-native` от GitHub Actions и `owner-review` от установленного GitHub App. Закрепи указанные
+   источники в ruleset. App публикует `owner-review` для текущего HEAD после подтверждения
+   владельцем. Если интерфейс ещё не показывает контекст `owner-review`, сначала открой пробный PR и
+   опубликуй подтверждение вручную. До проверки всех правил пробный PR держи открытым.
 
 [Правила защиты GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets)
