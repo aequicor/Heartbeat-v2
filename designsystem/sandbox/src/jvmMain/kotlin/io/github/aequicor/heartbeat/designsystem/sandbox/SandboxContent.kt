@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,12 +19,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbDialog
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.components.HbTooltip
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
@@ -61,6 +69,7 @@ internal fun SandboxScreen(modifier: Modifier = Modifier) {
         SandboxSection("Обратная связь") { Feedback(colors) }
         SandboxSection("Рабочая область") { Workspace(colors) }
         SandboxSection("Поверхности") { Surfaces(colors) }
+        SandboxSection("Диалоги и подсказки") { DialogsAndPopups(colors) }
     }
 }
 
@@ -111,7 +120,7 @@ private fun Palette(colors: HbColors) {
                 "Selection" to colors.selection.background,
             ),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
             StatusPair("Success", colors.status.success.foreground, colors.status.success.container)
             StatusPair("Warning", colors.status.warning.foreground, colors.status.warning.container)
             StatusPair("Error", colors.status.error.foreground, colors.status.error.container)
@@ -124,7 +133,10 @@ private fun Palette(colors: HbColors) {
 private fun SwatchRow(swatches: List<Pair<String, Color>>) {
     val colors = HbTheme.colors
 
-    Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+    ) {
         swatches.forEach { (name, color) ->
             Column(modifier = Modifier.width(SWATCH_WIDTH)) {
                 Box(
@@ -173,6 +185,12 @@ private fun TypographySamples(colors: HbColors) {
         BasicText("Мелкий текст", style = HbTypography.Caption, color = { colors.text.secondary })
         BasicText("fun main() = Unit", style = HbTypography.Code, color = { colors.text.primary })
         BasicText("12:45 · 128 токенов", style = HbTypography.Metadata, color = { colors.text.secondary })
+        BasicText(
+            "Datenschutzerklärung: Die Verarbeitung personenbezogener Daten erfolgt ausschließlich " +
+                "nach der Einwilligung der betroffenen Person.",
+            style = HbTypography.Body,
+            color = { colors.text.primary },
+        )
     }
 }
 
@@ -180,11 +198,44 @@ private val SWATCH_WIDTH = 96.dp
 
 private val SWATCH_HEIGHT = 28.dp
 
+/** Dialog open/close and tooltip trigger examples, verified interactively (HB-DS-028, HB-DS-029). */
+@Composable
+private fun DialogsAndPopups(colors: HbColors) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+    ) {
+        HbButton(text = "Открыть диалог", onClick = { showDialog = true })
+        HbTooltip(text = "Копирует выбранный текст в буфер обмена") {
+            HbButton(text = "С подсказкой", onClick = {})
+        }
+    }
+
+    if (showDialog) {
+        HbDialog(
+            title = "Удалить диалог?",
+            onDismissRequest = { showDialog = false },
+            actions = {
+                HbButton(text = "Отмена", onClick = { showDialog = false })
+                HbButton(text = "Удалить", onClick = { showDialog = false })
+            },
+        ) {
+            BasicText(
+                text = "Это действие нельзя отменить. Черновик и история диалога будут удалены.",
+                style = HbTypography.Body,
+                color = { colors.text.primary },
+            )
+        }
+    }
+}
+
 @Composable
 private fun Icons(colors: HbColors) {
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
         HbIconGlyph.entries.forEach { glyph ->
             Column(

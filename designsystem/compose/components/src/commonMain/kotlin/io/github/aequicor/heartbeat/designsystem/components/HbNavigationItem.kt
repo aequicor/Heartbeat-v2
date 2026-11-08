@@ -65,9 +65,12 @@ fun HbNavigationItem(
             .background(background)
             .drawBehind {
                 if (selected) {
+                    val width = indicatorWidth.toPx()
+                    val x = if (layoutDirection == LayoutDirection.Rtl) size.width - width else 0f
                     drawRect(
                         color = colors.selection.indicator,
-                        size = Size(indicatorWidth.toPx(), size.height),
+                        topLeft = Offset(x, 0f),
+                        size = Size(width, size.height),
                     )
                 }
             }

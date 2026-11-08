@@ -12,4 +12,19 @@ public enum class HbMotionPreference {
     System,
     Reduced,
     Full,
+    ;
+
+    /**
+     * Resolves [System] to the concrete preference reported by the host, so the theme never leaves
+     * the `System` marker in a resolved value. A concrete value passes through unchanged; a host that
+     * does not report a value defaults to the full vocabulary.
+     */
+    public fun resolve(system: HbMotionPreference): HbMotionPreference = when (this) {
+        System -> when (system) {
+            System -> Full
+            Reduced, Full -> system
+        }
+
+        Reduced, Full -> this
+    }
 }

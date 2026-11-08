@@ -16,11 +16,14 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
+import io.github.aequicor.heartbeat.designsystem.components.HbDisclosure
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
+import io.github.aequicor.heartbeat.designsystem.components.HbSegmentedControl
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -119,5 +122,48 @@ class KitInteractionTest {
         onNodeWithText("Сохранить").performClick()
 
         assertEquals(1, clicks)
+    }
+
+    @Test
+    fun segmentedControlMovesSelectionWithArrowKeys() = runComposeUiTest {
+        var selected by mutableStateOf("Диалог")
+        setContent {
+            HbTheme {
+                HbSegmentedControl(
+                    options = listOf("Диалог", "Проект", "Терминал"),
+                    selected = selected,
+                    onSelect = { selected = it },
+                    optionLabel = { it },
+                )
+            }
+        }
+
+        onNodeWithText("Диалог").requestFocus()
+        onNodeWithText("Диалог").performKeyInput { pressKey(Key.DirectionRight) }
+
+        onNodeWithText("Проект").assertIsSelected()
+    }
+
+    @Test
+    fun disabledDisclosureDoesNotExpand() = runComposeUiTest {
+        var expanded by mutableStateOf(false)
+        setContent {
+            HbTheme {
+                HbDisclosure(
+                    title = "Раздел",
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it },
+                    enabled = false,
+                ) {
+                    androidx.compose.foundation.text.BasicText("Скрытое содержимое")
+                }
+            }
+        }
+
+        onNodeWithText("Скрытое содержимое").assertDoesNotExist()
+        onNodeWithText("Раздел").performClick()
+
+        assertFalse(expanded)
+        onNodeWithText("Скрытое содержимое").assertDoesNotExist()
     }
 }

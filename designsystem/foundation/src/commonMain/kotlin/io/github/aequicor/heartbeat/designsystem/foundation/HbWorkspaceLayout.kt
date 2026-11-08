@@ -2,9 +2,6 @@ package io.github.aequicor.heartbeat.designsystem.foundation
 
 /** Navigation presentation of the resolved workspace. */
 public enum class HbNavigationMode {
-    /** Sidebar with a persistent navigation panel. */
-    Expanded,
-
     /** Compact navigation rail of the dense width. */
     Rail,
 
@@ -41,13 +38,16 @@ public object HbWorkspaceLayout {
      * Resolves the visible regions for [availableWidth].
      *
      * [sidebarWidth] and [inspectorWidth] are the user-chosen widths clamped to the documented
-     * range by the caller; [secondPane] is the user preference for a second content pane.
+     * range by the caller; [secondPane] is the user preference for a second content pane; [inspector]
+     * is the requested visibility of the inspector, which stays closed when the owner keeps it
+     * closed and is dropped only when the width cannot fit it.
      */
     public fun fit(
         availableWidth: Int,
         sidebarWidth: Int = HbPaneGeometry.SidebarPreferred,
         inspectorWidth: Int = HbPaneGeometry.InspectorPreferred,
         secondPane: Boolean = false,
+        inspector: Boolean = true,
     ): HbWorkspaceFit {
         val compact = availableWidth <= HbLayoutBreakpoints.CompactMax
         val navigation = if (compact) HbNavigationMode.Drawer else HbNavigationMode.Rail
@@ -61,24 +61,24 @@ public object HbWorkspaceLayout {
         }
 
         val navigationWidth = HbPaneGeometry.NavigationRail
-        var inspector = true
+        var inspectorVisible = inspector
         var pane = secondPane
         var sidebar = true
 
-        while (!fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspector, pane, sidebar)) {
+        while (!fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspectorVisible, pane, sidebar)) {
             when {
-                inspector -> inspector = false
+                inspectorVisible -> inspectorVisible = false
                 pane -> pane = false
                 sidebar -> sidebar = false
                 else -> break
             }
         }
 
-        val fit = fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspector, pane, sidebar)
+        val fit = fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspectorVisible, pane, sidebar)
         return HbWorkspaceFit(
             navigation = navigation,
             sidebar = sidebar && fit,
-            inspector = inspector && fit,
+            inspector = inspectorVisible && fit,
             secondPane = pane && fit,
         )
     }

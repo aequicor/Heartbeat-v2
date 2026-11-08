@@ -33,9 +33,13 @@ internal class HbAnchoredPopupPositionProvider(
         }
         val maxX = max(0, windowSize.width - popupContentSize.width)
         val maxY = max(0, windowSize.height - popupContentSize.height)
+        val x = when (layoutDirection) {
+            LayoutDirection.Ltr -> anchorBounds.left.coerceIn(0, maxX)
+            LayoutDirection.Rtl -> (anchorBounds.right - popupContentSize.width).coerceIn(0, maxX)
+        }
 
         return IntOffset(
-            x = anchorBounds.left.coerceIn(0, maxX),
+            x = x,
             y = y.coerceIn(0, maxY),
         )
     }

@@ -81,4 +81,29 @@ class HbWorkspaceLayoutTest {
         assertTrue(fit.inspector)
         assertTrue(fit.secondPane)
     }
+
+    @Test
+    fun requestedClosedInspectorStaysClosedOnAWideScreen() {
+        val fit = HbWorkspaceLayout.fit(availableWidth = 1920, inspector = false)
+
+        assertTrue(fit.sidebar)
+        assertFalse(fit.inspector)
+    }
+
+    @Test
+    fun requestedClosedInspectorIsNotReopenedWhenTheWidthReturns() {
+        val fit = HbWorkspaceLayout.fit(availableWidth = 1600, secondPane = true, inspector = false)
+
+        assertTrue(fit.sidebar)
+        assertTrue(fit.secondPane)
+        assertFalse(fit.inspector)
+    }
+
+    @Test
+    fun requestedInspectorStillCollapsesWhenItDoesNotFit() {
+        val fit = HbWorkspaceLayout.fit(availableWidth = 720, inspector = true)
+
+        assertTrue(fit.sidebar)
+        assertFalse(fit.inspector)
+    }
 }

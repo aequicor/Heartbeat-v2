@@ -11,4 +11,19 @@ public enum class HbContrastPreference {
     System,
     Standard,
     High,
+    ;
+
+    /**
+     * Resolves [System] to the concrete preference reported by the host, so the theme never leaves
+     * the `System` marker in a resolved value. A concrete value passes through unchanged; a host that
+     * does not report a value defaults to the standard palette.
+     */
+    public fun resolve(system: HbContrastPreference): HbContrastPreference = when (this) {
+        System -> when (system) {
+            System -> Standard
+            Standard, High -> system
+        }
+
+        Standard, High -> this
+    }
 }

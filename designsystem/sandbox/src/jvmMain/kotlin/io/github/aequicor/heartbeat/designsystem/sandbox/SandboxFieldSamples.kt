@@ -2,11 +2,10 @@ package io.github.aequicor.heartbeat.designsystem.sandbox
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
@@ -38,14 +37,15 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 /** Action, field and selection samples of the sandbox (HB-DS-039). */
 @Composable
 internal fun Actions(colors: HbColors) {
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
         HbButton(text = "Сохранить", onClick = {})
         HbButton(text = "Недоступно", onClick = {}, enabled = false)
+        HbButton(text = "Сохранение…", onClick = {}, busy = true, busyLabel = "Выполняется")
         HbLink(text = "Открыть проект", onClick = {})
-        HbCopyButton(label = "Копировать", copiedLabel = "Скопировано", onCopy = {})
+        HbCopyButton(label = "Копировать", copiedLabel = "Скопировано", onCopy = { true })
         HbKeyHint(keys = listOf("Ctrl", "K"))
         BasicText(
             text = "Текст",
@@ -100,13 +100,19 @@ internal fun Fields() {
 @Composable
 internal fun Selection() {
     Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.M)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+        ) {
             HbCheckbox(label = "Не отмечено", checked = false, onCheckedChange = {})
             HbCheckbox(label = "Отмечено", checked = true, onCheckedChange = {})
             HbCheckbox(label = "Смешанное", checked = true, indeterminate = true, onCheckedChange = {})
             HbCheckbox(label = "Недоступно", checked = false, onCheckedChange = {}, enabled = false)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.M)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+        ) {
             HbSwitch(label = "Автозапуск", checked = true, onCheckedChange = {})
             HbSwitch(label = "Уведомления", checked = false, onCheckedChange = {})
         }

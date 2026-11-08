@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -56,12 +58,14 @@ fun HbDisclosure(
                 .clip(HbShapes.Small)
                 .onFocusChanged { focused = it.isFocused }
                 .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+                .heightIn(min = HbSizes.minimumTarget)
                 .clickable(
                     enabled = enabled,
                     role = Role.Button,
                     onClick = { onExpandedChange(!expanded) },
                 )
                 .disclosureSemantics(
+                    enabled = enabled,
                     expanded = expanded,
                     stateDescription = stateDescription,
                     onExpandedChange = onExpandedChange,
@@ -101,14 +105,17 @@ fun HbDisclosure(
 }
 
 private fun Modifier.disclosureSemantics(
+    enabled: Boolean,
     expanded: Boolean,
     stateDescription: String?,
     onExpandedChange: (Boolean) -> Unit,
 ): Modifier = semantics {
-    if (expanded) {
-        collapse { onExpandedChange(false); true }
-    } else {
-        expand { onExpandedChange(true); true }
+    if (enabled) {
+        if (expanded) {
+            collapse { onExpandedChange(false); true }
+        } else {
+            expand { onExpandedChange(true); true }
+        }
     }
     stateDescription?.let { this.stateDescription = it }
 }

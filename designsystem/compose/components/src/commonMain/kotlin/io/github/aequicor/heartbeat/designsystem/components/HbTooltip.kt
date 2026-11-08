@@ -28,6 +28,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -82,6 +84,9 @@ fun HbTooltip(
                 } else {
                     false
                 }
+            }
+            .semantics {
+                if (active) stateDescription = text
             },
     ) {
         content()

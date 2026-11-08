@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +70,7 @@ fun HbDialog(
             Column(
                 modifier = Modifier
                     .widthIn(max = DIALOG_MAX_WIDTH)
+                    .heightIn(max = DIALOG_MAX_HEIGHT)
                     .clip(HbShapes.Large)
                     .background(colors.surface.raised)
                     .border(DIALOG_BORDER, colors.border.subtle, HbShapes.Large)
@@ -80,7 +84,13 @@ fun HbDialog(
                     color = { colors.text.primary },
                     modifier = Modifier.semantics { heading() },
                 )
-                content()
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+                    content = content,
+                )
                 Row(
                     modifier = Modifier.align(Alignment.End),
                     horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
@@ -92,6 +102,8 @@ fun HbDialog(
 }
 
 private val DIALOG_MAX_WIDTH = 560.dp
+
+private val DIALOG_MAX_HEIGHT = 560.dp
 
 private val DIALOG_BORDER = 1.dp
 

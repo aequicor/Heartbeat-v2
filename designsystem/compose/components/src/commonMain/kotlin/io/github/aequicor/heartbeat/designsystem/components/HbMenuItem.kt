@@ -28,9 +28,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
- * Action row of a menu (HB-DS-019). The row performs an action, and [selected] reports a checked
- * choice without replacing the action. [hint] carries a shortcut or a secondary value and is not
- * the only place the action is named.
+ * Action row of a menu (HB-DS-019). The row performs an action, and an optional [selected] reports a
+ * checked choice without replacing the action: a plain action item passes `null`, so it is not
+ * announced as an unselected choice. [hint] carries a shortcut or a secondary value and is not the
+ * only place the action is named.
  */
 @Composable
 fun HbMenuItem(
@@ -38,7 +39,7 @@ fun HbMenuItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    selected: Boolean = false,
+    selected: Boolean? = null,
     hint: String? = null,
 ) {
     val colors = HbTheme.colors
@@ -57,7 +58,13 @@ fun HbMenuItem(
                 role = Role.Button,
                 onClick = onClick,
             )
-            .semantics { this.selected = selected }
+            .then(
+                if (selected != null) {
+                    Modifier.semantics { this.selected = selected }
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),

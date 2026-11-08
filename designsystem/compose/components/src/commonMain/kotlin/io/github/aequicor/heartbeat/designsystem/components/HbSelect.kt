@@ -20,11 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -39,7 +43,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  *
  * The trigger is a field-shaped control with the `DropdownList` role; the options open in a
  * focusable popup with keyboard navigation. The options are supplied by the owner, so the component
- * does not query a model catalog or decide availability.
+ * does not query a model catalog or decide availability. The trigger announces its label, the
+ * selected value and the expanded state through semantics, keeps the shared focus outline, closes
+ * the popup when it becomes disabled, and reads the label and error of the surrounding
+ * [HbFormField].
  */
 @Composable
 fun <T> HbSelect(
@@ -55,23 +62,30 @@ fun <T> HbSelect(
     var expanded by remember { mutableStateOf(false) }
     var activeIndex by remember { mutableIntStateOf(0) }
     val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
+    val formLabel = HbFormFieldLocals.LocalLabel.current
+    val formError = HbFormFieldLocals.LocalError.current
+    val effectiveLabel = label.ifEmpty { formLabel.orEmpty() }
 
-    Box(modifier = modifier) {
-        SelectTrigger(
+    if (!enabled) expanded = false
+
+    Box(modifier = modifier) {        SelectTrigger(
             text = selected?.let(optionLabel) ?: placeholder,
             isPlaceholder = selected == null,
             expanded = expanded,
             enabled = enabled,
-            label = label,
+            label = effectiveLabel,
+            value = selected?.let(optionLabel),
+            error = formError,
             onClick = {
-                if (!expanded) {
+                if (enabled && !expanded) {
                     activeIndex = options.indexOf(selected).coerceAtLeast(0)
                 }
-                expanded = !expanded
+                if (enabled) expanded = !expanded
             },
+            onExpandedChange = { expanded = it },
         )
 
-        if (expanded) {
+        if (expanded && enabled) {
             Popup(
                 popupPositionProvider = remember(popupOffset) { HbAnchoredPopupPositionProvider(gap = popupOffset) },
                 onDismissRequest = { expanded = false },
@@ -101,10 +115,18 @@ private fun SelectTrigger(
     expanded: Boolean,
     enabled: Boolean,
     label: String,
+    value: String?,
+    error: String?,
     onClick: () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
+    var focused by remember { mutableStateOf(false) }
+    val border = when {
+        error != null -> colors.status.error.foreground
+        else -> colors.border.control
+    }
 
     Row(
         modifier = modifier
@@ -112,15 +134,22 @@ private fun SelectTrigger(
             .heightIn(min = HbSizes.controlHeight)
             .clip(HbShapes.Medium)
             .background(colors.surface.input)
-            .border(FIELD_BORDER, colors.border.control, HbShapes.Medium)
+            .border(FIELD_BORDER, border, HbShapes.Medium)
+            .onFocusChanged { focused = it.isFocused }
+            .hbFocusRing(focused = enabled && focused, shape = HbShapes.Medium, color = colors.focus)
             .clickable(
                 enabled = enabled,
                 role = Role.DropdownList,
                 onClick = onClick,
             )
-            .semantics {
-                if (label.isNotEmpty()) contentDescription = label
-            }
+            .selectSemantics(
+                enabled = enabled,
+                label = label,
+                value = value,
+                expanded = expanded,
+                error = error,
+                onExpandedChange = onExpandedChange,
+            )
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -132,6 +161,26 @@ private fun SelectTrigger(
         )
         HbChevronGlyph(color = colors.text.secondary, expanded = expanded)
     }
+}
+
+private fun Modifier.selectSemantics(
+    enabled: Boolean,
+    label: String,
+    value: String?,
+    expanded: Boolean,
+    error: String?,
+    onExpandedChange: (Boolean) -> Unit,
+): Modifier = semantics {
+    if (label.isNotEmpty()) contentDescription = label
+    if (value != null) stateDescription = value
+    if (enabled) {
+        if (expanded) {
+            collapse { onExpandedChange(false); true }
+        } else {
+            expand { onExpandedChange(true); true }
+        }
+    }
+    if (error != null) this.error(error)
 }
 
 

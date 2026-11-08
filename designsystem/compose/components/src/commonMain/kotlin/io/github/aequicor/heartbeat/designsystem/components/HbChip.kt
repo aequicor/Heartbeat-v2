@@ -9,13 +9,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
  * Compact metadata chip with content-aware sizing (HB-DS-018). A chip is display-only: it is not
- * focusable, so a filter chip needs the selection component instead of a clickable label.
+ * focusable, so a filter chip needs the selection component instead of a clickable label. A selected
+ * chip announces its chosen state through semantics while keeping the same non-interactive surface.
  */
 @Composable
 fun HbChip(
@@ -32,6 +35,13 @@ fun HbChip(
         modifier = modifier
             .clip(CircleShape)
             .background(background)
+            .then(
+                if (selected) {
+                    Modifier.semantics { this.selected = true }
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         contentAlignment = Alignment.Center,
     ) {

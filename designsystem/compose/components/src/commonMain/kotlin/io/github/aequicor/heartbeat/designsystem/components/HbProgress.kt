@@ -21,6 +21,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -35,8 +37,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  *
  * [progress] is a fraction of a meaningful denominator; `null` renders an indeterminate bar,
  * because a spinner must not invent a percentage. The value is exposed through
- * `progressBarRangeInfo`, so the state is announced without reading the moving bar. The label names
- * the operation and stays outside the bar.
+ * `progressBarRangeInfo`, so the state is announced without reading the moving bar. [label] names
+ * the operation and becomes the accessible name of the progress indicator; the visible label is
+ * kept for sighted users but excluded from the accessibility tree, so the operation is not
+ * announced twice. The infinite animation runs only in the indeterminate state.
  */
 @Composable
 fun HbProgress(
@@ -46,7 +50,7 @@ fun HbProgress(
 ) {
     val colors = HbTheme.colors
     val fraction = progress?.coerceIn(0f, 1f)
-    val offset = indeterminateOffset()
+    val offset = if (fraction == null) indeterminateOffset() else 0f
 
     Column(modifier = modifier) {
         if (label != null) {
@@ -54,7 +58,9 @@ fun HbProgress(
                 text = label,
                 style = HbTypography.Caption,
                 color = { colors.text.secondary },
-                modifier = Modifier.padding(bottom = HbSpacing.Xs),
+                modifier = Modifier
+                    .padding(bottom = HbSpacing.Xs)
+                    .clearAndSetSemantics { },
             )
         }
         Canvas(
@@ -62,6 +68,7 @@ fun HbProgress(
                 .fillMaxWidth()
                 .height(TRACK_HEIGHT)
                 .semantics {
+                    if (label != null) contentDescription = label
                     progressBarRangeInfo = if (fraction == null) {
                         ProgressBarRangeInfo.Indeterminate
                     } else {

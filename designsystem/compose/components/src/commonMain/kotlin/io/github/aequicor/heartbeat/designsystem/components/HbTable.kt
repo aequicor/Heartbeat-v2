@@ -34,6 +34,9 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * table exposes collection and item semantics, so a screen reader can describe the position of a
  * cell. Columns keep a bounded width and the table scrolls horizontally instead of squeezing its
  * cells; ordinary key/value records should use a stacked list instead of this table.
+ *
+ * Every row is composed at once, so the table is intended for a bounded, screen-sized number of
+ * rows; a large or unbounded dataset belongs to a lazy or paginated list, not this component.
  */
 @Composable
 fun HbTable(

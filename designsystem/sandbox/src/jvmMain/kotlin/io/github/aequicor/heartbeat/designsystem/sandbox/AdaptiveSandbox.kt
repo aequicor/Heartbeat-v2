@@ -42,7 +42,7 @@ private fun AdaptiveSample(
 ) {
     val colors = HbTheme.colors
 
-    HbAdaptive(modifier = modifier.width(width.dp)) { windowWidth, fit ->
+    HbAdaptive(modifier = modifier.width(width.dp)) { windowWidth, windowHeight, fit ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -57,7 +57,8 @@ private fun AdaptiveSample(
             )
             BasicText(
                 text = "навигация ${fit.navigation.name} · боковая ${fit.sidebar} · " +
-                    "инспектор ${fit.inspector} · вторая панель ${fit.secondPane}",
+                    "инспектор ${fit.inspector} · вторая панель ${fit.secondPane} · " +
+                    "высота ${windowHeight.name}",
                 style = HbTypography.Caption,
                 color = { colors.text.secondary },
             )

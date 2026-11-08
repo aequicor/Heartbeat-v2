@@ -52,6 +52,32 @@ class HbAnchoredPopupPositionProviderTest {
         assertEquals(136, position.y)
     }
 
+    @Test
+    fun alignsThePopupToTheLogicalEndInRtl() {
+        val position = provider.calculatePosition(
+            anchorBounds = IntRect(left = 400, top = 100, right = 600, bottom = 132),
+            windowSize = IntSize(width = 800, height = 600),
+            layoutDirection = LayoutDirection.Rtl,
+            popupContentSize = IntSize(width = 200, height = 200),
+        )
+
+        assertEquals(400, position.x)
+        assertEquals(136, position.y)
+    }
+
+    @Test
+    fun keepsTheRtlPopupInsideTheWindow() {
+        val position = provider.calculatePosition(
+            anchorBounds = IntRect(left = 50, top = 100, right = 250, bottom = 132),
+            windowSize = IntSize(width = 400, height = 600),
+            layoutDirection = LayoutDirection.Rtl,
+            popupContentSize = IntSize(width = 300, height = 200),
+        )
+
+        assertEquals(0, position.x)
+        assertEquals(136, position.y)
+    }
+
     private companion object {
         private const val GAP = 4
     }

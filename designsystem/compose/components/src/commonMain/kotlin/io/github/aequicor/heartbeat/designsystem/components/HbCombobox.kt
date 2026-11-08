@@ -10,7 +10,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -20,11 +19,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -35,7 +32,9 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * A combobox is not a plain action menu: the query is editable, the owner filters the options and
  * decides debouncing, and the popup keeps the keyboard contract of [HbOptionList]. Enter accepts
  * the active suggestion before anything broader, and Escape dismisses the suggestions before it
- * reaches a surrounding surface. [noResultsText] renders the no-results state inside the popup.
+ * reaches a surrounding surface. The popup is non-focusable so opening the suggestions never moves
+ * the focus away from the editor, and disabling the control closes the popup. [noResultsText]
+ * renders the no-results state on the same choice surface as the option list.
  */
 @Composable
 fun <T> HbCombobox(
@@ -54,6 +53,8 @@ fun <T> HbCombobox(
     var activeIndex by remember { mutableIntStateOf(0) }
     val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
 
+    if (!enabled) expanded = false
+
     Box(modifier = modifier) {
         HbTextField(
             value = query,
@@ -67,7 +68,7 @@ fun <T> HbCombobox(
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
-                .onFocusChanged { if (it.isFocused) expanded = true }
+                .onFocusChanged { if (it.isFocused && enabled) expanded = true }
                 .onPreviewKeyEvent { event ->
                     comboboxKeyEvent(
                         event = event,
@@ -85,7 +86,7 @@ fun <T> HbCombobox(
                 },
         )
 
-        if (expanded) {
+        if (expanded && enabled) {
             ComboboxPopup(
                 options = options,
                 activeIndex = activeIndex,
@@ -117,7 +118,7 @@ private fun <T> ComboboxPopup(
     Popup(
         popupPositionProvider = HbAnchoredPopupPositionProvider(gap = offset),
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+        properties = PopupProperties(focusable = false),
     ) {
         if (options.isEmpty()) {
             NoResults(text = noResultsText)
@@ -145,12 +146,14 @@ private fun NoResults(
     }
     val colors = HbTheme.colors
 
-    BasicText(
-        text = text,
-        style = HbTypography.Caption,
-        color = { colors.text.secondary },
-        modifier = modifier.padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
-    )
+    HbOptionSurface(modifier = modifier) {
+        BasicText(
+            text = text,
+            style = HbTypography.Caption,
+            color = { colors.text.secondary },
+            modifier = Modifier.padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
+        )
+    }
 }
 
 /**

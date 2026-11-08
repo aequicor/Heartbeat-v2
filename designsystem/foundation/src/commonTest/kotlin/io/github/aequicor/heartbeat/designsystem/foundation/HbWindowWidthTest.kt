@@ -36,6 +36,18 @@ class HbWindowWidthTest {
     }
 
     @Test
+    fun compactHeightEndsBeforeSixHundredForty() {
+        assertEquals(HbWindowHeight.Compact, HbWindowHeight.of(0))
+        assertEquals(HbWindowHeight.Compact, HbWindowHeight.of(639))
+    }
+
+    @Test
+    fun regularHeightStartsAtSixHundredForty() {
+        assertEquals(HbWindowHeight.Regular, HbWindowHeight.of(640))
+        assertEquals(HbWindowHeight.Regular, HbWindowHeight.of(1080))
+    }
+
+    @Test
     fun twoPaneWithSidebarMatchesTheDocumentedSum() {
         assertEquals(1038, HbPaneGeometry.TwoPaneWithSidebar)
     }

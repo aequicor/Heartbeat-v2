@@ -4,13 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
@@ -47,33 +48,29 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 /** Navigation, list, structure, metadata, feedback and workspace samples of the sandbox. */
 @Composable
 internal fun NavigationAndLists(colors: HbColors) {
-    Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.M)) {
-        Column(modifier = Modifier.width(NAV_WIDTH)) {
-            HbNavigationItem(label = "Выбранный раздел", selected = true, onClick = {})
-            HbNavigationItem(label = "Обычный раздел", selected = false, onClick = {})
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
+        HbNavigationItem(label = "Выбранный раздел", selected = true, onClick = {})
+        HbNavigationItem(label = "Обычный раздел", selected = false, onClick = {})
+        HbListItem(
+            onClick = {},
+            trailing = {
+                HbButton(text = "Открыть", onClick = {})
+            },
+        ) {
+            HbText(text = "Диалог с вложением")
+            HbBadge(label = "3", tone = HbStatusTone.Info)
         }
-        Column(modifier = Modifier.width(NAV_WIDTH)) {
-            HbListItem(
-                onClick = {},
-                trailing = {
-                    HbButton(text = "Открыть", onClick = {})
-                },
-            ) {
-                HbText(text = "Диалог с вложением")
-                HbBadge(label = "3", tone = HbStatusTone.Info)
-            }
-            HbDisclosure(
-                title = "Активность инструмента",
-                expanded = true,
-                onExpandedChange = {},
-                stateDescription = "Развёрнуто",
-            ) {
-                BasicText(
-                    text = "read_file · 12 строк",
-                    style = HbTypography.Caption,
-                    color = { colors.text.secondary },
-                )
-            }
+        HbDisclosure(
+            title = "Активность инструмента",
+            expanded = true,
+            onExpandedChange = {},
+            stateDescription = "Развёрнуто",
+        ) {
+            BasicText(
+                text = "read_file · 12 строк",
+                style = HbTypography.Caption,
+                color = { colors.text.secondary },
+            )
         }
     }
 }
@@ -86,44 +83,40 @@ internal fun Structure() {
             items = listOf("Проект", "Диалоги", "Разбор релиза"),
             onNavigate = {},
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.M)) {
-            Column(modifier = Modifier.width(STRUCTURE_NAV_WIDTH)) {
-                HbNavigationGroup(title = "Недавние") {
-                    HbNavigationItem(label = "Разбор релиза", selected = true, onClick = {})
-                    HbNavigationItem(label = "Конспект", selected = false, onClick = {})
-                }
-            }
-            Column(modifier = Modifier.width(STRUCTURE_TREE_WIDTH)) {
-                HbTreeItem(
-                    label = "designsystem",
-                    depth = 0,
-                    expanded = true,
-                    onExpandedChange = {},
-                    stateDescription = "Развёрнуто",
-                )
-                HbTreeItem(label = "foundation", depth = 1, expanded = false, onExpandedChange = {})
-                HbTreeItem(label = "compose", depth = 1, expanded = true, onExpandedChange = {})
-                HbTreeItem(label = "components", depth = 2, expanded = false, onExpandedChange = {})
-            }
-            Column(modifier = Modifier.width(STRUCTURE_TABLE_WIDTH)) {
-                HbTable(
-                    columns = listOf("Файл", "Изменён", "Статус"),
-                    rows = listOf(
-                        listOf("HbButton.kt", "10:24", "Изменён"),
-                        listOf("HbTable.kt", "10:31", "Добавлен"),
-                    ),
-                )
-            }
+        HbNavigationGroup(
+            title = "Недавние",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            HbNavigationItem(label = "Разбор релиза", selected = true, onClick = {})
+            HbNavigationItem(label = "Конспект", selected = false, onClick = {})
         }
+        HbTreeItem(
+            label = "designsystem",
+            depth = 0,
+            expanded = true,
+            onExpandedChange = {},
+            stateDescription = "Развёрнуто",
+        )
+        HbTreeItem(label = "foundation", depth = 1, expanded = false, onExpandedChange = {})
+        HbTreeItem(label = "compose", depth = 1, expanded = true, onExpandedChange = {})
+        HbTreeItem(label = "components", depth = 2, expanded = false, onExpandedChange = {})
+        HbTable(
+            columns = listOf("Файл", "Изменён", "Статус"),
+            rows = listOf(
+                listOf("HbButton.kt", "10:24", "Изменён"),
+                listOf("HbTable.kt", "10:31", "Добавлен"),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
 /** Avatar, chips, badges and a status row. */
 @Composable
 internal fun Metadata(colors: HbColors) {
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
         HbAvatar(initials = "HB", contentDescription = "Рабочая область")
         HbChip(label = "Выбрано", selected = true)
@@ -213,9 +206,9 @@ internal fun Workspace(colors: HbColors) {
 /** Sheet and inspector containers. */
 @Composable
 internal fun Surfaces(colors: HbColors) {
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.M),
-        verticalAlignment = Alignment.Top,
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.M),
     ) {
         HbSheet(
             title = "Параметры ответа",
@@ -240,14 +233,6 @@ internal fun Surfaces(colors: HbColors) {
     }
 }
 
-private val NAV_WIDTH = 360.dp
-
 private val SURFACE_WIDTH = 320.dp
 
 private val SURFACE_HEIGHT = 180.dp
-
-private val STRUCTURE_NAV_WIDTH = 220.dp
-
-private val STRUCTURE_TREE_WIDTH = 380.dp
-
-private val STRUCTURE_TABLE_WIDTH = 520.dp

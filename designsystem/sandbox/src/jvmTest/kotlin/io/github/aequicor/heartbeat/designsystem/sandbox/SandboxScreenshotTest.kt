@@ -72,6 +72,27 @@ class SandboxScreenshotTest {
         )
     }
 
+    @Test
+    fun rendersDoubleLargeTextSandbox() {
+        renderSandbox(
+            name = "sandbox-double-large-text",
+            width = WIDE_WIDTH,
+            height = DOUBLE_TEXT_HEIGHT,
+            appearance = HbAppearance.Light,
+            textScale = 2f,
+        )
+    }
+
+    @Test
+    fun rendersShortHeightSandbox() {
+        renderSandbox(
+            name = "sandbox-short-height",
+            width = WIDE_WIDTH,
+            height = SHORT_HEIGHT,
+            appearance = HbAppearance.Light,
+        )
+    }
+
     private fun renderSandbox(
         name: String,
         width: Int,
@@ -101,6 +122,7 @@ class SandboxScreenshotTest {
             file.writeBytes(data.bytes)
             assertTrue(file.length() > 0, "Empty screenshot $name")
             GoldenImage.verify(name = name, png = data.bytes)
+            GoldenImage.assertNoHorizontalClipping(name = name, png = data.bytes)
         } finally {
             scene.close()
         }
@@ -109,14 +131,18 @@ class SandboxScreenshotTest {
     private companion object {
         private const val WIDE_WIDTH = 1200
 
-        private const val WIDE_HEIGHT = 2750
+        private const val WIDE_HEIGHT = 3200
 
-        private const val LARGE_TEXT_HEIGHT = 3650
+        private const val LARGE_TEXT_HEIGHT = 4800
+
+        private const val DOUBLE_TEXT_HEIGHT = 7200
 
         private const val COMPACT_WIDTH = 390
 
-        private const val COMPACT_HEIGHT = 3350
+        private const val COMPACT_HEIGHT = 7000
 
-        private const val TOUCH_HEIGHT = 3250
+        private const val TOUCH_HEIGHT = 4800
+
+        private const val SHORT_HEIGHT = 640
     }
 }

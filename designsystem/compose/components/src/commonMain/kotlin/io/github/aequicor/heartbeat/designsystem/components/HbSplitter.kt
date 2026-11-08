@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import kotlin.math.roundToInt
 
@@ -38,8 +39,9 @@ import kotlin.math.roundToInt
  *
  * Dragging reports the delta in logical units through [onResize]; the same operation is available
  * from accessibility actions and from the arrow keys, and Home resets the arrangement when
- * [onReset] exists. The hit area is wider than the visible line, so the separator stays usable
- * without covering the adjacent content.
+ * [onReset] exists. The effective hit area matches the density minimum target while the visual line
+ * stays one logical unit, so the separator stays usable on touch without covering the adjacent
+ * content with a thick line.
  */
 @Composable
 fun HbSplitter(
@@ -52,38 +54,40 @@ fun HbSplitter(
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val stepPixels = with(LocalDensity.current) { STEP.toPx() }.roundToInt()
+    val density = LocalDensity.current
+    val step = STEP.value.roundToInt()
     val vertical = orientation == HbOrientation.Vertical
 
     Box(
         modifier = modifier
             .then(
                 if (vertical) {
-                    Modifier.fillMaxHeight().width(HIT_THICKNESS)
+                    Modifier.fillMaxHeight().width(HbSizes.minimumTarget)
                 } else {
-                    Modifier.fillMaxWidth().height(HIT_THICKNESS)
+                    Modifier.fillMaxWidth().height(HbSizes.minimumTarget)
                 },
             )
             .pointerInput(enabled, orientation) {
                 if (!enabled) return@pointerInput
                 detectDragGestures { change, dragAmount ->
                     change.consume()
-                    val delta = if (vertical) dragAmount.x else dragAmount.y
-                    onResize(delta.roundToInt())
+                    val deltaPx = if (vertical) dragAmount.x else dragAmount.y
+                    val delta = (deltaPx / density.density).roundToInt()
+                    onResize(delta)
                 }
             }
             .onFocusChanged { focused = it.isFocused }
             .focusable(enabled)
             .splitterKeys(
                 enabled = enabled,
-                stepPixels = stepPixels,
+                step = step,
                 onResize = onResize,
                 onReset = onReset,
             )
             .splitterActions(
                 enabled = enabled,
                 labels = labels,
-                stepPixels = stepPixels,
+                step = step,
                 onResize = onResize,
                 onReset = onReset,
             )
@@ -107,19 +111,19 @@ fun HbSplitter(
 /** Arrow keys resize the pane, and Home restores the preferred arrangement. */
 private fun Modifier.splitterKeys(
     enabled: Boolean,
-    stepPixels: Int,
+    step: Int,
     onResize: (Int) -> Unit,
     onReset: (() -> Unit)?,
 ): Modifier = onKeyEvent { event ->
         if (!enabled || event.type != KeyEventType.KeyDown) return@onKeyEvent false
         when (event.key) {
             Key.DirectionLeft, Key.DirectionUp -> {
-                onResize(-stepPixels)
+                onResize(-step)
                 true
             }
 
             Key.DirectionRight, Key.DirectionDown -> {
-                onResize(stepPixels)
+                onResize(step)
                 true
             }
 
@@ -136,21 +140,19 @@ private fun Modifier.splitterKeys(
 private fun Modifier.splitterActions(
     enabled: Boolean,
     labels: HbSplitterLabels,
-    stepPixels: Int,
+    step: Int,
     onResize: (Int) -> Unit,
     onReset: (() -> Unit)?,
 ): Modifier = semantics {
     if (enabled) {
         customActions = buildList {
-            add(CustomAccessibilityAction(labels.narrower) { onResize(-stepPixels); true })
-            add(CustomAccessibilityAction(labels.wider) { onResize(stepPixels); true })
+            add(CustomAccessibilityAction(labels.narrower) { onResize(-step); true })
+            add(CustomAccessibilityAction(labels.wider) { onResize(step); true })
             onReset?.let { reset -> add(CustomAccessibilityAction(labels.reset) { reset(); true }) }
         }
     }
 }
 
-
-private val HIT_THICKNESS = 8.dp
 
 private val LINE_THICKNESS = 1.dp
 

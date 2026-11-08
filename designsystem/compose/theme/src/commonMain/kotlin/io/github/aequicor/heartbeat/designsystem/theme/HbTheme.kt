@@ -42,13 +42,16 @@ object HbTheme {
  * preference behind [HbTheme.motion].
  *
  * [appearance] selects the semantic palette; [HbAppearance.System] follows the host where it reports
- * the preference. [contrast] applies the high-contrast mapping of the palette when it is [High], and
- * the system value resolves to the standard palette until the host reports a forced-contrast
- * setting. [textScale] is the user text preference and scales every type role, so containers grow
- * instead of clipping. [density] is the stable host default or the explicit user preference: it
- * selects the geometry and, on a touch host, the touch type scale. [motion] carries the
- * reduced-motion setting; [HbMotionPreference.System] resolves to the full vocabulary until the host
- * reports its accessibility setting.
+ * the preference. [contrast] applies the high-contrast mapping of the palette when it is [High];
+ * [HbContrastPreference.System] resolves to [systemContrast], which the host reports from its
+ * forced-contrast setting. [textScale] is the user text preference and scales every type role, so
+ * containers grow instead of clipping. [density] is the stable host default or the explicit user
+ * preference: it selects the geometry and, on a touch host, the touch type scale. [motion] carries
+ * the reduced-motion setting; [HbMotionPreference.System] resolves to [systemMotion], which the host
+ * reports from its accessibility setting.
+ *
+ * [systemMotion] and [systemContrast] are the explicit contract for the host to pass resolved system
+ * preferences. They must be concrete values; the [System] marker is never used as a resolved value.
  */
 @Composable
 fun HbTheme(
@@ -57,6 +60,8 @@ fun HbTheme(
     textScale: Float = 1f,
     density: HbDensity = HbDensity.Dense,
     contrast: HbContrastPreference = HbContrastPreference.System,
+    systemMotion: HbMotionPreference = HbMotionPreference.Full,
+    systemContrast: HbContrastPreference = HbContrastPreference.Standard,
     content: @Composable () -> Unit,
 ) {
     val isDark = when (appearance) {
@@ -65,16 +70,14 @@ fun HbTheme(
         HbAppearance.Dark -> true
     }
     val basePalette = if (isDark) HbColorPalettes.Dark else HbColorPalettes.Light
-    val palette = if (contrast == HbContrastPreference.High) {
+    val resolvedContrast = contrast.resolve(systemContrast)
+    val palette = if (resolvedContrast == HbContrastPreference.High) {
         HbContrastSchemes.highContrast(basePalette)
     } else {
         basePalette
     }
     val colors = remember(palette) { palette.toHbColors() }
-    val resolvedMotion = when (motion) {
-        HbMotionPreference.System -> HbMotionPreference.Full
-        HbMotionPreference.Reduced, HbMotionPreference.Full -> motion
-    }
+    val resolvedMotion = motion.resolve(systemMotion)
     val geometry = HbGeometries.forDensity(density)
     val typeScale = if (density == HbDensity.Touch) HbTypeScales.Touch else HbTypeScales.Desktop
     val typeStyles = remember(density, textScale) {

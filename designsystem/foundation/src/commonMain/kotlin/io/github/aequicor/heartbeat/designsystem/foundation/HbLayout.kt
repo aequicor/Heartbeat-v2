@@ -29,6 +29,25 @@ public enum class HbWindowWidth {
     }
 }
 
+/** Height class of the workspace (HB-DS-031). The class is derived from the available height after
+ * system insets and lets consumers reduce vertical chrome and replace tall dialogs on a short host.
+ */
+public enum class HbWindowHeight {
+    /** Below [HbLayoutBreakpoints.ShortHeight]: reduced chrome, pages replace tall dialogs. */
+    Compact,
+
+    /** At least [HbLayoutBreakpoints.ShortHeight]: regular vertical chrome. */
+    Regular;
+
+    public companion object {
+        /** Resolves the height class of an available height in logical units. */
+        public fun of(availableHeight: Int): HbWindowHeight = when {
+            availableHeight < HbLayoutBreakpoints.ShortHeight -> Compact
+            else -> Regular
+        }
+    }
+}
+
 /** Width and height signals of the adaptive contract. */
 public object HbLayoutBreakpoints {
     /** Largest width of the [HbWindowWidth.Compact] class. */
