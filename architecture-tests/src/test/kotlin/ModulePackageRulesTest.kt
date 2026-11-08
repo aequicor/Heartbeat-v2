@@ -135,6 +135,44 @@ class ModulePackageRulesTest {
     }
 
     @Test
+    fun nestedCoreModuleDeclaresItsFullPackage() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "core/preferences/api/src/commonMain/kotlin/PreferencesStore.kt",
+                "io.github.aequicor.heartbeat.core.preferences.api",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "core/preferences/api/src/commonMain/kotlin/PreferencesStore.kt",
+                "io.github.aequicor.heartbeat.core.preferences.api.model",
+            ),
+        )
+        assertViolation(
+            "core/preferences/api/src/commonMain/kotlin/PreferencesStore.kt",
+            "io.github.aequicor.heartbeat.core.preferences.datastore",
+            "core/preferences/api",
+            "io.github.aequicor.heartbeat.core.preferences.api",
+        )
+    }
+
+    @Test
+    fun storageModuleDeclaresTheStoragePackage() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "storage/database/src/commonMain/kotlin/DatabaseInitializer.kt",
+                "io.github.aequicor.heartbeat.storage.database",
+            ),
+        )
+        assertViolation(
+            "storage/database/src/commonMain/kotlin/DatabaseInitializer.kt",
+            "io.github.aequicor.heartbeat.storage.other",
+            "storage/database",
+            "io.github.aequicor.heartbeat.storage.database",
+        )
+    }
+
+    @Test
     fun diModuleDeclaresTheSharedDiPackage() {
         Assert.assertNull(
             ModulePackageRules.violation(
@@ -218,6 +256,12 @@ class ModulePackageRulesTest {
             ModulePackageRules.violation(
                 "platform/desktop/src/main/kotlin/Main.kt",
                 "io.github.aequicor.heartbeat",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "platform/desktop/src/main/kotlin/io/github/aequicor/heartbeat/di/DesktopGraph.kt",
+                "io.github.aequicor.heartbeat.di",
             ),
         )
         assertViolation(

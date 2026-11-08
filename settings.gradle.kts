@@ -18,6 +18,12 @@ include(":platform:android", ":platform:desktop")
 include(":di:api")
 include(":core:platform-api", ":core:network", ":core:database", ":core:filesystem")
 include(
+    ":core:preferences:api",
+    ":core:preferences:datastore",
+    ":core:preferences:sqlite",
+)
+include(":storage:database")
+include(
     ":designsystem:foundation",
     ":designsystem:sandbox",
     ":designsystem:consumer",

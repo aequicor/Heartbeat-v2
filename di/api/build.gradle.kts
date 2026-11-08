@@ -5,5 +5,6 @@ plugins {
 kotlin {
     sourceSets.commonMain.dependencies {
         api(libs.metro.runtime)
+        api(libs.kotlinx.coroutines.core)
     }
 }

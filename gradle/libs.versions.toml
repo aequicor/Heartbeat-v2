@@ -10,6 +10,9 @@ kotlinx-serialization = "1.6.3"
 junit = "4.13.2"
 konsist = "1.0.0-beta.1"
 jewel = "0.42.0-263.7307.200"
+sqldelight = "2.4.1"
+datastore = "1.2.1"
+okio = "3.18.2"
 detekt = "2.0.0-alpha.6"
 detekt-compose-rules = "0.6.8"
 kode-compose-rules = "2.1.2"
@@ -33,6 +36,14 @@ metro-gradle-plugin = { module = "dev.zacsweers.metro:gradle-plugin", version.re
 metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+sqldelight-gradle-plugin = { module = "app.cash.sqldelight:gradle-plugin", version.ref = "sqldelight" }
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
+sqldelight-android-driver = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
+sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+sqldelight-native-driver = { module = "app.cash.sqldelight:native-driver", version.ref = "sqldelight" }
+datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }
 konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }

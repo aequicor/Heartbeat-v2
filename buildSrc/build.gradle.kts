@@ -16,6 +16,7 @@ dependencies {
     implementation(libs.kotlin.compose.gradle.plugin)
     implementation(libs.compose.gradle.plugin)
     implementation(libs.metro.gradle.plugin)
+    implementation(libs.sqldelight.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
 
     // Unit tests cover the pure rules in heartbeat/ArchitectureRules.kt.

@@ -28,6 +28,11 @@ kotlin {
     linuxX64()
     linuxArm64()
 
+    // Intermediate source sets (nativeMain, appleMain, iosMain, macosMain, linuxMain) let
+    // infrastructure modules share one platform implementation across compatible targets, for
+    // example the SQLDelight native driver or the DataStore targets that exclude mingwX64.
+    applyDefaultHierarchyTemplate()
+
     jvmToolchain {
         languageVersion = KmpDefaults.JAVA_LANGUAGE_VERSION
         vendor = KmpDefaults.JVM_VENDOR

@@ -29,6 +29,7 @@ object ArchitectureRules {
         FeatureImpl,
         FeaturePresentation,
         FeatureUi,
+        Storage,
         DiApi,
         Core,
         DesignSystem,
@@ -122,6 +123,14 @@ object ArchitectureRules {
             Role.DiApi,
             Role.Core,
         ),
+        // Schema composition is the one reason storage depends on feature implementations.
+        // Features never depend on storage: they receive the connection through core contracts.
+        Role.Storage to setOf(
+            Role.Storage,
+            Role.FeatureImpl,
+            Role.DiApi,
+            Role.Core,
+        ),
         Role.DiApi to setOf(Role.DiApi, Role.Core),
         Role.Core to setOf(Role.Core, Role.DiApi),
         Role.DesignSystem to setOf(Role.DesignSystem, Role.Core),
@@ -145,6 +154,8 @@ object ArchitectureRules {
         Role.ShellPresentation to composeFrameworkGroups,
         Role.FeatureUi to uiFrameworkGroups + METRO_GROUP,
         Role.ShellUi to listOf(METRO_GROUP),
+        // Storage owns persistence and Metro bindings, but never renders UI.
+        Role.Storage to uiFrameworkGroups,
         Role.DiApi to uiFrameworkGroups,
         Role.Core to uiFrameworkGroups + METRO_GROUP,
         Role.DesignSystem to listOf(DECOMPOSE_GROUP, METRO_GROUP),
@@ -197,6 +208,7 @@ object ArchitectureRules {
         path == ":navigation:api" -> Role.NavigationApi
         path == ":navigation:decompose" -> Role.NavigationDecompose
         path == ":navigation:decompose-compose" -> Role.NavigationCompose
+        path.startsWith(":storage:") -> Role.Storage
         isFeature(path) && isApi(path) -> Role.FeatureApi
         isFeature(path) && isImpl(path) -> Role.FeatureImpl
         isFeature(path) && pathSegments(path).contains("presentation") -> Role.FeaturePresentation
@@ -240,6 +252,9 @@ object ArchitectureRules {
         }
         if (from == Role.FeatureUi && to == Role.FeaturePresentation) {
             return "ui may depend only on the presentation adapter of the same feature"
+        }
+        if (from == Role.FeatureImpl && to == Role.Storage) {
+            return "features must not depend on storage"
         }
         return when {
             from == Role.FeatureApi -> "api modules depend only on api contracts and core"
@@ -305,6 +320,7 @@ object ArchitectureRules {
         Role.DesignSystem -> "designsystem"
         Role.FeaturePresentation, Role.ShellPresentation -> "presentation adapters"
         Role.NavigationApi, Role.NavigationDecompose, Role.NavigationCompose -> "navigation"
+        Role.Storage -> "storage"
         Role.Platform -> "platform"
         Role.Other -> "module"
     }

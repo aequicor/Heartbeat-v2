@@ -1,0 +1,14 @@
+CREATE TABLE note (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL
+);
+
+selectById:
+SELECT id, title, content
+FROM note
+WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO note(id, title, content)
+VALUES (?, ?, ?);

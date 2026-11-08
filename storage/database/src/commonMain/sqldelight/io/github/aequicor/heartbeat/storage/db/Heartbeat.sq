@@ -1,0 +1,3 @@
+-- The aggregate database owns no tables of its own. Feature schemas and the preferences
+-- fallback arrive through `dependency(project(...))`; this file only makes the SQLDelight
+-- source set non-empty so the aggregate is generated from the composed schema.

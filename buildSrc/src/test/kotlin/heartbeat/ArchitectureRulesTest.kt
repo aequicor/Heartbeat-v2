@@ -24,6 +24,7 @@ class ArchitectureRulesTest {
         ":features:editor:impl" to Role.FeatureImpl,
         ":features:editor:presentation:decompose" to Role.FeaturePresentation,
         ":features:editor:ui:compose" to Role.FeatureUi,
+        ":storage:database" to Role.Storage,
         ":di:api" to Role.DiApi,
         ":core:network" to Role.Core,
         ":designsystem:compose:components" to Role.DesignSystem,
@@ -159,8 +160,7 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun coreAndDesignSystemMustNotDependOnFeatures() {
-        assertEquals(
+    fun coreAndDesignSystemMustNotDependOnFeatures() {        assertEquals(
             "core must not depend on features, shell or designsystem",
             ArchitectureRules.projectDependencyViolation(":core:network", ":features:editor:api"),
         )
@@ -169,6 +169,44 @@ class ArchitectureRulesTest {
             ArchitectureRules.projectDependencyViolation(
                 ":designsystem:compose:components",
                 ":features:editor:api",
+            ),
+        )
+    }
+
+    @Test
+    fun storageComposesFeatureSchemasButFeaturesStayIndependent() {
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(":storage:database", ":features:editor:impl"),
+        )
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(":storage:database", ":core:preferences:sqlite"),
+        )
+        assertEquals(
+            "features must not depend on storage",
+            ArchitectureRules.projectDependencyViolation(
+                ":features:editor:impl",
+                ":storage:database",
+            ),
+        )
+    }
+
+    @Test
+    fun storageMayUseMetroButNotUiFrameworks() {
+        assertNull(
+            ArchitectureRules.moduleDependencyViolation(":storage:database", "dev.zacsweers.metro"),
+        )
+        assertEquals(
+            "storage must not depend on Compose",
+            ArchitectureRules.moduleDependencyViolation(
+                ":storage:database",
+                "org.jetbrains.compose.runtime",
+            ),
+        )
+        assertEquals(
+            "storage must not import Decompose: com.arkivanov.decompose.ComponentContext",
+            ArchitectureRules.forbiddenImport(
+                ":storage:database",
+                "com.arkivanov.decompose.ComponentContext",
             ),
         )
     }

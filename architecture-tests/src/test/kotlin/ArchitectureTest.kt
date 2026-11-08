@@ -47,6 +47,8 @@ class ArchitectureTest {
     /** Production sources of the infrastructure modules; `shell` may stay empty. */
     private val infrastructureScope = Konsist.scopeFromProduction(moduleName = ":core..")
 
+    private val storageScope = Konsist.scopeFromProduction(moduleName = ":storage..")
+
     private val diScope = Konsist.scopeFromProduction(moduleName = ":di..")
 
     private val shellScope = Konsist.scopeFromProduction(moduleName = ":shell..")
@@ -115,7 +117,8 @@ class ArchitectureTest {
     @Test
     fun modulePackagesMatchTheGradleModule() {
         val files = featureScope.files + designSystemScope.files + infrastructureScope.files +
-            diScope.files + shellScope.files + navigationScope.files + platformScope.files
+            storageScope.files + diScope.files + shellScope.files + navigationScope.files +
+            platformScope.files
         val paths = files.map { it.projectPath.replace('\\', '/') }
         // The rule derives the module from the path, so a path without the `/src/` part, or a
         // path that does not start at the repository directory, would silently disable the check.
