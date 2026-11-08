@@ -15,9 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,11 +61,12 @@ import org.jetbrains.compose.resources.stringResource
  * States: default uses the [variant] pair, hover and press use their own semantic colors, [busy]
  * prevents duplicate activation immediately and announces the busy state, and shows a delayed
  * spinner so a short operation does not flicker; disabled keeps the container muted and dims the
- * label. The spinner occupies a slot that is reserved in every state, so the button keeps its width
- * while busy (HB-DS-015). The busy state description is part of the contract: when the owner does
- * not pass [busyLabel], the localized kit label is announced. The focus outline is drawn outside
- * the button with the documented gap, so it stays a separate layer over the surface. The component
- * has no error state: a failed action belongs to the screen that owns the operation.
+ * label. The spinner is drawn over the leading padding instead of occupying a permanent slot, so
+ * the label stays centered while idle and the button keeps its width when the spinner appears
+ * (HB-DS-015). The busy state description is part of the contract: when the owner does not pass
+ * [busyLabel], the localized kit label is announced. The focus outline is drawn outside the button
+ * with the documented gap, so it stays a separate layer over the surface. The component has no
+ * error state: a failed action belongs to the screen that owns the operation.
  */
 @Composable
 fun HbButton(
@@ -128,8 +127,7 @@ fun HbButton(
                 enabled = interactive,
                 role = Role.Button,
                 onClick = onClick,
-            )
-            .padding(horizontal = HbSpacing.M, vertical = HbSpacing.S),
+            ),
     ) {
         HbButtonContent(
             text = text,
@@ -145,21 +143,24 @@ private fun HbButtonContent(
     contentColor: Color,
     indicatorVisible: Boolean,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
-    ) {
-        // The slot exists in every state, so the delayed indicator cannot change the width.
-        Box(modifier = Modifier.size(BUSY_INDICATOR_SIZE), contentAlignment = Alignment.Center) {
-            if (indicatorVisible) {
-                BusyIndicator(color = contentColor, modifier = Modifier.matchParentSize())
-            }
-        }
+    Box(contentAlignment = Alignment.Center) {
         BasicText(
             text = text,
             color = { contentColor },
             style = HbTypography.Body,
+            modifier = Modifier.padding(horizontal = HbSpacing.M, vertical = HbSpacing.S),
         )
+        if (indicatorVisible) {
+            // The delayed spinner is drawn over the leading padding, so it neither shifts the
+            // label nor reserves an empty slot while the button is idle (HB-DS-015).
+            BusyIndicator(
+                color = contentColor,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = HbSpacing.Xxs)
+                    .size(BUSY_INDICATOR_SIZE),
+            )
+        }
     }
 }
 
@@ -278,7 +279,7 @@ private fun BusyIndicator(
     }
 }
 
-private val BUSY_INDICATOR_SIZE = 16.dp
+private val BUSY_INDICATOR_SIZE = 12.dp
 
 private val BUSY_STROKE_WIDTH = 2.dp
 

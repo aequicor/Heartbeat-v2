@@ -49,15 +49,17 @@ internal fun ConsumerScreen() {
             expanded = false,
             onDismissRequest = {},
             actions = listOf(HbMenuAction(label = "Открыть", onClick = {})),
-        ) {
-            HbButton(text = "Меню", onClick = {})
+        ) { triggerModifier ->
+            HbButton(text = "Меню", onClick = {}, modifier = triggerModifier)
         }
         HbLazyList(items = listOf("Первый"), key = { it }) { item -> HbText(text = item) }
         HbScrollArea { HbText(text = "Прокрутка") }
         HbSettingsRow(
             title = "Настройка",
             description = "Пояснение",
-            control = { HbSwitch(label = "", checked = true, onCheckedChange = {}) },
+            control = { controlModifier ->
+                HbSwitch(label = "", checked = true, onCheckedChange = {}, modifier = controlModifier)
+            },
         )
         HbSidebar(title = "Диалоги") { HbText(text = "Раздел") }
     }

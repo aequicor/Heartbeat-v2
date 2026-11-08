@@ -40,11 +40,13 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * The dialog is a platform dialog window, so the host keeps the modality and the focus containment
  * of its platform; the content also draws the application scrim of the contract, so the decision is
  * visibly modal on every renderer. A click outside the panel requests dismissal when
- * [dismissOnClickOutside] is set, the title is exposed as a heading, and [onDismissRequest] receives
- * an Escape or a close request when [dismissOnBackPress] is set. A blocking decision passes both
- * flags as `false`, so the surface cannot be dismissed by an accidental backdrop click while the
- * choice is still required. The panel is capped at the dialog width of the contract and keeps its
- * header and [actions] outside the scrollable content.
+ * [dismissOnClickOutside] is set, the title is exposed as a heading, and a platform dismiss request
+ * — Escape or a close gesture — reaches [onDismissRequest] only when [dismissOnBackPress] is set by
+ * the platform properties. Each flag controls only its own dismissal path: a disabled back press
+ * does not swallow an enabled click outside. A blocking decision passes both flags as `false`, so
+ * the surface cannot be dismissed by an accidental backdrop click while the choice is still
+ * required. The panel is capped at the dialog width of the contract and keeps its header and
+ * [actions] outside the scrollable content.
  */
 @Composable
 fun HbDialog(
@@ -61,7 +63,7 @@ fun HbDialog(
     val scrim = if (darkCanvas) HbEffects.ScrimDark else HbEffects.ScrimLight
 
     Dialog(
-        onDismissRequest = { if (dismissOnBackPress) onDismissRequest() },
+        onDismissRequest = onDismissRequest,
         properties = DialogProperties(
             dismissOnBackPress = dismissOnBackPress,
             dismissOnClickOutside = dismissOnClickOutside,

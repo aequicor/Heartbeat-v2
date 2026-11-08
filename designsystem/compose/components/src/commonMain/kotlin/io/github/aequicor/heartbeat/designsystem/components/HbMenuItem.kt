@@ -19,8 +19,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -80,6 +80,15 @@ fun HbMenuItem(
                 text = hint,
                 style = HbTypography.Metadata,
                 color = { colors.text.secondary },
+            )
+        }
+        if (selected == true) {
+            // A permanent check mark keeps the chosen option visible without relying on the
+            // background tint or on the keyboard-active row.
+            HbIcon(
+                glyph = HbIconGlyph.Check,
+                tint = if (enabled) colors.selection.indicator else colors.text.disabled,
+                size = HbSizes.controlGlyph,
             )
         }
     }

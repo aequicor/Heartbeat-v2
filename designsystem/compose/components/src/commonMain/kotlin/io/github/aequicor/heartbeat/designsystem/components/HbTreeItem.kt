@@ -20,7 +20,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
@@ -29,11 +32,13 @@ import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.resources.Res
 import io.github.aequicor.heartbeat.designsystem.resources.hb_collapse
 import io.github.aequicor.heartbeat.designsystem.resources.hb_expand
 import io.github.aequicor.heartbeat.designsystem.resources.hb_tree_level
+import io.github.aequicor.heartbeat.designsystem.theme.HbColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -53,7 +58,9 @@ import org.jetbrains.compose.resources.stringResource
  * [depth] is announced as a localized level in the state description next to the caller's
  * [stateDescription], because the Compose semantics contract has no platform-independent tree-level
  * property. The platform accessibility bridge then reads the branch position instead of only the
- * indentation.
+ * indentation. Selection is always announced, including the explicit `false` state, and a selected
+ * row draws the same permanent indicator bar as [HbNavigationItem], so the background tint is not
+ * the only sign of the choice.
  */
 @Composable
 fun HbTreeItem(
@@ -78,8 +85,7 @@ fun HbTreeItem(
     val description = treeStateDescription(stateDescription, levelLabel)
     // One toggle action serves the pointer, the keyboard and the accessibility action.
     val toggleExpansion: (() -> Unit)? = onExpandedChange?.let { change -> { change(!expanded) } }
-    val background = if (selected) colors.selection.background else Color.Transparent
-    val contentColor = if (selected) colors.selection.foreground else colors.text.primary
+    val (background, contentColor) = treeRowColors(selected, colors)
 
     Row(
         modifier = modifier
@@ -93,6 +99,11 @@ fun HbTreeItem(
             )
             .clip(HbShapes.Small)
             .background(background)
+            .treeSelectionIndicator(
+                selected = selected,
+                depth = depth,
+                color = colors.selection.indicator,
+            )
             .then(treeRowInteraction(onClick = onClick, toggleExpansion = toggleExpansion))
             .treeRowSemantics(
                 activatable = activatable,
@@ -126,6 +137,38 @@ fun HbTreeItem(
     }
 }
 
+private data class TreeRowColors(val background: Color, val contentColor: Color)
+
+private fun treeRowColors(selected: Boolean, colors: HbColors): TreeRowColors =
+    if (selected) {
+        TreeRowColors(colors.selection.background, colors.selection.foreground)
+    } else {
+        TreeRowColors(Color.Transparent, colors.text.primary)
+    }
+
+private fun Modifier.treeSelectionIndicator(
+    selected: Boolean,
+    depth: Int,
+    color: Color,
+): Modifier = if (!selected) {
+    this
+} else {
+    drawBehind {
+        val indent = INDENT_STEP.toPx() * depth
+        val width = selectionIndicatorWidth.toPx()
+        val x = if (layoutDirection == LayoutDirection.Rtl) {
+            size.width - indent - width
+        } else {
+            indent
+        }
+        drawRect(
+            color = color,
+            topLeft = Offset(x, 0f),
+            size = Size(width, size.height),
+        )
+    }
+}
+
 private fun treeRowInteraction(
     onClick: (() -> Unit)?,
     toggleExpansion: (() -> Unit)?,
@@ -149,7 +192,7 @@ private fun Modifier.treeRowSemantics(
             expand { toggleExpansion(); true }
         }
     }
-    if (selected) this.selected = true
+    this.selected = selected
     description?.let { this.stateDescription = it }
 }
 
@@ -182,3 +225,5 @@ private fun treeStateDescription(state: String?, level: String?): String? =
     listOfNotNull(state, level).joinToString(", ").ifEmpty { null }
 
 private val INDENT_STEP = 16.dp
+
+private val selectionIndicatorWidth = 2.dp

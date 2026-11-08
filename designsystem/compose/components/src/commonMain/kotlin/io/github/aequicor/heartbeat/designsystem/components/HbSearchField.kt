@@ -30,12 +30,12 @@ fun HbSearchField(
         label = label,
         placeholder = placeholder,
         enabled = enabled,
-        trailing = {
+        trailing = { fieldEnabled ->
             if (value.isNotEmpty()) {
                 HbIconButton(
                     contentDescription = clearDescription,
                     onClick = { onValueChange("") },
-                    enabled = enabled,
+                    enabled = fieldEnabled,
                 ) {
                     HbCloseGlyph(color = colors.text.secondary)
                 }

@@ -134,7 +134,9 @@ private fun KitStrip() {
         HbSettingsRow(
             title = "Автозапуск",
             description = "Запускать Heartbeat при входе",
-            control = { HbSwitch(label = "", checked = true, onCheckedChange = {}) },
+            control = { controlModifier ->
+                HbSwitch(label = "", checked = true, onCheckedChange = {}, modifier = controlModifier)
+            },
         )
         BasicText(
             text = "Длинная локализованная подпись действия, которая переносится",

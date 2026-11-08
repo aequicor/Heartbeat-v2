@@ -18,9 +18,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -34,9 +39,13 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
+import io.github.aequicor.heartbeat.designsystem.components.HbBreadcrumbs
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
+import io.github.aequicor.heartbeat.designsystem.components.HbLink
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
+import io.github.aequicor.heartbeat.designsystem.components.HbSelect
+import io.github.aequicor.heartbeat.designsystem.components.HbSettingsRow
 import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
 import io.github.aequicor.heartbeat.designsystem.components.HbTable
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
@@ -389,6 +398,200 @@ class KitContractTest {
         )
     }
 
+    @Test
+    fun idleButtonKeepsItsLabelCenteredWithoutABusySlot() = runComposeUiTest {
+        setContent {
+            HbTheme {
+                HbButton(
+                    text = "Сохранить",
+                    onClick = {},
+                    modifier = Modifier.testTag(IdleTag),
+                )
+            }
+        }
+
+        val button = onNodeWithTag(IdleTag).getUnclippedBoundsInRoot()
+        val label = onNodeWithText("Сохранить", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val buttonCenter = (button.left.value + button.right.value) / 2f
+        val labelCenter = (label.left.value + label.right.value) / 2f
+
+        assertTrue(
+            abs(buttonCenter - labelCenter) <= 1f,
+            "The idle label must stay centered; button center $buttonCenter, label center $labelCenter",
+        )
+    }
+
+    @Test
+    fun settingsRowGivesItsTitleToTheNestedSwitch() = runComposeUiTest {
+        var checked by mutableStateOf(true)
+        setContent {
+            HbTheme {
+                HbSettingsRow(
+                    title = "Автозапуск",
+                    control = { controlModifier ->
+                        HbSwitch(
+                            label = "",
+                            checked = checked,
+                            onCheckedChange = { checked = it },
+                            modifier = controlModifier,
+                        )
+                    },
+                )
+            }
+        }
+
+        onNodeWithContentDescription("Автозапуск").assertIsOn().performClick()
+
+        assertFalse(checked, "The switch named by the settings row must toggle")
+    }
+
+    @Test
+    fun clickableTableRowKeepsTheMinimumTargetAndFocus() = runComposeUiTest {
+        setContent {
+            HbTheme(density = HbDensity.Touch) {
+                HbTable(
+                    columns = listOf("Файл", "Статус"),
+                    rows = listOf(listOf("HbButton.kt", "Изменён")),
+                    onRowClick = {},
+                )
+            }
+        }
+
+        val row = onNode(hasClickAction()).getUnclippedBoundsInRoot()
+        assertTrue(
+            row.bottom - row.top >= 48.dp,
+            "A clickable table row must keep the touch minimum target",
+        )
+
+        onNode(hasClickAction()).requestFocus()
+        onNode(hasClickAction()).assertIsFocused()
+    }
+
+    @Test
+    fun shortLinkKeepsTheMinimumTargetOnBothAxes() = runComposeUiTest {
+        setContent {
+            HbTheme(density = HbDensity.Touch) {
+                HbLink(
+                    text = "OK",
+                    onClick = {},
+                    modifier = Modifier.testTag(LinkTag),
+                )
+            }
+        }
+
+        val bounds = onNodeWithTag(LinkTag).getUnclippedBoundsInRoot()
+        assertTrue(bounds.right - bounds.left >= 48.dp, "A short link is too narrow for touch")
+        assertTrue(bounds.bottom - bounds.top >= 48.dp, "A short link is too short for touch")
+    }
+
+    @Test
+    fun selectedTreeItemIsAnnouncedAndMarked() = runComposeUiTest {
+        var marker = Color.Unspecified
+        setContent {
+            HbTheme {
+                marker = HbTheme.colors.selection.indicator
+                HbTreeItem(
+                    label = "components",
+                    depth = 0,
+                    selected = true,
+                    onClick = {},
+                    modifier = Modifier.testTag(TreeNodeTag),
+                )
+            }
+        }
+
+        onNodeWithTag(TreeNodeTag).assertIsSelected()
+
+        val pixels = onNodeWithTag(TreeNodeTag).captureToImage().toPixelMap()
+        val marked = (0 until 3).any { x ->
+            (0 until pixels.height).any { y ->
+                colorDistance(pixels[x, y], marker) < RingColorTolerance
+            }
+        }
+        assertTrue(marked, "A selected tree item must draw a permanent non-color-only marker")
+    }
+
+    @Test
+    fun unselectedTreeItemAnnouncesTheExplicitFalseState() = runComposeUiTest {
+        setContent {
+            HbTheme {
+                HbTreeItem(
+                    label = "foundation",
+                    depth = 0,
+                    selected = false,
+                    onClick = {},
+                    modifier = Modifier.testTag(TreeNodeTag),
+                )
+            }
+        }
+
+        onNodeWithTag(TreeNodeTag).assertIsNotSelected()
+    }
+
+    @Test
+    fun shortBreadcrumbKeepsTheMinimumTargetOnBothAxes() = runComposeUiTest {
+        setContent {
+            HbTheme(density = HbDensity.Touch) {
+                HbBreadcrumbs(
+                    items = listOf("A", "B"),
+                    onNavigate = {},
+                    modifier = Modifier.testTag(BreadcrumbTag),
+                )
+            }
+        }
+
+        val link = onNodeWithText("A").getUnclippedBoundsInRoot()
+        assertTrue(link.right - link.left >= 48.dp, "A short breadcrumb is too narrow for touch")
+        assertTrue(link.bottom - link.top >= 48.dp, "A short breadcrumb is too short for touch")
+    }
+
+    @Test
+    fun disabledFieldPassesTheDisabledStateToTrailing() = runComposeUiTest {
+        var trailingEnabled: Boolean? = null
+        setContent {
+            HbTheme {
+                HbTextField(
+                    value = "",
+                    onValueChange = {},
+                    label = "Поле",
+                    enabled = false,
+                    trailing = { fieldEnabled -> trailingEnabled = fieldEnabled },
+                )
+            }
+        }
+
+        assertEquals(false, trailingEnabled)
+    }
+
+    @Test
+    fun disabledSelectKeepsItsDisabledBorderAndDoesNotOpen() = runComposeUiTest {
+        var border = Color.Unspecified
+        setContent {
+            HbTheme {
+                border = HbTheme.colors.border.subtle
+                HbSelect(
+                    options = listOf("Альфа"),
+                    selected = null,
+                    onSelect = {},
+                    label = "Модель",
+                    enabled = false,
+                    optionLabel = { it },
+                    modifier = Modifier.testTag(SelectTag),
+                )
+            }
+        }
+
+        onNodeWithContentDescription("Модель").assertIsNotEnabled().performClick()
+        onNodeWithText("Альфа").assertDoesNotExist()
+
+        val pixels = onNodeWithTag(SelectTag).captureToImage().toPixelMap()
+        val middleY = pixels.height / 2
+        val marked = (0 until 3).any { x ->
+            colorDistance(pixels[x, middleY], border) < RingColorTolerance
+        }
+        assertTrue(marked, "The disabled select must use the subtle border role")
+    }
+
     private fun colorDistance(first: Color, second: Color): Float =
         maxOf(
             abs(first.red - second.red),
@@ -402,6 +605,9 @@ class KitContractTest {
         private const val FieldTag = "field"
         private const val TreeNodeTag = "tree-node"
         private const val AvatarTag = "avatar"
+        private const val LinkTag = "link"
+        private const val SelectTag = "select"
+        private const val BreadcrumbTag = "breadcrumb"
         private const val RingSearch = 24
         private const val RingColorTolerance = 0.05f
     }

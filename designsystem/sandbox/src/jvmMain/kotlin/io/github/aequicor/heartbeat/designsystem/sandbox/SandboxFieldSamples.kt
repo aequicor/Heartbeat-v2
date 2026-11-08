@@ -27,6 +27,7 @@ import io.github.aequicor.heartbeat.designsystem.components.HbLazyList
 import io.github.aequicor.heartbeat.designsystem.components.HbLink
 import io.github.aequicor.heartbeat.designsystem.components.HbMenu
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
+import io.github.aequicor.heartbeat.designsystem.components.HbMenuSeparator
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
 import io.github.aequicor.heartbeat.designsystem.components.HbScrollArea
 import io.github.aequicor.heartbeat.designsystem.components.HbSearchField
@@ -194,49 +195,67 @@ private val SCROLL_HEIGHT = 72.dp
 
 private val LAZY_HEIGHT = 120.dp
 
-/** Menu, settings row, lazy list and scroll area of the extended kit (HB-DS-039). */
+/** Menu trigger and scroll area of the extended kit, kept separately to bound the sample length. */
 @Composable
-internal fun ExtendedKit(colors: HbColors) {
+private fun ExtendedKitMenu(colors: HbColors) {
     var menuOpen by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
-            HbMenu(
-                expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                actions = listOf(
-                    HbMenuAction(label = "Переименовать", onClick = {}),
-                    HbMenuAction(label = "Архивировать", onClick = {}, enabled = false),
-                ),
-            ) {
-                HbButton(
-                    text = "Действия",
-                    onClick = { menuOpen = true },
-                    variant = HbButtonVariant.Secondary,
-                )
-            }
-            HbScrollArea(modifier = Modifier.width(SCROLL_WIDTH).height(SCROLL_HEIGHT)) {
-                Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs)) {
-                    repeat(5) {
-                        BasicText(
-                            text = "Строка ${it + 1}",
-                            style = HbTypography.Caption,
-                            color = { colors.text.secondary },
-                        )
-                    }
+    Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+        HbMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+            actions = listOf(
+                HbMenuAction(label = "Переименовать", onClick = {}),
+                HbMenuSeparator,
+                HbMenuAction(label = "Архивировать", onClick = {}, enabled = false),
+            ),
+        ) { triggerModifier ->
+            HbButton(
+                text = "Действия",
+                onClick = { menuOpen = true },
+                variant = HbButtonVariant.Secondary,
+                modifier = triggerModifier,
+            )
+        }
+        HbScrollArea(modifier = Modifier.width(SCROLL_WIDTH).height(SCROLL_HEIGHT)) {
+            Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs)) {
+                repeat(5) {
+                    BasicText(
+                        text = "Строка ${it + 1}",
+                        style = HbTypography.Caption,
+                        color = { colors.text.secondary },
+                    )
                 }
             }
         }
+    }
+}
+
+/** Menu, settings row, lazy list and scroll area of the extended kit (HB-DS-039). */
+@Composable
+internal fun ExtendedKit(colors: HbColors) {
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+        ExtendedKitMenu(colors)
         HbSettingsRow(
             title = "Автозапуск",
             description = "Запускать Heartbeat при входе в систему",
-            control = { HbSwitch(label = "", checked = true, onCheckedChange = {}) },
+            control = { controlModifier ->
+                HbSwitch(label = "", checked = true, onCheckedChange = {}, modifier = controlModifier)
+            },
         )
         HbSettingsRow(
             title = "Анонимная телеметрия",
             description = "Недоступно в этой сборке",
             enabled = false,
-            control = { HbSwitch(label = "", checked = false, onCheckedChange = {}, enabled = false) },
+            control = { controlModifier ->
+                HbSwitch(
+                    label = "",
+                    checked = false,
+                    onCheckedChange = {},
+                    enabled = false,
+                    modifier = controlModifier,
+                )
+            },
         )
         HbLazyList(
             items = (1..6).map { "Элемент $it" },
@@ -259,8 +278,8 @@ private fun DisabledFieldSample(modifier: Modifier = Modifier) {    HbTextField(
         label = "Отключено",
         placeholder = "Недоступно для ввода",
         enabled = false,
-        trailing = {
-            HbLink(text = "Справка", onClick = {}, enabled = false)
+        trailing = { fieldEnabled ->
+            HbLink(text = "Справка", onClick = {}, enabled = fieldEnabled)
         },
         modifier = modifier,
     )

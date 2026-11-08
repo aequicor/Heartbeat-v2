@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
@@ -28,6 +29,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * select keeps its own accessible name and state. [onClick] makes the whole row an additional
  * target for hosts where clicking the row is expected; the inner control still handles its own
  * click first. The row grows with the text scale instead of clipping its explanation.
+ *
+ * [control] receives the modifier that carries the title as the accessible name. The caller must
+ * apply that modifier to the interactive control itself: a nested control has its own semantics
+ * node, so merging the row descendants cannot give the switch or the select its name. The modifier
+ * is also the place for the caller's own styling.
  */
 @Composable
 fun HbSettingsRow(
@@ -36,7 +42,7 @@ fun HbSettingsRow(
     description: String? = null,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
-    control: @Composable () -> Unit = {},
+    control: @Composable (Modifier) -> Unit = {},
 ) {
     val colors = HbTheme.colors
     val titleColor = if (enabled) {
@@ -86,7 +92,11 @@ fun HbSettingsRow(
             }
         }
         Box(modifier = Modifier.padding(end = HbSpacing.Xxs)) {
-            control()
+            control(
+                Modifier.semantics {
+                    if (title.isNotEmpty()) contentDescription = title
+                },
+            )
         }
     }
 }

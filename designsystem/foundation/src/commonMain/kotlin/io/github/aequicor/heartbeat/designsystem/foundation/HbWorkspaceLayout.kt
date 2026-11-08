@@ -34,14 +34,18 @@ public object HbWorkspaceLayout {
     /**
      * Resolves the visible regions for [availableWidth].
      *
-     * [sidebarWidth] and [inspectorWidth] are the user-chosen widths clamped to the documented
-     * range by the caller; [secondPane] is the user preference for a second content pane; [sidebar]
-     * and [inspector] are the requested visibility of those regions. A requested region stays
-     * closed when the owner keeps it closed and is dropped only when the width cannot fit it.
+     * [sidebarWidth] and [inspectorWidth] are the preferred widths of the regions. The policy
+     * clamps them to the documented [HbPaneGeometry.SidebarMin]…[HbPaneGeometry.SidebarMax] and
+     * [HbPaneGeometry.InspectorMin]…[HbPaneGeometry.InspectorMax] ranges, so a zero, negative or
+     * oversized preference cannot pretend that a region fits when its real minimum does not.
+     * [secondPane] is the user preference for a second content pane; [sidebar] and [inspector] are
+     * the requested visibility of those regions. A requested region stays closed when the owner
+     * keeps it closed and is dropped only when the width cannot fit it.
      *
      * [splitterWidth] is the layout width of one pane separator, which the caller resolves from the
      * active density. It equals the resize hit target, not the painted line: the hit area is a real
-     * layout region, so the panes' minimums do not silently overlap it.
+     * layout region, so the panes' minimums do not silently overlap it. A negative separator width
+     * is treated as zero.
      */
     public fun fit(
         availableWidth: Int,
@@ -64,6 +68,15 @@ public object HbWorkspaceLayout {
         }
 
         val navigationWidth = HbPaneGeometry.NavigationRail
+        val normalizedSidebarWidth = sidebarWidth.coerceIn(
+            HbPaneGeometry.SidebarMin,
+            HbPaneGeometry.SidebarMax,
+        )
+        val normalizedInspectorWidth = inspectorWidth.coerceIn(
+            HbPaneGeometry.InspectorMin,
+            HbPaneGeometry.InspectorMax,
+        )
+        val normalizedSplitterWidth = splitterWidth.coerceAtLeast(0)
         var inspectorVisible = inspector
         var pane = secondPane
         var sidebarVisible = sidebar
@@ -72,12 +85,12 @@ public object HbWorkspaceLayout {
             !fits(
                 availableWidth,
                 navigationWidth,
-                sidebarWidth,
-                inspectorWidth,
+                normalizedSidebarWidth,
+                normalizedInspectorWidth,
                 inspectorVisible,
                 pane,
                 sidebarVisible,
-                splitterWidth,
+                normalizedSplitterWidth,
             )
         ) {
             when {
@@ -91,12 +104,12 @@ public object HbWorkspaceLayout {
         val layoutFits = fits(
             availableWidth,
             navigationWidth,
-            sidebarWidth,
-            inspectorWidth,
+            normalizedSidebarWidth,
+            normalizedInspectorWidth,
             inspectorVisible,
             pane,
             sidebarVisible,
-            splitterWidth,
+            normalizedSplitterWidth,
         )
         return HbWorkspaceFit(
             navigation = navigation,

@@ -133,7 +133,8 @@ private fun HbSwitchTrack(
         modifier = Modifier
             .size(width = trackWidth, height = trackHeight)
             .clip(CircleShape)
-            .background(trackColor),
+            .background(trackColor)
+            .padding(horizontal = thumbInset),
         contentAlignment = if (rightToLeft) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         Box(

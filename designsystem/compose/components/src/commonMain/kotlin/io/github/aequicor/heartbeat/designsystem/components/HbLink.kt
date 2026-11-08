@@ -2,7 +2,7 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,7 +25,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * Text link that opens a resource (HB-DS-015). Links navigate or open; buttons perform actions. The
  * underline is always present in reading content, and the accessible role is a button until the
  * platform exposes a dedicated link role. The effective hit area keeps the density minimum target
- * while the label keeps its compact visual size.
+ * on both axes while the label keeps its compact visual size; a short label therefore gains
+ * transparent padding instead of a narrow target.
  */
 @Composable
 fun HbLink(
@@ -42,7 +43,7 @@ fun HbLink(
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
             .clip(HbShapes.Small)
-            .heightIn(min = HbSizes.minimumTarget)
+            .sizeIn(minWidth = HbSizes.minimumTarget, minHeight = HbSizes.minimumTarget)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,

@@ -60,12 +60,12 @@ fun HbSecretField(
         } else {
             PasswordVisualTransformation()
         },
-        trailing = {
+        trailing = { fieldEnabled ->
             if (value.isNotEmpty()) {
                 HbLink(
                     text = toggleLabel,
                     onClick = { revealed = !revealed },
-                    enabled = enabled,
+                    enabled = fieldEnabled,
                 )
             }
         },

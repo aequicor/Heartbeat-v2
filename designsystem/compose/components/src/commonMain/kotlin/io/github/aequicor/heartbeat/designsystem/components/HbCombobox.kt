@@ -5,8 +5,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,9 +27,12 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import io.github.aequicor.heartbeat.designsystem.resources.Res
+import io.github.aequicor.heartbeat.designsystem.resources.hb_no_options
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Searchable selection from a list (HB-DS-018).
@@ -37,14 +41,17 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * decides debouncing, and the popup keeps the keyboard contract of [HbOptionList]. Enter accepts
  * the active suggestion before anything broader, and Escape dismisses the suggestions before it
  * reaches a surrounding surface. The popup is non-focusable so opening the suggestions never moves
- * the focus away from the editor, and disabling the control closes the popup. [noResultsText]
- * renders the no-results state on the same choice surface as the option list.
+ * the focus away from the editor; when the editor loses focus, for example on Tab, the suggestions
+ * close instead of staying over the next control, while a pointer click still reaches an option
+ * because the popup itself does not take focus. [noResultsText] overrides the localized no-results
+ * message that the component shows by default.
  *
  * The editor carries the combobox contract of the suggestions: the expanded and collapsed states,
  * their accessibility actions, and the active suggestion (or the no-results text) as the state
- * description, so a screen reader hears the same surface the mouse and keyboard users see. The
- * active index is normalized against the filtered options, so a shrinking result set never leaves
- * Enter pointing outside the list.
+ * description, so a screen reader hears the same surface the mouse and keyboard users see.
+ * [optionKey] is the stable identity of an option and must be unique in [options]; the active
+ * option is resolved by that identity, so a filtered list that keeps its length but changes its
+ * order cannot move Enter to another value.
  */
 @Composable
 fun <T> HbCombobox(
@@ -58,50 +65,55 @@ fun <T> HbCombobox(
     optionLabel: (T) -> String = { it.toString() },
     noResultsText: String? = null,
     enabled: Boolean = true,
+    optionKey: (T) -> Any? = { it },
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var activeIndex by remember { mutableIntStateOf(0) }
-    val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
-    // The stored index can outlive its options after an asynchronous filtering pass.
-    val active = activeIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
-    val activeSuggestion = options.getOrNull(active)?.let(optionLabel)
+    var activeKey by remember { mutableStateOf<HbOptionIdentity?>(null) }
+    val noResults = noResultsText ?: stringResource(Res.string.hb_no_options)
+    // The stored identity can outlive its options after an asynchronous filtering pass.
+    val active = activeOptionIndex(options, activeKey, optionKey)
 
-    if (!enabled) expanded = false
+    DisabledStateSync(enabled) { expanded = false }
+
+    fun open() {
+        if (!enabled) return
+        if (activeKey == null) {
+            activeKey = options.firstOrNull()?.let { optionIdentityOf(it, optionKey) }
+        }
+        expanded = true
+    }
 
     Box(modifier = modifier) {
         HbTextField(
             value = query,
             onValueChange = { value ->
                 onQueryChange(value)
+                activeKey = options.firstOrNull()?.let { optionIdentityOf(it, optionKey) }
                 expanded = true
-                activeIndex = 0
             },
             label = label,
             placeholder = placeholder,
             enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { if (it.isFocused && enabled) expanded = true }
-                .comboboxKeys(
-                    options = options,
-                    activeIndex = active,
-                    expanded = expanded,
-                    onExpand = { expanded = true },
-                    onDismiss = { expanded = false },
-                    onActiveChange = { activeIndex = it },
-                    onSelect = { option ->
-                        onSelect(option)
-                        expanded = false
-                    },
-                )
-                .comboboxSemantics(
-                    expanded = expanded,
-                    enabled = enabled,
-                    activeSuggestion = activeSuggestion,
-                    noResultsText = noResultsText,
-                    onExpand = { expanded = true },
-                    onCollapse = { expanded = false },
-                ),
+            modifier = Modifier.comboboxEditorModifier(
+                options = options,
+                activeIndex = active,
+                expanded = expanded,
+                enabled = enabled,
+                activeSuggestion = options.getOrNull(active)?.let(optionLabel),
+                noResultsText = noResults,
+                onExpand = { open() },
+                onDismiss = { expanded = false },
+                onActiveChange = { index ->
+                    activeKey = options.getOrNull(index)?.let { optionIdentityOf(it, optionKey) }
+                },
+                onSelect = { option ->
+                    onSelect(option)
+                    expanded = false
+                },
+                onFocusChange = { focused ->
+                    if (focused) open() else expanded = false
+                },
+            ),
         )
 
         if (expanded && enabled) {
@@ -109,15 +121,27 @@ fun <T> HbCombobox(
                 options = options,
                 activeIndex = active,
                 optionLabel = optionLabel,
-                noResultsText = noResultsText,
-                offset = popupOffset,
+                noResultsText = noResults,
+                optionKey = optionKey,
+                offset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() },
                 onSelect = { option ->
                     onSelect(option)
                     expanded = false
                 },
-                onActiveChange = { activeIndex = it },
+                onActiveChange = { index ->
+                    activeKey = options.getOrNull(index)?.let { optionIdentityOf(it, optionKey) }
+                },
                 onDismiss = { expanded = false },
             )
+        }
+    }
+}
+
+@Composable
+private fun DisabledStateSync(enabled: Boolean, onDisable: () -> Unit) {
+    key(enabled) {
+        SideEffect {
+            if (!enabled) onDisable()
         }
     }
 }
@@ -127,7 +151,8 @@ private fun <T> ComboboxPopup(
     options: List<T>,
     activeIndex: Int,
     optionLabel: (T) -> String,
-    noResultsText: String?,
+    noResultsText: String,
+    optionKey: (T) -> Any?,
     offset: Int,
     onSelect: (T) -> Unit,
     onActiveChange: (Int) -> Unit,
@@ -151,6 +176,7 @@ private fun <T> ComboboxPopup(
                 onDismiss = onDismiss,
                 // The editor keeps the focus, so the suggestions never take it from typing.
                 focusOnOpen = false,
+                optionKey = optionKey,
             )
         }
     }
@@ -158,12 +184,9 @@ private fun <T> ComboboxPopup(
 
 @Composable
 private fun NoResults(
-    text: String?,
+    text: String,
     modifier: Modifier = Modifier,
 ) {
-    if (text == null) {
-        return
-    }
     val colors = HbTheme.colors
 
     HbOptionSurface(modifier = modifier) { _ ->
@@ -176,6 +199,41 @@ private fun NoResults(
     }
 }
 
+private fun <T> Modifier.comboboxEditorModifier(
+    options: List<T>,
+    activeIndex: Int,
+    expanded: Boolean,
+    enabled: Boolean,
+    activeSuggestion: String?,
+    noResultsText: String,
+    onExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    onActiveChange: (Int) -> Unit,
+    onSelect: (T) -> Unit,
+    onFocusChange: (Boolean) -> Unit,
+): Modifier = this
+    .fillMaxWidth()
+    .onFocusChanged { state ->
+        if (enabled) onFocusChange(state.hasFocus)
+    }
+    .comboboxKeys(
+        options = options,
+        activeIndex = activeIndex,
+        expanded = expanded,
+        onExpand = onExpand,
+        onDismiss = onDismiss,
+        onActiveChange = onActiveChange,
+        onSelect = onSelect,
+    )
+    .comboboxSemantics(
+        expanded = expanded,
+        enabled = enabled,
+        activeSuggestion = activeSuggestion,
+        noResultsText = noResultsText,
+        onExpand = onExpand,
+        onCollapse = onDismiss,
+    )
+
 /**
  * Combobox contract of the editor: the expanded and collapsed actions, and the active suggestion
  * (or the no-results text) as the announced state of the suggestions.
@@ -184,12 +242,12 @@ private fun Modifier.comboboxSemantics(
     expanded: Boolean,
     enabled: Boolean,
     activeSuggestion: String?,
-    noResultsText: String?,
+    noResultsText: String,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
 ): Modifier = semantics {
     if (expanded) {
-        (activeSuggestion ?: noResultsText)?.let { stateDescription = it }
+        stateDescription = activeSuggestion ?: noResultsText
         collapse {
             onCollapse()
             true

@@ -12,8 +12,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,8 +55,13 @@ import org.jetbrains.compose.resources.stringResource
  * [HbFormField].
  *
  * Both ways of opening the popup — a pointer click and the accessibility `expand` action — run the
- * same [open] function, so the active option always starts at the selected value. Closing returns
- * the focus to the trigger, which is the element that opened the surface.
+ * same [open] function, so the active option always starts at the selected value. Every way of
+ * closing the popup runs the same close procedure, including Escape and the platform dismissal, so
+ * the focus returns to the trigger that opened the surface.
+ *
+ * [optionKey] is the stable identity of an option and must be unique in [options]. The active
+ * option is resolved by that identity instead of by its position, so an asynchronous refresh that
+ * keeps the list length but changes the order does not move the highlight or Enter to another value.
  */
 @Composable
 fun <T> HbSelect(
@@ -67,23 +73,29 @@ fun <T> HbSelect(
     placeholder: String = "",
     optionLabel: (T) -> String = { it.toString() },
     enabled: Boolean = true,
+    optionKey: (T) -> Any? = { it },
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var activeIndex by remember { mutableIntStateOf(0) }
+    var activeKey by remember { mutableStateOf<HbOptionIdentity?>(null) }
     val triggerRequester = remember { FocusRequester() }
     val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
     val noOptionsText = stringResource(Res.string.hb_no_options)
     val formLabel = HbFormFieldLocals.LocalLabel.current
     val formError = HbFormFieldLocals.LocalError.current
     val effectiveLabel = label.ifEmpty { formLabel.orEmpty() }
-    // The stored index can outlive its options after an asynchronous refresh of the list.
-    val active = activeIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
+    // The stored identity can outlive its options after an asynchronous refresh of the list.
+    val active = activeOptionIndex(options, activeKey, optionKey)
 
-    if (!enabled) expanded = false
+    key(enabled) {
+        SideEffect {
+            if (!enabled) expanded = false
+        }
+    }
 
     fun open() {
         if (!enabled || expanded) return
-        activeIndex = options.indexOf(selected).coerceAtLeast(0)
+        activeKey = selected?.let { optionIdentityOf(it, optionKey) }
+            ?: options.firstOrNull()?.let { optionIdentityOf(it, optionKey) }
         expanded = true
     }
 
@@ -103,39 +115,64 @@ fun <T> HbSelect(
             error = formError,
             focusRequester = triggerRequester,
             onClick = {
-                if (expanded) {
-                    close()
-                } else {
-                    open()
-                }
+                selectToggle(expanded, ::open, ::close)
             },
             onExpandedChange = { shouldExpand ->
-                if (shouldExpand) open() else close()
+                selectExpanded(shouldExpand, ::open, ::close)
             },
         )
 
         if (expanded && enabled) {
-            Popup(
-                popupPositionProvider = remember(popupOffset) { HbAnchoredPopupPositionProvider(gap = popupOffset) },
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                HbOptionList(
-                    options = options,
-                    selected = selected,
-                    activeIndex = active,
-                    optionLabel = optionLabel,
-                    onSelect = { option ->
-                        onSelect(option)
-                        expanded = false
-                        triggerRequester.requestFocus()
-                    },
-                    onActiveChange = { activeIndex = it },
-                    onDismiss = { close() },
-                    emptyText = noOptionsText,
-                )
-            }
+            SelectPopup(
+                options = options,
+                selected = selected,
+                activeIndex = active,
+                optionLabel = optionLabel,
+                noOptionsText = noOptionsText,
+                optionKey = optionKey,
+                offset = popupOffset,
+                onSelect = { option ->
+                    onSelect(option)
+                    close()
+                },
+                onActiveChange = { index ->
+                    activeKey = options.getOrNull(index)?.let { optionIdentityOf(it, optionKey) }
+                },
+                onClose = { close() },
+            )
         }
+    }
+}
+
+@Composable
+private fun <T> SelectPopup(
+    options: List<T>,
+    selected: T?,
+    activeIndex: Int,
+    optionLabel: (T) -> String,
+    noOptionsText: String,
+    optionKey: (T) -> Any?,
+    offset: Int,
+    onSelect: (T) -> Unit,
+    onActiveChange: (Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    Popup(
+        popupPositionProvider = remember(offset) { HbAnchoredPopupPositionProvider(gap = offset) },
+        onDismissRequest = onClose,
+        properties = PopupProperties(focusable = true),
+    ) {
+        HbOptionList(
+            options = options,
+            selected = selected,
+            activeIndex = activeIndex,
+            optionLabel = optionLabel,
+            onSelect = onSelect,
+            onActiveChange = onActiveChange,
+            onDismiss = onClose,
+            emptyText = noOptionsText,
+            optionKey = optionKey,
+        )
     }
 }
 
@@ -156,9 +193,16 @@ private fun SelectTrigger(
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val border = when {
+        !enabled -> colors.border.subtle
         error != null -> colors.status.error.foreground
         else -> colors.border.control
     }
+    val contentColor = when {
+        !enabled -> colors.text.disabled
+        isPlaceholder -> colors.text.secondary
+        else -> colors.text.primary
+    }
+    val chevronColor = if (enabled) colors.text.secondary else colors.text.disabled
 
     Row(
         modifier = modifier
@@ -189,10 +233,10 @@ private fun SelectTrigger(
         BasicText(
             text = text,
             style = HbTypography.Label,
-            color = { if (isPlaceholder) colors.text.secondary else colors.text.primary },
+            color = { contentColor },
             modifier = Modifier.weight(1f),
         )
-        HbChevronGlyph(color = colors.text.secondary, expanded = expanded)
+        HbChevronGlyph(color = chevronColor, expanded = expanded)
     }
 }
 
@@ -214,6 +258,15 @@ private fun Modifier.selectSemantics(
         }
     }
     if (error != null) this.error(error)
+}
+
+
+private fun selectToggle(expanded: Boolean, open: () -> Unit, close: () -> Unit) {
+    if (expanded) close() else open()
+}
+
+private fun selectExpanded(shouldExpand: Boolean, open: () -> Unit, close: () -> Unit) {
+    if (shouldExpand) open() else close()
 }
 
 

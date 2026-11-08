@@ -48,10 +48,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * services and drives the error visuals, so the message is not encoded only in the border color.
  *
  * States: the value uses the primary text role, so it stays readable in both appearances; disabled
- * dims the value, the placeholder and the trailing action together; read-only keeps the readable
- * value, the normal border and the focus outline, so it is distinguishable from disabled; focused
- * draws the separate focus outline outside the field; a non-null error keeps the error border, so
- * focused and invalid are visible at the same time.
+ * dims the value, the placeholder and the trailing action together and passes `enabled = false` to
+ * the [trailing] slot, so a nested action can disable itself instead of merely looking disabled;
+ * read-only keeps the readable value, the normal border and the focus outline, so it is
+ * distinguishable from disabled; focused draws the separate focus outline outside the field; a
+ * non-null error keeps the error border, so focused and invalid are visible at the same time.
  *
  * The owner keeps the value: [keyboardOptions] carries the keyboard type and IME action, and
  * [keyboardActions] handles that action, so a field integrates with the host input methods without
@@ -73,7 +74,7 @@ fun HbTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
-    trailing: @Composable () -> Unit = {},
+    trailing: @Composable (enabled: Boolean) -> Unit = {},
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
@@ -184,7 +185,7 @@ private fun HbFieldDecoration(
     placeholder: String,
     placeholderColor: Color,
     enabled: Boolean,
-    trailing: @Composable () -> Unit,
+    trailing: @Composable (enabled: Boolean) -> Unit,
     innerTextField: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -205,7 +206,7 @@ private fun HbFieldDecoration(
         Box(
             modifier = Modifier.alpha(if (enabled) 1f else HbEffects.DisabledContent),
         ) {
-            trailing()
+            trailing(enabled)
         }
     }
 }

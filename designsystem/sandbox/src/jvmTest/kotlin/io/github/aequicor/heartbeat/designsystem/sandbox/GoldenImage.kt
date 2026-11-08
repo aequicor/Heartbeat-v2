@@ -57,7 +57,7 @@ internal object GoldenImage {
         val fraction = different.toDouble() / (expected.width * expected.height)
         assertTrue(
             fraction <= MaxDifferentFraction,
-            "Visual regression in $name: ${(fraction * 100).format()} of pixels differ",
+            "Visual regression in $name: ${formatPercent(fraction)} of pixels differ",
         )
 
         verifyRegions(expected, actual, name)
@@ -96,7 +96,7 @@ internal object GoldenImage {
                 assertTrue(
                     fraction <= MaxRegionDifferentFraction,
                     "Visual regression in $name: the ${width}x$height region at ($tileX,$tileY) " +
-                        "has ${(fraction * 100).format()} different pixels",
+                        "has ${formatPercent(fraction)} different pixels",
                 )
             }
         }
@@ -135,8 +135,6 @@ internal object GoldenImage {
             blue > ChannelTolerance
     }
 
-    private fun Double.format(): String = String.format(Locale.ROOT, "%.2f%%", this * 100.0)
-
     private const val GoldenDirectory = "src/jvmTest/resources/golden"
 
     private const val UpdateVariable = "HB_UPDATE_GOLDENS"
@@ -157,3 +155,7 @@ internal object GoldenImage {
 
     private const val EdgeMargin = 2
 }
+
+/** Formats a pixel share as a percentage for the golden-image diagnostics. */
+internal fun formatPercent(fraction: Double): String =
+    String.format(Locale.ROOT, "%.2f%%", fraction * 100.0)

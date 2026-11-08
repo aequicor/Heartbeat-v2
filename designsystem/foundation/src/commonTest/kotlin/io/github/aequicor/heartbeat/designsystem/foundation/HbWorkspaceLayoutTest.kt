@@ -107,12 +107,48 @@ class HbWorkspaceLayoutTest {
 
     @Test
     fun sidebarCollapsesWhenEvenItDoesNotFit() {
-        val fit = HbWorkspaceLayout.fit(availableWidth = 1000, sidebarWidth = 600)
+        val fit = HbWorkspaceLayout.fit(availableWidth = 720, sidebarWidth = 600)
 
         assertEquals(HbNavigationMode.Rail, fit.navigation)
         assertFalse(fit.sidebar)
         assertFalse(fit.inspector)
         assertFalse(fit.secondPane)
+    }
+
+    @Test
+    fun zeroWidthsAreClampedToTheDocumentedMinimums() {
+        val fit = HbWorkspaceLayout.fit(
+            availableWidth = 720,
+            sidebarWidth = 0,
+            inspectorWidth = 0,
+        )
+
+        assertTrue(fit.sidebar)
+        assertFalse(fit.inspector, "The inspector minimum does not fit next to the sidebar")
+    }
+
+    @Test
+    fun negativeWidthsAreClampedToTheDocumentedMinimums() {
+        val fit = HbWorkspaceLayout.fit(
+            availableWidth = 720,
+            sidebarWidth = -100,
+            inspectorWidth = -200,
+        )
+
+        assertTrue(fit.sidebar)
+        assertFalse(fit.inspector, "Negative preferences must not pretend the inspector fits")
+    }
+
+    @Test
+    fun oversizedWidthsAreClampedToTheDocumentedMaximums() {
+        val fit = HbWorkspaceLayout.fit(
+            availableWidth = 800,
+            sidebarWidth = 10_000,
+            inspectorWidth = 10_000,
+        )
+
+        assertTrue(fit.sidebar, "The sidebar preference is clamped to its maximum")
+        assertFalse(fit.inspector)
     }
 
     @Test
