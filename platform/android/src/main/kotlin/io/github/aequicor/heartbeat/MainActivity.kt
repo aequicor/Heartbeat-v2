@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Modifier
 import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.lifecycle.LifecycleRegistry
+import com.arkivanov.essenty.lifecycle.create
 import com.arkivanov.essenty.lifecycle.destroy
+import com.arkivanov.essenty.lifecycle.pause
 import com.arkivanov.essenty.lifecycle.resume
-import dev.zacsweers.metro.createGraph
+import com.arkivanov.essenty.lifecycle.start
+import com.arkivanov.essenty.lifecycle.stop
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.di.AndroidGraph
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ShellComponent
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
@@ -32,9 +34,9 @@ class MainActivity : ComponentActivity() {
         Log.i("Heartbeat", "Heartbeat started")
         enableEdgeToEdge()
 
-        decomposeLifecycle.resume()
+        decomposeLifecycle.create()
 
-        val graph = createGraph<AndroidGraph>()
+        val graph = (application as HeartbeatApplication).graph
         val renderers = graph.renderers
         shell = graph.shellComponentFactory.create(
             componentContext = DefaultComponentContext(decomposeLifecycle),
@@ -56,6 +58,26 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        decomposeLifecycle.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        decomposeLifecycle.resume()
+    }
+
+    override fun onPause() {
+        decomposeLifecycle.pause()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        decomposeLifecycle.stop()
+        super.onStop()
     }
 
     override fun onDestroy() {
