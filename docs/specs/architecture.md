@@ -39,6 +39,7 @@ Heartbeat использует Kotlin Multiplatform. Общий код обсл�
 | `platform/` | Точки входа: запуск, создание Metro-графа, корневая Presentation-иерархия, интеграция с ОС |
 | `shell/` | Общая оболочка приложения: корневая навигация, состояние сессии, координация фич |
 | `features/` | Бизнес-функциональность: контракты, реализация, адаптеры Presentation и UI |
+| `storage/` | Композиция SQL-схем, глобальная версия и миграции физической БД, инициализация хранилища |
 | `frameworks/` | Собственные переиспользуемые фреймворки, например BLoC |
 | `di/` | Общие определения областей видимости Metro и общие registrations |
 | `designsystem/` | UI Kit по UI-технологиям |
@@ -77,6 +78,11 @@ project/
 │   ├── editor/
 │   └── settings/
 │
+├── storage/
+│   └── database/
+│       ├── HeartbeatDatabase
+│       └── migrations/
+│
 ├── frameworks/
 │   └── block/
 │
@@ -98,6 +104,10 @@ project/
 ├── core/
 │   ├── network/
 │   ├── database/
+│   ├── preferences/
+│   │   ├── api/
+│   │   ├── datastore/
+│   │   └── sqlite/
 │   ├── filesystem/
 │   └── platform-api/
 │
@@ -682,6 +692,7 @@ designsystem/
 core/
 ├── network/
 ├── database/
+├── preferences/
 ├── filesystem/
 └── platform-api/
 ```
@@ -821,6 +832,7 @@ platform:windows
 | `features/*/impl` | `features/*/api`, `di:api`, `core/*` |
 | `features/*/presentation/*` | `features/*/api`, `navigation/*`, `di:api`, `core/*` |
 | `features/*/ui/*` | `features/<same>/presentation/*`, `features/*/api`, `navigation/decompose-compose`, `designsystem/*`, `core/*` |
+| `storage/database` | `storage/database`, `features/*/impl` (только композиция SQL-схем), `di:api`, `core/*` |
 | `di:api` | `di:api`, `core/*` |
 | `core/*` | `core/*`, `di:api` |
 | `designsystem/*` | `designsystem/*`, `core/*` |
@@ -834,6 +846,7 @@ platform:windows
 - Presentation-адаптер получает Store через `api` и не зависит от `impl`; Decompose-адаптер зависит от `navigation/decompose`, адаптеры не зависят друг от друга.
 - `ui` не зависит от `impl`; `ui/compose` может зависеть от собственного `presentation/decompose`, а связывать компоненты с экранами может renderer этой же фичи.
 - `core` и `designsystem` не зависят от фич; `designsystem` не зависит от `di`.
+- Фичи не зависят от `storage`: SQL-драйвер и соединение приходят через контракты `core`, а физическую БД открывает и мигрирует `storage/database`. Зависимость `storage → features/*/impl` существует только для композиции SQL-схем и не даёт доступа к бизнес-логике фичи.
 - `features/*/api`, `core` и `navigation/api` не зависят от UI-фреймворков и Metro; `designsystem` не зависит от Decompose и Metro; Presentation-адаптеры не зависят от Compose; `ui/compose` зависит от Compose, Metro и собственного Decompose-адаптера.
 
 Группы артефактов проверяются и в объявленных зависимостях, и в разрешённых compile/runtime/klib-графах универсальных модулей; импорты проверяются по той же роли модуля.
@@ -920,6 +933,7 @@ buildSrc/src/main/kotlin/
 ├── heartbeat-kmp-decompose.gradle.kts
 ├── heartbeat-kmp-compose.gradle.kts
 ├── heartbeat-metro.gradle.kts
+├── heartbeat-sqldelight.gradle.kts
 ├── heartbeat-compose-designsystem.gradle.kts
 └── heartbeat-architecture-check.gradle.kts
 ```
@@ -930,6 +944,7 @@ buildSrc/src/main/kotlin/
 | `heartbeat-kmp-decompose` | Совместимые Decompose targets и зависимости |
 | `heartbeat-kmp-compose` | Compose Multiplatform |
 | `heartbeat-metro` | Metro compiler plugin и runtime |
+| `heartbeat-sqldelight` | SQLDelight plugin и runtime для модулей со схемой |
 | `heartbeat-compose-designsystem` | Конфигурация Compose UI Kit |
 | `heartbeat-architecture-check` | Проверка правил архитектуры |
 
@@ -1058,6 +1073,7 @@ CI должен отклонять изменения, нарушающие за
 | `shell` | Общая оболочка приложения |
 | `navigation` | Универсальные маршруты и SPI навигации |
 | `features` | Бизнес-функциональность |
+| `storage` | Композиция SQL-схем и управление физическими хранилищами |
 | `api` | Публичные универсальные контракты |
 | `impl` | Универсальная бизнес-реализация |
 | `presentation/decompose` | Адаптер Decompose |
@@ -1151,7 +1167,7 @@ features/<feature>/
 | HB-ARCH-021 | Универсальные модули должны объявлять обязательный набор targets: android, jvm, iosArm64, iosSimulatorArm64, iosX64, macosArm64, macosX64, mingwX64, linuxX64, linuxArm64. | Согласованная архитектура от 7 ноября 2026 | Сверить `kotlin.targets` модулей с набором; сборка каждого target на поддерживающем хосте. |
 | HB-ARCH-022 | Модули должны следовать матрице targets по типу: Decompose-адаптеры без Windows Native, Compose UI без Linux и Windows Native. | Согласованная архитектура от 7 ноября 2026 | Сверить targets модулей с матрицей раздела «KMP Targets». |
 | HB-ARCH-023 | Пока BLoC framework не реализован, `presentation/block`, `frameworks/block` и нативные UI-каталоги не должны подключаться к Gradle. | Согласованная архитектура от 7 ноября 2026 | Проверить, что `settings.gradle.kts` не содержит block-модулей. |
-| HB-ARCH-024 | Соглашения сборки должны задаваться precompiled-плагинами `buildSrc`: `heartbeat-kmp-universal`, `heartbeat-kmp-decompose`, `heartbeat-kmp-compose`, `heartbeat-kmp-api`, `heartbeat-metro`, `heartbeat-compose-designsystem`, `heartbeat-architecture-check`; версии — только в `gradle/libs.versions.toml`. | Согласованная архитектура от 7 ноября 2026 и buildSrc/AGENTS.md | Сверить файлы плагинов и версии каталога; сборка модулей применяет плагины по идентификатору без версии. |
+| HB-ARCH-024 | Соглашения сборки должны задаваться precompiled-плагинами `buildSrc`: `heartbeat-kmp-universal`, `heartbeat-kmp-decompose`, `heartbeat-kmp-compose`, `heartbeat-kmp-api`, `heartbeat-metro`, `heartbeat-sqldelight`, `heartbeat-compose-designsystem`, `heartbeat-architecture-check`; версии — только в `gradle/libs.versions.toml`. | Согласованная архитектура от 7 ноября 2026 и buildSrc/AGENTS.md | Сверить файлы плагинов и версии каталога; сборка модулей применяет плагины по идентификатору без версии. |
 | HB-ARCH-025 | Бизнес-логика должна покрываться `commonTest`; Presentation-адаптеры — тестами навигации, жизненного цикла и контрактными тестами; CI должен выполнять архитектурные проверки и статический анализ для проверенного коммита, а проверки, недоступные на хосте владельца, — на подходящих runner-ах. | Согласованная архитектура от 7 ноября 2026 и третье код-ревью PR #20 | `static-analysis.yml` после `/reviewed` публикует статусы `static-analysis` и `architecture-check`; `cross-platform.yml` после `/reviewed` выполняет Apple-цели и нативные тесты Linux; `jvmTest` выполняется локально. |
 | HB-ARCH-026 | В Native Windows/Linux UI event loop не должен блокироваться бизнес-операциями, обновления UI должны выполняться на UI-потоке, подписки на Flow должны отменяться при уничтожении экрана, а граница с C ABI должна управлять временем жизни объектов. | Согласованная архитектура от 7 ноября 2026 | Прогнать сценарии с длительной операцией и уничтожением экрана на нативном приложении. |
 | HB-ARCH-027 | Имена модулей и пакетов должны соответствовать таблице соглашений по именованию. | Согласованная архитектура от 7 ноября 2026 | Сверить пути модулей с таблицей раздела «Соглашения по именованию». |
@@ -1170,8 +1186,10 @@ features/<feature>/
 | HB-ARCH-038 | Модули `features/*/api`, `shell:api` и `di:api` должны компилироваться в explicit API mode (`explicitApi()`): публичные объявления указывают видимость, публичные свойства и функции — тип. | Запрос владельца от 7 ноября 2026 | Сборка api-модулей в strict explicit API mode без ошибок; публичное объявление без модификатора не компилируется. |
 | HB-ARCH-039 | Имена и размещение архитектурных ролей фичи должны соответствовать таблице «Имена архитектурных ролей»: в пакетах ролей имя получает обязательный суффикс (`UseCase`, `Repository`, `DataSource`, `Dto`, `Mapper`, `Store`, `StoreFactory`, `Component`, `ComponentFactory`, `State`, `Action`, `Effect`, `Screen`), в `api` и его подпакетах — префикс `<Feature>`, поэтому публичные модели и сервисы фичи сохраняют свои имена; `Default` означает реализацию по умолчанию; доменные модели, вложенные Action/Effect и top-level mapper-функции не подчиняются роли. | Запрос владельца от 7 ноября 2026 и третье код-ревью PR #20 | Konsist-тест `declarationsFollowNamingStandard` падает на `LoadNote` в `domain.usecase`; unit-тесты `NamingRulesTest` покрывают позитивный и негативный случай каждого правила. |
 | HB-ARCH-040 | Публичные контракты `features/*/api` и его подпакетов (`api.model`, `api.service`) должны быть `public`; детали реализации — `internal` или `private`. Публичными остаются только контрактные роли: интерфейс `*Repository`, доменная модель с модификатором `data`/`sealed`/`enum`/`value`, интерфейсы `<Feature>Component` и `<Feature>ComponentFactory`, `@Composable fun *Screen`; типы с Metro-аннотацией — единственное исключение, и только в ролях, которые видит финальный граф. | Запрос владельца от 7 ноября 2026, третье, четвёртое, девятое и десятое код-ревью PR #20 | Konsist-тесты `apiContractsArePublic` (включая подпакеты) и `implementationDetailsAreInternal`; unit-тесты `VisibilityRulesTest` покрывают роль, вид и модификаторы объявления: публичные вспомогательная модель в `domain.model`, helper в `di` и не-Screen композиция в `ui` дают нарушение; explicit API mode api-модулей. Правило видимости минимизирует внутренний API, а межмодульную границу защищает dependency graph: публичная доменная модель в `impl` допустима, потому что `impl -> impl` и `presentation -> impl` запрещены `architectureCheck`. |
-| HB-ARCH-043 | Размещение исходников должно соответствовать Gradle-модулю: `features/<feature>/api` объявляет только пакет `features.<feature>.api` и его подпакеты, `features/<feature>/impl` — роли `domain`, `data`, `presentation`, `di`, модуль `presentation/<adapter>` — `component`, модуль `ui/<platform>` — `ui`, `core/<module>` — `core.<module>`, `di/api` — `di`, модули `shell/...` — область `shell`, `platform/...` — корневой пакет `io.github.aequicor.heartbeat`; произвольный пакет вне этой таблицы — нарушение. | Четвёртое и восьмое код-ревью PR #20 от 7 ноября 2026 | Konsist-тест `modulePackagesMatchTheGradleModule` сканирует `features`, `designsystem`, `core`, `di`, `shell` и `platform`; unit-тесты `ModulePackageRulesTest` покрывают негативный случай для каждого типа модуля; таблица соответствий задана явно в `ModulePackageRules`. |
+| HB-ARCH-043 | Размещение исходников должно соответствовать Gradle-модулю: `features/<feature>/api` объявляет только пакет `features.<feature>.api` и его подпакеты, `features/<feature>/impl` — роли `domain`, `data`, `presentation`, `di`, модуль `presentation/<adapter>` — `component`, модуль `ui/<platform>` — `ui`, `core/<module>` — `core.<module>`, `storage/<module>` — `storage.<module>`, `di/api` — `di`, модули `shell/...` — область `shell`, `platform/...` — корневой пакет `io.github.aequicor.heartbeat` и пакет `di`; произвольный пакет вне этой таблицы — нарушение. | Четвёртое и восьмое код-ревью PR #20 от 7 ноября 2026 | Konsist-тест `modulePackagesMatchTheGradleModule` сканирует `features`, `designsystem`, `core`, `storage`, `di`, `shell` и `platform`; unit-тесты `ModulePackageRulesTest` покрывают негативный случай для каждого типа модуля; таблица соответствий задана явно в `ModulePackageRules`. |
 | HB-ARCH-044 | Эффекты `<Feature>Store` должны быть необязательными одноразовыми уведомлениями: Store не ждёт подписчика, не воспроизводит пропущенный эффект, а критичный результат операции отражается в UI State. | Пятое код-ревью PR #20 от 7 ноября 2026 | Тесты `savedEffectIsNotReplayedToALateCollector` и `savesWithoutEffectCollectorDoNotBlock`; контракт доставки описан в KDoc `EditorStore`. |
 | HB-ARCH-045 | Модуль `designsystem/foundation` должен компилироваться для всех обязательных targets, не зависеть от Compose, Decompose, Metro и фич и не содержать типов рендерера; Compose-тема разрешает его токены в собственные значения. | Спецификация дизайн-системы 2.0 от 7 ноября 2026 | Konsist-тест `foundationStaysRendererNeutral` отклоняет импорт Compose в `designsystem/foundation`; `architectureCheck` проверяет зависимости модуля; `theme` собирается с зависимостью от `foundation`. |
+| HB-ARCH-046 | Приложение должно использовать одну физическую БД. Схему, версию и миграции объединяет `storage/database`: он зависит от `features/*/impl` только для композиции `.sq`, а фичи получают общий SQL-драйвер через контракты `core`. Фича не создаёт и не мигрирует схему и не зависит от `storage`. | Согласованная архитектура хранения от 8 ноября 2026 | `architectureCheck` разрешает только ребро `storage → features/*/impl` и запрещает обратное; SQLDelight-агрегат собирает схемы двух фич, `:storage:database:jvmTest` создаёт БД и сохраняет данные при повторном открытии; `verifySqlDelightMigration` проверяет снимок `1.db`. |
+| HB-ARCH-047 | Настройки должны храниться через контракт `core/preferences/api` с изолированными namespace и типизированными ключами; DataStore используется на поддерживаемых targets, SQLite-реализация — там, где DataStore недоступен. | Согласованная архитектура хранения от 8 ноября 2026 | `:core:preferences:datastore:jvmTest` проверяет изоляцию namespace и сохранение значений между экземплярами; `:core:preferences:sqlite:jvmTest` проверяет тот же контракт на общем драйвере; `DefaultAiStudioSettings` читает и записывает настройку через namespace `ai-studio`. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.

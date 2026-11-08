@@ -1,0 +1,20 @@
+CREATE TABLE preference (
+    namespace TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (namespace, key)
+);
+
+selectByKey:
+SELECT value_type, value
+FROM preference
+WHERE namespace = ? AND key = ?;
+
+upsert:
+INSERT OR REPLACE INTO preference(namespace, key, value_type, value)
+VALUES (?, ?, ?, ?);
+
+delete:
+DELETE FROM preference
+WHERE namespace = ? AND key = ?;

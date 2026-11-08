@@ -13,12 +13,14 @@ import com.arkivanov.decompose.DefaultComponentContext
 import com.arkivanov.essenty.lifecycle.LifecycleRegistry
 import com.arkivanov.essenty.lifecycle.destroy
 import com.arkivanov.essenty.lifecycle.resume
-import dev.zacsweers.metro.createGraph
+import dev.zacsweers.metro.createGraphFactory
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.di.DesktopGraph
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
+import java.io.File
+import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
@@ -37,10 +39,15 @@ import org.jetbrains.jewel.window.styling.TitleBarStyle
 fun main() {
     println("Heartbeat started")
 
+    val dataDirectory = desktopDataDirectory()
+    ensureDataDirectory(dataDirectory)
+
+    val graph = createGraphFactory<DesktopGraph.Factory>().create(dataDirectory)
+    initializeStorage(graph)
+
     val lifecycle = LifecycleRegistry()
     lifecycle.resume()
 
-    val graph = createGraph<DesktopGraph>()
     val renderers = graph.renderers
 
     application {
@@ -63,6 +70,8 @@ fun main() {
             DecoratedWindow(
                 onCloseRequest = {
                     lifecycle.destroy()
+                    graph.databaseInitializer.close()
+                    graph.appCoroutineScope.cancel()
                     exitApplication()
                 },
                 state = rememberWindowState(width = 1440.dp, height = 900.dp),
@@ -86,5 +95,58 @@ fun main() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Application data directory: `%LOCALAPPDATA%\Heartbeat` on Windows and `~/.heartbeat` elsewhere.
+ * The entry point owns the path; the database and preferences modules receive it as a string.
+ *
+ * `HEARTBEAT_DATA_DIR` overrides the location. The Gradle dev-run task uses it to keep the
+ * sandboxed desktop process inside the writable build directory; a normal installation does not
+ * set it.
+ */
+private fun desktopDataDirectory(): String {
+    val override = System.getenv("HEARTBEAT_DATA_DIR")
+    if (!override.isNullOrBlank()) {
+        return File(override).absolutePath
+    }
+
+    val localAppData = System.getenv("LOCALAPPDATA")
+    return if (!localAppData.isNullOrBlank()) {
+        File(localAppData, "Heartbeat").absolutePath
+    } else {
+        File(System.getProperty("user.home"), ".heartbeat").absolutePath
+    }
+}
+
+/**
+ * Ensures the data directory exists before the database is opened. Without this check a read-only
+ * location surfaces as an opaque `SQLITE_CANTOPEN`; report the real cause instead.
+ */
+private fun ensureDataDirectory(directory: String) {
+    val dataDirectory = File(directory)
+    if (!dataDirectory.isDirectory && !dataDirectory.mkdirs()) {
+        System.err.println(
+            "Heartbeat storage initialization failed: cannot create data directory $directory",
+        )
+        exitProcess(1)
+    }
+}
+
+/**
+ * Opens the database before any shell binding can request a repository. A failure is reported and
+ * terminates the process: the entry point must not start features on a database whose migration
+ * failed, and it must not delete user data to recover.
+ */
+@Suppress("TooGenericExceptionCaught") // Any driver or migration failure must stop startup.
+private fun initializeStorage(graph: DesktopGraph) {
+    try {
+        graph.databaseInitializer.initialize()
+    } catch (error: Exception) {
+        System.err.println("Heartbeat storage initialization failed: ${error.message}")
+        graph.databaseInitializer.close()
+        graph.appCoroutineScope.cancel()
+        exitProcess(1)
     }
 }

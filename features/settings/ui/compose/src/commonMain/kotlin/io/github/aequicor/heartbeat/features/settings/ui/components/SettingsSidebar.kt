@@ -14,11 +14,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.components.HbIconButton
 import io.github.aequicor.heartbeat.designsystem.components.HbNavigationItem
 import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
 import io.github.aequicor.heartbeat.designsystem.components.HbSearchField
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageDescriptor
@@ -33,6 +38,7 @@ internal fun SettingsSidebar(
     query: String,
     onQueryChange: (String) -> Unit,
     onSelect: (SettingsPageId) -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
@@ -56,7 +62,7 @@ internal fun SettingsSidebar(
             .widthIn(min = HbPaneGeometry.SidebarMin.dp, max = HbPaneGeometry.SidebarMax.dp)
             .background(colors.surface.subtle),
     ) {
-        HbPaneHeader(title = "Настройки")
+        SettingsSidebarHeader(onBack = onBack)
         HbSearchField(
             value = query,
             onValueChange = onQueryChange,
@@ -85,4 +91,30 @@ internal fun SettingsSidebar(
     }
 }
 
+@Composable
+private fun SettingsSidebarHeader(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    HbPaneHeader(
+        title = "Настройки",
+        modifier = modifier,
+        leading = {
+            HbIconButton(
+                contentDescription = "Назад",
+                onClick = onBack,
+            ) {
+                HbIcon(
+                    glyph = HbIconGlyph.ChevronDown,
+                    modifier = Modifier.rotate(BackRotationDegrees),
+                    size = HbSizes.iconSize,
+                    tint = HbTheme.colors.text.secondary,
+                )
+            }
+        },
+    )
+}
+
 private val Whitespace = Regex("""\s+""")
+
+private const val BackRotationDegrees = 90f

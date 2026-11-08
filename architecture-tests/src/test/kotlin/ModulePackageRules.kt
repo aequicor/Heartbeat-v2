@@ -26,9 +26,11 @@ internal object ModulePackageRules {
 
     private const val NAVIGATION_ROOT = "$ROOT_PACKAGE.navigation"
 
+    private const val STORAGE_ROOT = "$ROOT_PACKAGE.storage"
+
     /** Repository areas that own a module tree: the first segment of the module path. */
     private val moduleAreas =
-        listOf("features", "designsystem", "core", "di", "shell", "navigation", "platform")
+        listOf("features", "designsystem", "core", "di", "shell", "navigation", "storage", "platform")
 
     /** Roles of the universal implementation module: one Gradle module holds all of them. */
     private val implRoles = listOf("domain", "data", "presentation", "di")
@@ -49,6 +51,7 @@ internal object ModulePackageRules {
             "di" -> diViolation(module, packageName)
             "shell" -> shellViolation(module, packageName)
             "navigation" -> navigationViolation(module, packageName)
+            "storage" -> storageViolation(module, packageName)
             "platform" -> platformViolation(module, packageName)
             else -> null
         }
@@ -86,8 +89,9 @@ internal object ModulePackageRules {
     /** `core/platform-api` declares `...core.platformapi`: the module directory names the package. */
     private fun coreViolation(module: List<String>, packageName: String): String? {
         val modulePath = module.joinToString("/")
-        val name = module.getOrNull(1) ?: return "unknown core module: $modulePath"
-        return mismatch(modulePath, packageName, listOf("$CORE_ROOT.${name.replace("-", "")}"))
+        if (module.size < 2) return "unknown core module: $modulePath"
+        val suffix = module.drop(1).joinToString(".") { segment -> segment.replace("-", "") }
+        return mismatch(modulePath, packageName, listOf("$CORE_ROOT.$suffix"))
     }
 
     /** `di/api` holds the shared Metro scopes in the `di` package. */
@@ -120,17 +124,24 @@ internal object ModulePackageRules {
     }
 
     /**
-     * Platform modules are entry points: their sources live in the application root package, so a
-     * feature or design-system package declared inside a platform module is reported instead of
-     * being accepted as a subpackage of the root.
+     * Platform modules are entry points: their sources live in the application root package or in
+     * the `di` composition-root package, so a feature or design-system package declared inside a
+     * platform module is reported instead of being accepted as a subpackage of the root.
      */
     private fun platformViolation(module: List<String>, packageName: String): String? =
-        if (packageName == ROOT_PACKAGE) {
-            null
-        } else {
-            "package $packageName does not belong to module ${module.joinToString("/")}: " +
-                "expected $ROOT_PACKAGE"
+        when {
+            packageName == ROOT_PACKAGE -> null
+            packageName == "$ROOT_PACKAGE.di" || packageName.startsWith("$ROOT_PACKAGE.di.") -> null
+            else -> "package $packageName does not belong to module ${module.joinToString("/")}: " +
+                "expected $ROOT_PACKAGE or $ROOT_PACKAGE.di"
         }
+
+    /** `storage/database` declares `...storage.database`: storage owns composition, not feature roles. */
+    private fun storageViolation(module: List<String>, packageName: String): String? {
+        val modulePath = module.joinToString("/")
+        val suffix = module.drop(1).joinToString(".") { segment -> segment.replace("-", "") }
+        return mismatch(modulePath, packageName, listOf("$STORAGE_ROOT.$suffix"))
+    }
 
     private fun mismatch(modulePath: String, packageName: String, allowed: List<String>): String? =
         if (allowed.any { packageName == it || packageName.startsWith("$it.") }) {

@@ -69,6 +69,9 @@ internal object VisibilityRules {
             role == listOf("domain", "repository") ->
                 repositoryContractViolation(declarationKind, declarationName)
 
+            role == listOf("data", "datasource") ->
+                dataSourceContractViolation(declarationKind, declarationName)
+
             role == listOf("domain", "model") -> modelViolation(
                 declarationKind,
                 declarationName,
@@ -111,6 +114,23 @@ internal object VisibilityRules {
         null
     } else {
         "repository contract must be an interface ending with Repository: $declarationName"
+    }
+
+    /**
+     * A data source is the storage boundary of a feature. Its contract is an interface so the
+     * implementation (for example SQLDelight) stays replaceable; the class that implements it is a
+     * Metro binding and stays public through the Metro annotation exception above.
+     */
+    private fun dataSourceContractViolation(
+        declarationKind: DeclarationKind,
+        declarationName: String,
+    ): String? = if (
+        declarationKind == DeclarationKind.INTERFACE &&
+        declarationName.endsWith("DataSource")
+    ) {
+        null
+    } else {
+        "data source contract must be an interface ending with DataSource: $declarationName"
     }
 
     private fun modelViolation(

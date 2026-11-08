@@ -26,6 +26,7 @@ fun HbPaneHeader(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    leading: @Composable RowScope.() -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val colors = HbTheme.colors
@@ -38,6 +39,7 @@ fun HbPaneHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
+        leading()
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),

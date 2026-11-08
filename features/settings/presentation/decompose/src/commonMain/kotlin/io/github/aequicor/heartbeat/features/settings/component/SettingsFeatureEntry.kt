@@ -26,5 +26,6 @@ class SettingsFeatureEntry(
     ): FeatureRoot = factory.create(
         componentContext = context,
         requestedPageId = route.destination.takeUnless { it == "root" },
+        onBack = host::back,
     )
 }

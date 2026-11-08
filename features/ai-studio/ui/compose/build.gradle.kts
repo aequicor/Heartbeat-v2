@@ -11,6 +11,7 @@ kotlin {
         implementation(project(":features:settings:api"))
         implementation(project(":navigation:decompose-compose"))
         implementation(project(":di:api"))
+        implementation(libs.kotlinx.coroutines.core)
     }
     sourceSets.jvmTest.dependencies {
         implementation(libs.compose.ui)

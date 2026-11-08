@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -36,7 +37,8 @@ fun AiStudioScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.surface.canvas),
+            .background(colors.surface.canvas)
+            .imePadding(),
     ) {
         val fit = HbWorkspaceLayout.fit(
             availableWidth = maxWidth.value.toInt(),
@@ -44,7 +46,9 @@ fun AiStudioScreen(
         )
 
         Row(modifier = Modifier.fillMaxSize()) {
-            if (fit.navigation == HbNavigationMode.Rail) {
+            // The overlay drawer is not implemented yet; keep the rail visible in compact mode so
+            // the workspace never loses access to navigation and settings on narrow widths.
+            if (fit.navigation == HbNavigationMode.Rail || fit.navigation == HbNavigationMode.Drawer) {
                 AiStudioNavigationRail(
                     avatarVisible = avatarVisible,
                     onOpenSettings = onOpenSettings,

@@ -393,7 +393,7 @@ class DefaultEditorStoreTest {
     }
 
     private suspend fun repositoryWith(vararg notes: Note): DefaultEditorRepository {
-        val repository = DefaultEditorRepository(EditorDataSource())
+        val repository = DefaultEditorRepository(InMemoryEditorDataSource())
         for (note in notes) {
             repository.save(note)
         }
@@ -410,6 +410,17 @@ class DefaultEditorStoreTest {
             noteId = noteId,
             scope = this,
         )
+}
+
+/** In-memory data source for repository-level tests that do not exercise SQLDelight. */
+private class InMemoryEditorDataSource : EditorDataSource {
+    private val notes = mutableMapOf<String, Note>()
+
+    override suspend fun find(noteId: String): Note? = notes[noteId]
+
+    override suspend fun store(note: Note) {
+        notes[note.id] = note
+    }
 }
 
 /** In-memory repository with configurable delays, failures and a save gate for cancellation. */

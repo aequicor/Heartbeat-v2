@@ -1,0 +1,22 @@
+CREATE TABLE chat (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL
+);
+
+selectById:
+SELECT id, title
+FROM chat
+WHERE id = ?;
+
+selectAll:
+SELECT id, title
+FROM chat
+ORDER BY title ASC;
+
+insert:
+INSERT OR REPLACE INTO chat(id, title)
+VALUES (?, ?);
+
+deleteById:
+DELETE FROM chat
+WHERE id = ?;

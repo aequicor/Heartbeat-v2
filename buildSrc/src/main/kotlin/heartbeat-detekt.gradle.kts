@@ -28,8 +28,25 @@ subprojects {
     }
 
     tasks.withType(Detekt::class.java).configureEach {
-        // Compose resources generate Res.kt under build; generated files are not edited sources.
+        // Generated sources are not edited sources: Compose resources write Res.kt and SQLDelight
+        // writes query classes under build/generated, including on Windows path separators.
         exclude("**/build/generated/**")
+        exclude("**/generated/sqldelight/**")
+        exclude("**/sqldelight/**")
+    }
+
+    // KMP source-set tasks take the whole Kotlin source set, which includes SQLDelight generated
+    // code. The task-level exclude patterns do not filter those source-set roots on Windows, so
+    // rebuild the source tree explicitly after the Kotlin and detekt plugins configured it.
+    afterEvaluate {
+        tasks.withType(Detekt::class.java).configureEach {
+            setSource(
+                source.filter { file ->
+                    val path = file.invariantSeparatorsPath
+                    !path.contains("/build/generated/") && !path.contains("/sqldelight/")
+                },
+            )
+        }
     }
 
     extensions.getByType(DetektExtension::class.java).apply {

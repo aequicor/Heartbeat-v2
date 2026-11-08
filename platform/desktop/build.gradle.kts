@@ -48,6 +48,10 @@ dependencies {
     implementation(project(":features:settings:presentation:decompose"))
     implementation(project(":features:settings:ui:compose"))
     implementation(project(":di:api"))
+    implementation(project(":core:database"))
+    implementation(project(":core:preferences:api"))
+    implementation(project(":core:preferences:datastore"))
+    implementation(project(":storage:database"))
     implementation(libs.metro.runtime)
 
     // Test-only: the composition root graph must see the feature bindings the platform
@@ -82,6 +86,10 @@ compose.desktop {
         }.get().metadata.installationPath.asFile.absolutePath
 
         nativeDistributions {
+            // SQLite JDBC loads java.sql; DataStore's protobuf adapter uses sun.misc.Unsafe from
+            // jdk.unsupported. jpackage includes neither automatically.
+            modules("java.sql")
+            modules("jdk.unsupported")
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the
             // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
@@ -107,24 +115,28 @@ val isccCandidates = listOfNotNull(
 val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/Heartbeat")
 val installerDir = layout.buildDirectory.dir("compose/binaries/main/innosetup")
 
-// On Windows, a sandboxed dev environment can make the system temp directory read-only.
-// The app then crashes at startup: Jewel's IntUiTheme measures the Inter font with
-// Font.createFont, and the JDK writes a temporary font file into java.io.tmpdir. Redirect
-// the launched app's temp directory to a writable directory under the build output. This
-// affects only the local run task, not the packaged distribution.
+// On Windows, a sandboxed dev environment can make the system temp directory and the user profile
+// read-only. The app then crashes at startup: Jewel's IntUiTheme measures the Inter font with
+// Font.createFont, the JDK writes a temporary font file into java.io.tmpdir, and SQLite cannot
+// create the database under %LOCALAPPDATA%. Redirect both the temp and the application data
+// directory to writable directories under the build output. This affects only the local run task,
+// not the packaged distribution.
 if (isWindows) {
     val runTmpDir = layout.buildDirectory.dir("run-tmp")
+    val runDataDir = layout.buildDirectory.dir("run-data")
 
     val launchApp = tasks.register<Exec>("runDistributableWritableTemp") {
         group = "compose desktop"
-        description = "Runs the packaged desktop app with a writable temp directory"
+        description = "Runs the packaged desktop app with writable temp and data directories"
         dependsOn("createDistributable")
         workingDir = appImageDir.get().asFile
         commandLine(appImageDir.get().asFile.resolve("Heartbeat.exe").absolutePath)
         environment("TMP", runTmpDir.get().asFile.absolutePath)
         environment("TEMP", runTmpDir.get().asFile.absolutePath)
+        environment("HEARTBEAT_DATA_DIR", runDataDir.get().asFile.absolutePath)
         doFirst {
             runTmpDir.get().asFile.mkdirs()
+            runDataDir.get().asFile.mkdirs()
         }
     }
 

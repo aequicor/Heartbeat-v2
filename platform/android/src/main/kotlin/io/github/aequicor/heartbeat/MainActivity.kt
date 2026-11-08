@@ -8,41 +8,32 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Modifier
-import com.arkivanov.decompose.DefaultComponentContext
-import com.arkivanov.essenty.lifecycle.LifecycleRegistry
-import com.arkivanov.essenty.lifecycle.create
-import com.arkivanov.essenty.lifecycle.destroy
-import com.arkivanov.essenty.lifecycle.pause
-import com.arkivanov.essenty.lifecycle.resume
-import com.arkivanov.essenty.lifecycle.start
-import com.arkivanov.essenty.lifecycle.stop
+import com.arkivanov.decompose.retainedComponent
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.shell.ShellComponent
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import kotlinx.coroutines.Dispatchers
 
 class MainActivity : ComponentActivity() {
-
-    private val decomposeLifecycle = LifecycleRegistry()
-
-    private lateinit var shell: ShellComponent
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i("Heartbeat", "Heartbeat started")
         enableEdgeToEdge()
 
-        decomposeLifecycle.create()
-
         val graph = (application as HeartbeatApplication).graph
         val renderers = graph.renderers
-        shell = graph.shellComponentFactory.create(
-            componentContext = DefaultComponentContext(decomposeLifecycle),
-            initialRoute = AiStudioRoutes.main(),
-            dispatcher = Dispatchers.Main,
-        )
+        // The Decompose root is retained across configuration changes and process recreation, so
+        // the navigation stack and the selected feature survive rotation instead of resetting to
+        // the AI studio route on every `onCreate`.
+        val shell = retainedComponent(key = "shell", handleBackButton = false) { context ->
+            graph.shellComponentFactory.create(
+                componentContext = context,
+                initialRoute = AiStudioRoutes.main(),
+                dispatcher = Dispatchers.Main,
+            )
+        }
 
         setContent {
             HbTheme(density = HbDensity.Touch) {
@@ -58,30 +49,5 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        decomposeLifecycle.start()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        decomposeLifecycle.resume()
-    }
-
-    override fun onPause() {
-        decomposeLifecycle.pause()
-        super.onPause()
-    }
-
-    override fun onStop() {
-        decomposeLifecycle.stop()
-        super.onStop()
-    }
-
-    override fun onDestroy() {
-        decomposeLifecycle.destroy()
-        super.onDestroy()
     }
 }

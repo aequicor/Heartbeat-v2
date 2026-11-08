@@ -46,7 +46,7 @@ class VisibilityRulesTest {
             violation(dataDto, "NoteDto"),
         )
         Assert.assertEquals(
-            "implementation detail must be internal: NoteDto",
+            "data source contract must be an interface ending with DataSource: NoteDto",
             violation(dataSource, "NoteDto"),
         )
         Assert.assertEquals(
@@ -109,6 +109,13 @@ class VisibilityRulesTest {
         )
         Assert.assertNull(
             violation(domainRepository, "EditorRepository", declarationKind = DeclarationKind.INTERFACE),
+        )
+        Assert.assertNull(
+            violation(dataSource, "EditorDataSource", declarationKind = DeclarationKind.INTERFACE),
+        )
+        Assert.assertEquals(
+            "data source contract must be an interface ending with DataSource: NoteCache",
+            violation(dataSource, "NoteCache"),
         )
         Assert.assertNull(
             violation(

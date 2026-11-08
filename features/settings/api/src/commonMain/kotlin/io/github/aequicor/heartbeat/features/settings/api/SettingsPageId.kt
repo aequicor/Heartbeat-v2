@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.settings.api
 
+import kotlin.jvm.JvmInline
+
 /**
  * Stable identifier of a settings page, owned by the feature that provides the page. The value is
  * used by the settings registry to deduplicate pages and by the shell to select a page.

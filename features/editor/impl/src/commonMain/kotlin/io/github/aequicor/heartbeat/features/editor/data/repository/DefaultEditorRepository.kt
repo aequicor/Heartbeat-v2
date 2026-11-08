@@ -4,12 +4,10 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.editor.data.datasource.EditorDataSource
-import io.github.aequicor.heartbeat.features.editor.data.mapper.toDto
-import io.github.aequicor.heartbeat.features.editor.data.mapper.toNote
 import io.github.aequicor.heartbeat.features.editor.domain.model.Note
 import io.github.aequicor.heartbeat.features.editor.domain.repository.EditorRepository
 
-/** In-memory implementation of [EditorRepository]. */
+/** Repository implementation over the editor data source. */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 class DefaultEditorRepository(
@@ -17,9 +15,9 @@ class DefaultEditorRepository(
 ) : EditorRepository {
 
     override suspend fun load(noteId: String): Note =
-        dataSource.find(noteId)?.toNote() ?: Note(id = noteId, title = "", content = "")
+        dataSource.find(noteId) ?: Note(id = noteId, title = "", content = "")
 
     override suspend fun save(note: Note) {
-        dataSource.store(note.toDto())
+        dataSource.store(note)
     }
 }

@@ -16,6 +16,7 @@ internal class DefaultSettingsComponent(
     componentContext: ComponentContext,
     requestedPageId: String?,
     registry: SettingsRegistry,
+    private val onBack: () -> Unit,
 ) : SettingsComponent, ComponentContext by componentContext {
 
     override val pages: List<SettingsPageDescriptor> = registry.pages
@@ -32,6 +33,10 @@ internal class DefaultSettingsComponent(
 
     override fun search(query: String) {
         searchQuery.value = query
+    }
+
+    override fun back() {
+        onBack()
     }
 
     private fun initialPageId(requestedPageId: String?): SettingsPageId? =
