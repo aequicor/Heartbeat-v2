@@ -52,8 +52,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * receives the focus when the popup opens and is scrolled into the visible area; the selected
  * option keeps the permanent check mark of `HbMenuItem`.
  *
- * [optionKey] is the stable identity of an option and must be unique in [options]; it is used as
- * the lazy-list key and by the owning surface to keep the active option when the list is reordered.
+ * [optionKey] is the stable identity of an option; it must be unique in [options] and saveable via
+ * Bundle on Android. It is used as the lazy-list key and by the owning surface to keep the active
+ * option when the list is reordered. A `null` identity is replaced by a saveable sentinel key, so it
+ * neither collides with an index-like key nor loses the item state when the list is reordered.
  * The active index is normalized against the current options on every composition, so a shrinking
  * list never leaves Enter pointing outside the list.
  */
@@ -74,6 +76,7 @@ internal fun <T> HbOptionList(
     val colors = HbTheme.colors
     val active = activeIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
     val listState = rememberLazyListState()
+    val listKeys = remember(options, optionKey) { optionListKeys(options, optionKey) }
 
     LaunchedEffect(active) {
         if (options.isNotEmpty()) listState.scrollToItem(active)
@@ -107,7 +110,7 @@ internal fun <T> HbOptionList(
             ) {
                 itemsIndexed(
                     items = options,
-                    key = { index, option -> optionKey(option) ?: index },
+                    key = { index, _ -> listKeys[index] },
                 ) { index, option ->
                     OptionRow(
                         option = option,
@@ -268,6 +271,37 @@ private val POPUP_MAX_HEIGHT = 280.dp
 private val POPUP_BORDER = 1.dp
 
 private val ACTIVE_INDICATOR = 2.dp
+
+private const val NullOptionKey = "hb-option-null"
+
+/**
+ * Lazy-list keys of [options]. A `null` identity cannot be used as a Compose key, and the item
+ * index is not a safe substitute: an index can equal a real key (for example `[1, null]` gets `1`
+ * twice) and moves when the list is reordered. The string sentinel is unique among the keys of the
+ * current list, saveable via Bundle on Android, and the same for every order of the same keys.
+ */
+internal fun <T> optionListKeys(
+    options: List<T>,
+    optionKey: (T) -> Any?,
+    nullKey: String = NullOptionKey,
+): List<Any> {
+    val identities = options.map(optionKey)
+    val used = identities.filterNotNull().toMutableSet()
+    var suffix = 0
+    return identities.map { identity ->
+        if (identity != null) {
+            identity
+        } else {
+            var candidate = nullKey
+            while (candidate in used) {
+                suffix += 1
+                candidate = "$nullKey-$suffix"
+            }
+            used += candidate
+            candidate
+        }
+    }
+}
 
 /**
  * Stable identity of an option, including a nullable value. The wrapper keeps the identity

@@ -49,9 +49,9 @@ import org.jetbrains.compose.resources.stringResource
  * The editor carries the combobox contract of the suggestions: the expanded and collapsed states,
  * their accessibility actions, and the active suggestion (or the no-results text) as the state
  * description, so a screen reader hears the same surface the mouse and keyboard users see.
- * [optionKey] is the stable identity of an option and must be unique in [options]; the active
- * option is resolved by that identity, so a filtered list that keeps its length but changes its
- * order cannot move Enter to another value.
+ * [optionKey] is the stable identity of an option; it must be unique in [options] and saveable via
+ * Bundle on Android. The active option is resolved by that identity, so a filtered list that keeps
+ * its length but changes its order cannot move Enter to another value.
  */
 @Composable
 fun <T> HbCombobox(

@@ -59,9 +59,10 @@ import org.jetbrains.compose.resources.stringResource
  * closing the popup runs the same close procedure, including Escape and the platform dismissal, so
  * the focus returns to the trigger that opened the surface.
  *
- * [optionKey] is the stable identity of an option and must be unique in [options]. The active
- * option is resolved by that identity instead of by its position, so an asynchronous refresh that
- * keeps the list length but changes the order does not move the highlight or Enter to another value.
+ * [optionKey] is the stable identity of an option; it must be unique in [options] and saveable via
+ * Bundle on Android. The active option is resolved by that identity instead of by its position, so
+ * an asynchronous refresh that keeps the list length but changes the order does not move the
+ * highlight or Enter to another value.
  */
 @Composable
 fun <T> HbSelect(
