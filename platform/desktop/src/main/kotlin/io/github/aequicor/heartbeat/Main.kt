@@ -40,7 +40,7 @@ fun main() {
     println("Heartbeat started")
 
     val dataDirectory = desktopDataDirectory()
-    File(dataDirectory).mkdirs()
+    ensureDataDirectory(dataDirectory)
 
     val graph = createGraphFactory<DesktopGraph.Factory>().create(dataDirectory)
     initializeStorage(graph)
@@ -101,13 +101,36 @@ fun main() {
 /**
  * Application data directory: `%LOCALAPPDATA%\Heartbeat` on Windows and `~/.heartbeat` elsewhere.
  * The entry point owns the path; the database and preferences modules receive it as a string.
+ *
+ * `HEARTBEAT_DATA_DIR` overrides the location. The Gradle dev-run task uses it to keep the
+ * sandboxed desktop process inside the writable build directory; a normal installation does not
+ * set it.
  */
 private fun desktopDataDirectory(): String {
+    val override = System.getenv("HEARTBEAT_DATA_DIR")
+    if (!override.isNullOrBlank()) {
+        return File(override).absolutePath
+    }
+
     val localAppData = System.getenv("LOCALAPPDATA")
     return if (!localAppData.isNullOrBlank()) {
         File(localAppData, "Heartbeat").absolutePath
     } else {
         File(System.getProperty("user.home"), ".heartbeat").absolutePath
+    }
+}
+
+/**
+ * Ensures the data directory exists before the database is opened. Without this check a read-only
+ * location surfaces as an opaque `SQLITE_CANTOPEN`; report the real cause instead.
+ */
+private fun ensureDataDirectory(directory: String) {
+    val dataDirectory = File(directory)
+    if (!dataDirectory.isDirectory && !dataDirectory.mkdirs()) {
+        System.err.println(
+            "Heartbeat storage initialization failed: cannot create data directory $directory",
+        )
+        exitProcess(1)
     }
 }
 
