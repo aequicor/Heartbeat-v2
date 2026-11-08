@@ -17,6 +17,9 @@ class ArchitectureRulesTest {
         ":shell:impl" to Role.ShellImpl,
         ":shell:presentation:decompose" to Role.ShellPresentation,
         ":shell:ui:compose" to Role.ShellUi,
+        ":navigation:api" to Role.NavigationApi,
+        ":navigation:decompose" to Role.NavigationDecompose,
+        ":navigation:decompose-compose" to Role.NavigationCompose,
         ":features:editor:api" to Role.FeatureApi,
         ":features:editor:impl" to Role.FeatureImpl,
         ":features:editor:presentation:decompose" to Role.FeaturePresentation,
@@ -43,7 +46,7 @@ class ArchitectureRulesTest {
         roleSamples.forEach { (fromPath, _) ->
             roleSamples.forEach { (toPath, toRole) ->
                 val violation = ArchitectureRules.projectDependencyViolation(fromPath, toPath)
-                val allowed = toRole in ArchitectureRules.allowedTargets(fromPath)
+                val allowed = ArchitectureRules.isAllowedDependency(fromPath, toPath)
                 if (allowed) {
                     assertNull(violation, "$fromPath -> $toPath must be allowed")
                 } else {
@@ -130,11 +133,17 @@ class ArchitectureRulesTest {
                 ":features:editor:impl",
             ),
         )
-        assertEquals(
-            "ui is presentation-framework independent; only shell:ui:compose may bind components",
+        assertNull(
             ArchitectureRules.projectDependencyViolation(
                 ":features:editor:ui:compose",
                 ":features:editor:presentation:decompose",
+            ),
+        )
+        assertEquals(
+            "ui may depend only on the presentation adapter of the same feature",
+            ArchitectureRules.projectDependencyViolation(
+                ":features:editor:ui:compose",
+                ":features:home:presentation:decompose",
             ),
         )
     }
@@ -198,8 +207,28 @@ class ArchitectureRulesTest {
         assertEquals(
             "ui must not depend on Decompose",
             ArchitectureRules.moduleDependencyViolation(
+                ":features:editor:ui:win32",
+                "com.arkivanov.decompose",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.moduleDependencyViolation(
                 ":features:editor:ui:compose",
                 "com.arkivanov.decompose",
+            ),
+        )
+        assertEquals(
+            "navigation must not depend on Compose",
+            ArchitectureRules.moduleDependencyViolation(
+                ":navigation:decompose",
+                "org.jetbrains.compose.runtime",
+            ),
+        )
+        assertEquals(
+            "navigation must not depend on Metro",
+            ArchitectureRules.moduleDependencyViolation(
+                ":navigation:decompose-compose",
+                "dev.zacsweers.metro",
             ),
         )
         assertNull(
@@ -243,17 +272,23 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun uiMayImportComposeButNotDecompose() {
+    fun composeUiMayImportComposeAndDecompose() {
         assertNull(
             ArchitectureRules.forbiddenImport(
                 ":features:editor:ui:compose",
                 "androidx.compose.runtime.Composable",
             ),
         )
+        assertNull(
+            ArchitectureRules.forbiddenImport(
+                ":features:editor:ui:compose",
+                "com.arkivanov.decompose.ComponentContext",
+            ),
+        )
         assertEquals(
             "ui must not import Decompose: com.arkivanov.decompose.ComponentContext",
             ArchitectureRules.forbiddenImport(
-                ":features:editor:ui:compose",
+                ":features:editor:ui:win32",
                 "com.arkivanov.decompose.ComponentContext",
             ),
         )
@@ -319,7 +354,11 @@ class ArchitectureRulesTest {
         // A framework ban protects the boundary only if it applies to the resolved graph as well:
         // the forbidden group can arrive through an allowed intermediate library.
         roleSamples.forEach { (path, role) ->
-            val guarded = role != Role.Platform && role != Role.Other
+            val guarded = when {
+                role == Role.Platform || role == Role.Other -> false
+                path.endsWith(":ui:compose") -> false
+                else -> true
+            }
             assertEquals(guarded, ArchitectureRules.requiresCleanClasspath(path), path)
         }
     }

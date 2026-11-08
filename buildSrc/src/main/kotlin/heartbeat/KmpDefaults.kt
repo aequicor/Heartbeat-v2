@@ -17,5 +17,5 @@ object KmpDefaults {
     val JVM_VENDOR = JvmVendorSpec.JETBRAINS
 
     fun namespace(projectPath: String): String =
-        NAMESPACE_PREFIX + projectPath.replace(":", ".")
+        NAMESPACE_PREFIX + projectPath.replace(":", ".").replace("-", "")
 }

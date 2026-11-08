@@ -13,6 +13,7 @@ nav:
   - Главная: index.md
   - Окружение и запуск: setup.md
   - Архитектура: specs/architecture.md
+  - Навигация: specs/navigation.md
   - Дизайн-система: specs/design-system.md
   - Поддерживаемые таргеты: specs/platforms.md
   - Выпуск: specs/releases.md

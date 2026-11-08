@@ -27,6 +27,15 @@ include(
     ":designsystem:compose:desktop",
 )
 include(
+    ":navigation:api",
+    ":navigation:decompose",
+    ":navigation:decompose-compose",
+)
+include(
+    ":features:ai-studio:api",
+    ":features:ai-studio:impl",
+    ":features:ai-studio:presentation:decompose",
+    ":features:ai-studio:ui:compose",
     ":features:editor:api",
     ":features:editor:impl",
     ":features:editor:presentation:decompose",

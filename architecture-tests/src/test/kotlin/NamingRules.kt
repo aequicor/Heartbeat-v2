@@ -32,6 +32,7 @@ internal object NamingRules {
         declarationName: String,
         isPublic: Boolean = true,
         annotations: List<String> = listOf(),
+        projectPath: String? = null,
     ): String? = when {
         foreignStateHolderSuffixes.any(declarationName::endsWith) ->
             "features must name the state holder <Feature>Store, not $declarationName"
@@ -39,7 +40,7 @@ internal object NamingRules {
         packageName.startsWith("$DESIGN_SYSTEM_PACKAGE.") ->
             violationInDesignSystem(declarationName, isPublic)
 
-        else -> featureViolation(packageName, declarationKind, declarationName, annotations)
+        else -> featureViolation(packageName, declarationKind, declarationName, annotations, projectPath)
     }
 
     private fun featureViolation(
@@ -47,6 +48,7 @@ internal object NamingRules {
         declarationKind: DeclarationKind,
         declarationName: String,
         annotations: List<String>,
+        projectPath: String?,
     ): String? {
         val path = featurePath(packageName)
         return when {
@@ -54,9 +56,9 @@ internal object NamingRules {
             // The api package holds every public contract: Store, State, Action, Effect, models
             // and services. Only the feature prefix is mandatory, so a model keeps its own name.
             isApiPackage(packageName) ->
-                apiContractViolation(featureName(path), declarationName)
+                apiContractViolation(featureName(path.first(), projectPath), declarationName)
 
-            else -> roleViolation(path, declarationKind, declarationName, annotations)
+            else -> roleViolation(path, declarationKind, declarationName, annotations, projectPath)
         }
     }
 
@@ -77,8 +79,9 @@ internal object NamingRules {
         declarationKind: DeclarationKind,
         declarationName: String,
         annotations: List<String>,
+        projectPath: String?,
     ): String? {
-        val feature = featureName(path)
+        val feature = featureName(path.first(), projectPath)
         return when (path.drop(1)) {
             listOf("domain", "usecase") -> suffixViolation(
                 role = "use case",
@@ -207,13 +210,15 @@ internal object NamingRules {
         val allowed = setOf(
             "${feature}Component",
             "${feature}ComponentFactory",
+            "${feature}FeatureEntry",
             "Default${feature}Component",
             "Default${feature}ComponentFactory",
+            "Default${feature}FeatureEntry",
         )
-        return if (declarationName in allowed) {
+        return if (declarationName in allowed || declarationName.endsWith("FeatureEntry")) {
             null
         } else {
-            "component must be <Feature>Component or Default<Feature>Component: $declarationName"
+            "component must be <Feature>Component or <Feature>FeatureEntry: $declarationName"
         }
     }
 
@@ -240,9 +245,25 @@ internal object NamingRules {
         else -> null
     }
 
-    /** Capitalised feature segment: `editor` becomes `Editor`. */
-    private fun featureName(path: List<String>): String =
-        path.first().replaceFirstChar { it.uppercaseChar() }
+    /**
+     * Capitalised feature segment: `editor` becomes `Editor`. A hyphenated directory
+     * (`features/ai-studio`) becomes `AiStudio`, so the display name follows the module name
+     * rather than the flattened package segment.
+     */
+    internal fun featureName(featureSegment: String, projectPath: String? = null): String =
+        featureNameFromPath(projectPath) ?: featureSegment.replaceFirstChar { it.uppercaseChar() }
+
+    internal fun featureNameFromPath(projectPath: String?): String? =
+        projectPath
+            ?.replace('\\', '/')
+            ?.let { featureDirectory.find(it)?.groupValues?.get(2) }
+            ?.split('-')
+            ?.filter { it.isNotEmpty() }
+            ?.joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+            ?.takeIf { it.isNotEmpty() }
+
+    /** Matches the feature directory in an absolute or repo-relative source path. */
+    private val featureDirectory = Regex("""(^|/)features/([^/]+)/""")
 
     /** Segments of `...heartbeat.features.<feature>.<role>`; `null` outside a feature. */
     internal fun featurePath(packageName: String): List<String>? {

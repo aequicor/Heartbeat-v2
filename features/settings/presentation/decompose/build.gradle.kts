@@ -6,6 +6,7 @@ plugins {
 kotlin {
     sourceSets.commonMain.dependencies {
         implementation(project(":features:settings:api"))
+        implementation(project(":navigation:decompose"))
         implementation(project(":di:api"))
     }
 }

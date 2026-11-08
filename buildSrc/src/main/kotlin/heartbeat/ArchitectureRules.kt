@@ -22,6 +22,9 @@ object ArchitectureRules {
         ShellImpl,
         ShellPresentation,
         ShellUi,
+        NavigationApi,
+        NavigationDecompose,
+        NavigationCompose,
         FeatureApi,
         FeatureImpl,
         FeaturePresentation,
@@ -58,7 +61,13 @@ object ArchitectureRules {
     private val allowedTargetsByRole: Map<Role, Set<Role>> = mapOf(
         // The composition root lives in the platform compilation and sees every binding.
         Role.Platform to Role.entries.toSet(),
-        Role.ShellApi to setOf(Role.ShellApi, Role.FeatureApi, Role.DiApi, Role.Core),
+        Role.ShellApi to setOf(
+            Role.ShellApi,
+            Role.FeatureApi,
+            Role.NavigationApi,
+            Role.DiApi,
+            Role.Core,
+        ),
         Role.ShellImpl to setOf(
             Role.ShellApi,
             Role.ShellImpl,
@@ -72,6 +81,8 @@ object ArchitectureRules {
             Role.ShellPresentation,
             Role.FeatureApi,
             Role.FeaturePresentation,
+            Role.NavigationApi,
+            Role.NavigationDecompose,
             Role.DiApi,
             Role.Core,
         ),
@@ -83,31 +94,59 @@ object ArchitectureRules {
             Role.FeatureApi,
             Role.FeaturePresentation,
             Role.FeatureUi,
+            Role.NavigationApi,
+            Role.NavigationCompose,
+            Role.NavigationDecompose,
             Role.DesignSystem,
             Role.DiApi,
             Role.Core,
         ),
-        Role.FeatureApi to setOf(Role.FeatureApi, Role.Core),
-        Role.FeatureImpl to setOf(Role.FeatureApi, Role.DiApi, Role.Core),
-        Role.FeaturePresentation to setOf(Role.FeatureApi, Role.DiApi, Role.Core),
-        Role.FeatureUi to setOf(Role.FeatureApi, Role.DesignSystem, Role.Core),
+        Role.NavigationApi to setOf(Role.NavigationApi),
+        Role.NavigationDecompose to setOf(Role.NavigationApi, Role.NavigationDecompose),
+        Role.NavigationCompose to setOf(Role.NavigationApi, Role.NavigationDecompose),
+        Role.FeatureApi to setOf(Role.FeatureApi, Role.NavigationApi, Role.Core),
+        Role.FeatureImpl to setOf(Role.FeatureApi, Role.NavigationApi, Role.DiApi, Role.Core),
+        Role.FeaturePresentation to setOf(
+            Role.FeatureApi,
+            Role.NavigationApi,
+            Role.NavigationDecompose,
+            Role.DiApi,
+            Role.Core,
+        ),
+        Role.FeatureUi to setOf(
+            Role.FeatureApi,
+            Role.FeaturePresentation,
+            Role.NavigationApi,
+            Role.NavigationCompose,
+            Role.DesignSystem,
+            Role.DiApi,
+            Role.Core,
+        ),
         Role.DiApi to setOf(Role.DiApi, Role.Core),
         Role.Core to setOf(Role.Core, Role.DiApi),
         Role.DesignSystem to setOf(Role.DesignSystem, Role.Core),
         Role.Other to setOf(Role.Other),
     )
 
-    private val forbiddenGroups: Map<Role, List<String>> = mapOf(
-        Role.FeatureApi to uiFrameworkGroups + METRO_GROUP,
+    /**
+     * Framework groups a role must not declare directly. Compose UI of a feature is the
+     * exception: it renders its own Decompose adapter through the renderer SPI and contributes the
+     * renderer with Metro, so those frameworks are expected there.
+     */
+    private val baseForbiddenGroups: Map<Role, List<String>> = mapOf(
         Role.ShellApi to uiFrameworkGroups + METRO_GROUP,
-        Role.FeatureImpl to uiFrameworkGroups,
         Role.ShellImpl to uiFrameworkGroups,
-        Role.DiApi to uiFrameworkGroups,
-        Role.Core to uiFrameworkGroups + METRO_GROUP,
+        Role.NavigationApi to uiFrameworkGroups + METRO_GROUP,
+        Role.NavigationDecompose to composeFrameworkGroups + METRO_GROUP,
+        Role.NavigationCompose to listOf(METRO_GROUP),
+        Role.FeatureApi to uiFrameworkGroups + METRO_GROUP,
+        Role.FeatureImpl to uiFrameworkGroups,
         Role.FeaturePresentation to composeFrameworkGroups,
         Role.ShellPresentation to composeFrameworkGroups,
-        Role.FeatureUi to listOf(DECOMPOSE_GROUP, METRO_GROUP),
+        Role.FeatureUi to uiFrameworkGroups + METRO_GROUP,
         Role.ShellUi to listOf(METRO_GROUP),
+        Role.DiApi to uiFrameworkGroups,
+        Role.Core to uiFrameworkGroups + METRO_GROUP,
         Role.DesignSystem to listOf(DECOMPOSE_GROUP, METRO_GROUP),
         Role.Platform to listOf(),
         Role.Other to listOf(),
@@ -119,26 +158,22 @@ object ArchitectureRules {
      * dependency: a presentation adapter may inherit the `androidx.lifecycle` artifacts from
      * Decompose, but declaring them directly stays forbidden.
      */
-    private val forbiddenTransitiveGroups: Map<Role, List<String>> = forbiddenGroups + mapOf(
-        Role.FeaturePresentation to composeArtifactGroups,
-        Role.ShellPresentation to composeArtifactGroups,
-    )
+    private fun transitiveForbiddenGroups(path: String): List<String> = when (role(path)) {
+        Role.FeaturePresentation, Role.ShellPresentation -> composeArtifactGroups
+        // Decompose brings `androidx.lifecycle` transitively; only Compose artifacts stay banned.
+        Role.NavigationDecompose -> composeArtifactGroups + METRO_GROUP
+        else -> declaredForbiddenGroups(path)
+    }
 
-    private val forbiddenImports: Map<Role, List<String>> = mapOf(
-        Role.FeatureApi to uiFrameworkGroups + METRO_GROUP,
-        Role.ShellApi to uiFrameworkGroups + METRO_GROUP,
-        Role.FeatureImpl to uiFrameworkGroups,
-        Role.ShellImpl to uiFrameworkGroups,
-        Role.DiApi to uiFrameworkGroups,
-        Role.Core to uiFrameworkGroups + METRO_GROUP,
-        Role.FeaturePresentation to composeFrameworkGroups,
-        Role.ShellPresentation to composeFrameworkGroups,
-        Role.FeatureUi to listOf(DECOMPOSE_GROUP, METRO_GROUP),
-        Role.ShellUi to listOf(METRO_GROUP),
-        Role.DesignSystem to listOf(DECOMPOSE_GROUP, METRO_GROUP),
-        Role.Platform to listOf(),
-        Role.Other to listOf(),
-    )
+    private fun declaredForbiddenGroups(path: String): List<String> =
+        if (isComposeUi(path)) emptyList() else baseForbiddenGroups.getValue(role(path))
+
+    /** `features/<feature>/ui/compose` renders the Decompose flow, unlike a native UI module. */
+    private fun isComposeUi(path: String): Boolean {
+        val segments = pathSegments(path)
+        val index = segments.indexOf("ui")
+        return index >= 0 && segments.getOrNull(index + 1)?.startsWith("compose") == true
+    }
 
     fun pathSegments(path: String): List<String> =
         path.split(":").filter { it.isNotEmpty() }
@@ -159,6 +194,9 @@ object ArchitectureRules {
         path == ":shell:impl" -> Role.ShellImpl
         path.startsWith(":shell:presentation:") -> Role.ShellPresentation
         path.startsWith(":shell:ui:") -> Role.ShellUi
+        path == ":navigation:api" -> Role.NavigationApi
+        path == ":navigation:decompose" -> Role.NavigationDecompose
+        path == ":navigation:decompose-compose" -> Role.NavigationCompose
         isFeature(path) && isApi(path) -> Role.FeatureApi
         isFeature(path) && isImpl(path) -> Role.FeatureImpl
         isFeature(path) && pathSegments(path).contains("presentation") -> Role.FeaturePresentation
@@ -178,18 +216,30 @@ object ArchitectureRules {
      * ([moduleDependencyViolation] and [transitiveModuleDependencyViolation]).
      */
     fun requiresCleanClasspath(path: String): Boolean =
-        forbiddenTransitiveGroups.getValue(role(path)).isNotEmpty()
+        transitiveForbiddenGroups(path).isNotEmpty()
 
     fun allowedTargets(from: String): Set<Role> = allowedTargetsByRole.getValue(role(from))
 
-    fun isAllowedDependency(fromPath: String, toPath: String): Boolean =
-        role(toPath) in allowedTargetsByRole.getValue(role(fromPath))
+    fun isAllowedDependency(fromPath: String, toPath: String): Boolean {
+        val from = role(fromPath)
+        val to = role(toPath)
+        if (to !in allowedTargetsByRole.getValue(from)) {
+            return false
+        }
+        if (from == Role.FeatureUi && to == Role.FeaturePresentation) {
+            return featureOf(fromPath) == featureOf(toPath)
+        }
+        return true
+    }
 
     fun projectDependencyViolation(fromPath: String, toPath: String): String? {
         val from = role(fromPath)
         val to = role(toPath)
-        if (to in allowedTargetsByRole.getValue(from)) {
+        if (isAllowedDependency(fromPath, toPath)) {
             return null
+        }
+        if (from == Role.FeatureUi && to == Role.FeaturePresentation) {
+            return "ui may depend only on the presentation adapter of the same feature"
         }
         return when {
             from == Role.FeatureApi -> "api modules depend only on api contracts and core"
@@ -207,9 +257,6 @@ object ArchitectureRules {
 
             from == Role.FeatureUi && to == Role.FeatureImpl -> "ui must not depend on impl"
 
-            from == Role.FeatureUi && to == Role.FeaturePresentation ->
-                "ui is presentation-framework independent; only shell:ui:compose may bind components"
-
             from == Role.Core -> "core must not depend on features, shell or designsystem"
 
             from == Role.DesignSystem && to == Role.DiApi ->
@@ -223,29 +270,31 @@ object ArchitectureRules {
 
     /** Violation of the declared-dependency policy of the module role. */
     fun moduleDependencyViolation(modulePath: String, group: String): String? =
-        groupViolation(forbiddenGroups, modulePath, group)
+        groupViolation(declaredForbiddenGroups(modulePath), role(modulePath), group)
 
     /** Violation of the resolved-graph policy of the module role. */
     fun transitiveModuleDependencyViolation(modulePath: String, group: String): String? =
-        groupViolation(forbiddenTransitiveGroups, modulePath, group)
+        groupViolation(transitiveForbiddenGroups(modulePath), role(modulePath), group)
 
     private fun groupViolation(
-        policy: Map<Role, List<String>>,
-        modulePath: String,
+        policy: List<String>,
+        moduleRole: Role,
         group: String,
     ): String? {
-        val moduleRole = role(modulePath)
-        val forbidden = policy.getValue(moduleRole).firstOrNull { isGroup(group, it) }
+        val forbidden = policy.firstOrNull { isGroup(group, it) }
             ?: return null
         return "${roleDescription(moduleRole)} must not depend on ${reason(forbidden)}"
     }
 
     fun forbiddenImport(modulePath: String, importPath: String): String? {
-        val forbidden = forbiddenImports.getValue(role(modulePath))
+        val forbidden = declaredForbiddenGroups(modulePath)
             .firstOrNull { isGroup(importPath, it) }
             ?: return null
         return "${roleDescription(role(modulePath))} must not import ${reason(forbidden)}: $importPath"
     }
+
+    private fun featureOf(path: String): String? =
+        pathSegments(path).takeIf { it.firstOrNull() == "features" }?.getOrNull(1)
 
     private fun roleDescription(role: Role): String = when (role) {
         Role.FeatureApi, Role.ShellApi -> "api contracts"
@@ -255,6 +304,7 @@ object ArchitectureRules {
         Role.FeatureUi, Role.ShellUi -> "ui"
         Role.DesignSystem -> "designsystem"
         Role.FeaturePresentation, Role.ShellPresentation -> "presentation adapters"
+        Role.NavigationApi, Role.NavigationDecompose, Role.NavigationCompose -> "navigation"
         Role.Platform -> "platform"
         Role.Other -> "module"
     }

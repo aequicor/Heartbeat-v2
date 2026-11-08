@@ -46,6 +46,8 @@ style:
       - 'androidx.lifecycle.ViewModel'
     excludes:
       - '**/presentation/decompose/**'
+      - '**/navigation/decompose/**'
+      - '**/navigation/decompose-compose/**'
       - '**/designsystem/**'
       - '**/platform/**'
       - '**/shell/presentation/**'
@@ -178,7 +180,9 @@ compose:
   TopLevelComposableFunctions:
     active: true
     allowInObjects: false
-    allowInInterfaces: false
+    # The navigation Compose module defines the renderer SPI as interfaces with a `@Composable`
+    # member: the shell calls the member, and features implement it without a wrapper type.
+    allowInInterfaces: true
   UnnecessaryEventHandlerParameter:
     active: true
     reportConstantArguments: true

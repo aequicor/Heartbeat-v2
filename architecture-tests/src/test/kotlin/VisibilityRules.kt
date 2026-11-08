@@ -26,6 +26,8 @@ internal object VisibilityRules {
         "Inject",
         "ContributesBinding",
         "ContributesTo",
+        "ContributesIntoSet",
+        "ContributesIntoMap",
         "Provides",
         "Binds",
         "SingleIn",
@@ -40,6 +42,7 @@ internal object VisibilityRules {
         listOf("presentation"),
         listOf("di"),
         listOf("component"),
+        listOf("ui"),
     )
 
     /** Modifiers of a value declaration that carries domain meaning. */
@@ -55,6 +58,7 @@ internal object VisibilityRules {
         declarationKind: DeclarationKind = DeclarationKind.CLASS,
         annotations: List<String> = listOf(),
         modifiers: List<String> = listOf(),
+        projectPath: String? = null,
     ): String? {
         val role = if (isPublic) NamingRules.featurePath(packageName)?.drop(1) else null
         return when {
@@ -72,7 +76,7 @@ internal object VisibilityRules {
             )
 
             role == listOf("component") -> componentContractViolation(
-                packageName,
+                featureName(packageName, projectPath),
                 declarationKind,
                 declarationName,
             )
@@ -123,11 +127,10 @@ internal object VisibilityRules {
     }
 
     private fun componentContractViolation(
-        packageName: String,
+        feature: String,
         declarationKind: DeclarationKind,
         declarationName: String,
     ): String? {
-        val feature = featureName(packageName)
         val allowed = setOf("${feature}Component", "${feature}ComponentFactory")
         return if (declarationKind == DeclarationKind.INTERFACE && declarationName in allowed) {
             null
@@ -154,7 +157,9 @@ internal object VisibilityRules {
     private fun detailViolation(declarationName: String): String =
         "implementation detail must be internal: $declarationName"
 
-    /** Capitalised feature segment: `editor` becomes `Editor`. */
-    private fun featureName(packageName: String): String =
-        NamingRules.featurePath(packageName)!!.first().replaceFirstChar { it.uppercaseChar() }
+    /** Capitalised feature name: `editor` becomes `Editor`, `ai-studio` becomes `AiStudio`. */
+    private fun featureName(packageName: String, projectPath: String?): String {
+        val segment = NamingRules.featurePath(packageName)!!.first()
+        return NamingRules.featureName(segment, projectPath)
+    }
 }
