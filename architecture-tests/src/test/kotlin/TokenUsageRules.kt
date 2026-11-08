@@ -1,6 +1,21 @@
-import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType
-import org.jetbrains.kotlin.lexer.KotlinLexer
-import org.jetbrains.kotlin.lexer.KtTokens
+@file:OptIn(
+    org.jetbrains.kotlin.CoreEnvironmentDeprecation::class,
+    org.jetbrains.kotlin.config.CompilerConfiguration.Internals::class,
+    org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi::class,
+)
+
+import org.jetbrains.kotlin.cli.extensionsStorage
+import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
+import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory
+import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
+import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.idea.KotlinLanguage
+import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import java.io.File
 
 /**
@@ -8,16 +23,29 @@ import java.io.File
  * semantic roles or component APIs, so a raw `Color`, `Dp`, `TextUnit` or `dp`/`sp` literal is a
  * violation instead of a silent second design system.
  *
- * The rule tokenizes Kotlin with the compiler lexer and checks only code tokens, so a color or size
- * mentioned in a comment, a character literal or a string literal is not a violation, and a
- * constructor call is recognized together with its named arguments. The design system layer,
- * generated code and platform renderer adapters are exempt by an anchored module path; a feature
- * cannot become exempt by putting a component in a subdirectory whose name happens to contain
- * `theme`, `renderer` or `adapter`.
+ * The rule parses Kotlin syntax with the Kotlin PSI instead of matching raw source text, so a
+ * color or size mentioned in a comment or a string literal is not a violation, and a constructor
+ * call is recognized together with its named arguments. The design system layer, generated code
+ * and platform renderer adapters are exempt by an anchored module path; a feature cannot become
+ * exempt by putting a component in a subdirectory whose name happens to contain `theme`, `renderer`
+ * or `adapter`.
  */
 internal object TokenUsageRules {
 
     private val repoRoot = File(System.getProperty("user.dir")).absoluteFile.path.replace('\\', '/')
+
+    private val project by lazy {
+        val configuration = CompilerConfiguration().apply {
+            extensionsStorage = CompilerPluginRegistrar.ExtensionStorage()
+        }
+        KotlinCoreEnvironment.createForProduction(
+            Disposer.newDisposable("token-usage-rules"),
+            configuration,
+            EnvironmentConfigFiles.JVM_CONFIG_FILES,
+        ).project
+    }
+
+    private val fileFactory by lazy { PsiFileFactory.getInstance(project) }
 
     private val exemptions = listOf(
         Regex("""^designsystem/"""),
@@ -25,19 +53,18 @@ internal object TokenUsageRules {
         Regex("""^platform/(?:[^/]+/)?(?:renderer|adapter)/"""),
     )
 
-    private val forbidden = listOf(
-        "raw Color constructor" to Regex(
-            """\bColor\s*\(\s*(?:(?:color|red)\s*=\s*)?(?:""" +
-                """0x[0-9a-fA-F_]+(?:\s*\)|\s*,)|""" +
-                """\d[\d_]*(?:\.\d+)?[fF]?\s*,)""",
-        ),
-        "raw palette constant" to Regex(
-            """\bColor\s*\.\s*(Red|Green|Blue|Black|White|Gray|LightGray|DarkGray|Yellow|Cyan|Magenta)\b""",
-        ),
-        "raw Dp constructor" to Regex("""\bDp\s*\(\s*-?\d[\d_]*(?:\.\d+)?[fF]?\s*\)"""),
-        "raw TextUnit constructor" to Regex("""\bTextUnit\s*\(\s*-?\d[\d_]*(?:\.\d+)?[fF]?\s*,"""),
-        "literal dp" to Regex("""(?<![\w.])\d[\d_]*(?:\.\d+)?\.dp\b"""),
-        "literal sp" to Regex("""(?<![\w.])\d[\d_]*(?:\.\d+)?\.sp\b"""),
+    private val paletteConstants = setOf(
+        "Red",
+        "Green",
+        "Blue",
+        "Black",
+        "White",
+        "Gray",
+        "LightGray",
+        "DarkGray",
+        "Yellow",
+        "Cyan",
+        "Magenta",
     )
 
     fun isExempt(projectPath: String): Boolean {
@@ -48,46 +75,51 @@ internal object TokenUsageRules {
     fun violations(projectPath: String, source: String): List<String> {
         if (isExempt(projectPath)) return listOf()
         val normalized = relativePath(projectPath)
-        val code = codeOnly(source)
-        return forbidden.flatMap { (reason, pattern) ->
-            pattern.findAll(code).map { match -> "$normalized: $reason: ${match.value}" }.toList()
-        }
+        val violations = mutableListOf<String>()
+        parse(source).accept(
+            object : KtTreeVisitorVoid() {
+                override fun visitCallExpression(expression: KtCallExpression) {
+                    val callee = expression.calleeExpression?.text
+                    val hasNumericArgument = expression.valueArguments.any { argument ->
+                        argument.getArgumentExpression()?.text?.let(::isNumericLiteral) == true
+                    }
+                    when {
+                        callee == "Color" && hasNumericArgument -> {
+                            violations += "$normalized: raw Color constructor: ${expression.text}"
+                        }
+
+                        (callee == "Dp" || callee == "TextUnit") && hasNumericArgument -> {
+                            violations += "$normalized: raw $callee constructor: ${expression.text}"
+                        }
+                    }
+                    super.visitCallExpression(expression)
+                }
+
+                override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) {
+                    val receiver = expression.receiverExpression.text
+                    val selector = expression.selectorExpression?.text.orEmpty()
+                    when {
+                        isNumericLiteral(receiver) && selector == "dp" -> {
+                            violations += "$normalized: literal dp: ${expression.text}"
+                        }
+
+                        isNumericLiteral(receiver) && selector == "sp" -> {
+                            violations += "$normalized: literal sp: ${expression.text}"
+                        }
+
+                        receiver.substringAfterLast('.') == "Color" && selector in paletteConstants -> {
+                            violations += "$normalized: raw palette constant: ${expression.text}"
+                        }
+                    }
+                    super.visitDotQualifiedExpression(expression)
+                }
+            },
+        )
+        return violations
     }
 
-    /** Keeps code tokens and replaces comments, whitespace and literals with blanks. */
-    private fun codeOnly(source: String): String {
-        val lexer = KotlinLexer()
-        lexer.start(source)
-        val code = StringBuilder(source.length)
-        while (true) {
-            val type = lexer.tokenType ?: break
-            appendToken(source, lexer.tokenStart, lexer.tokenEnd, type, code)
-            lexer.advance()
-        }
-        return code.toString()
-    }
-
-    private fun appendToken(
-        source: String,
-        start: Int,
-        end: Int,
-        type: IElementType,
-        code: StringBuilder,
-    ) {
-        if (isIgnored(type)) {
-            for (index in start until end) {
-                code.append(if (source[index] == '\n') '\n' else ' ')
-            }
-        } else {
-            code.append(source, start, end)
-        }
-    }
-
-    private fun isIgnored(type: IElementType): Boolean =
-        type == KtTokens.WHITE_SPACE ||
-            KtTokens.COMMENTS.contains(type) ||
-            KtTokens.STRINGS.contains(type) ||
-            type == KtTokens.CHARACTER_LITERAL
+    private fun parse(source: String): KtFile =
+        fileFactory.createFileFromText("TokenUsage.kt", KotlinLanguage.INSTANCE, source) as KtFile
 
     private fun relativePath(projectPath: String): String {
         val unix = projectPath.replace('\\', '/')
@@ -98,4 +130,11 @@ internal object TokenUsageRules {
             else -> unix
         }
     }
+
+    private fun isNumericLiteral(text: String): Boolean =
+        NumericLiteral.matches(text.replace("_", ""))
+
+    private val NumericLiteral = Regex(
+        """^-?(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)[fF]?$""",
+    )
 }
