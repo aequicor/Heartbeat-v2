@@ -68,6 +68,12 @@ jobs:
     name: ${{ matrix.name }}
     needs: resolve
     runs-on: ${{ matrix.runner }}
+    # The matrix mixes Ubuntu and Windows runners, but every step uses bash syntax (gh api line
+    # continuations, `if [ ... ]` and `./gradlew`). Pin bash so the Windows gate does not parse the
+    # publish steps with pwsh, which would fail before the gate runs and leave its status pending.
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 45
     permissions:
       contents: read

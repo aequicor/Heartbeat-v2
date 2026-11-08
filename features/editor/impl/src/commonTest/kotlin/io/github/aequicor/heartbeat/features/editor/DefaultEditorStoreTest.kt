@@ -242,12 +242,14 @@ class DefaultEditorStoreTest {
     @Test
     @Suppress("InjectDispatcher")
     fun concurrentSaveStartsOnlyOnce() = runTest {
-        val repository = FakeEditorRepository(saveDelayMillis = 1_000)
+        // The gate holds the first save in flight so a completed save cannot reset isSaving and
+        // admit a second one. While it is held, the atomic check-and-set must still let exactly
+        // one of the concurrent dispatches start a save; the rest are rejected.
+        val saveGate = CompletableDeferred<Unit>()
+        val repository = FakeEditorRepository(saveGate = saveGate)
         val store = store(repository, "n1")
         advanceUntilIdle()
 
-        // Release many dispatchers on a real thread pool at once: the atomic
-        // check-and-set in the store must let exactly one save through.
         val attempts = 16
         val start = CompletableDeferred<Unit>()
         coroutineScope {
@@ -262,6 +264,11 @@ class DefaultEditorStoreTest {
         advanceUntilIdle()
 
         assertEquals(1, repository.saveCalls)
+        assertTrue(store.state.value.isSaving)
+
+        saveGate.complete(Unit)
+        advanceUntilIdle()
+
         assertFalse(store.state.value.isSaving)
     }
 
