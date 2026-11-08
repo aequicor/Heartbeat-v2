@@ -83,6 +83,32 @@ class ShellComponentTest {
         }
     }
 
+    @Test
+    fun featureHostBackAtRootDoesNotEmptyTheStack() {
+        val lifecycle = LifecycleRegistry()
+        lifecycle.resume()
+
+        var host: FeatureHost? = null
+        val shell = DefaultShellComponent(
+            componentContext = DefaultComponentContext(lifecycle),
+            initialRoute = start,
+            entries = setOf(entryCapturingHost("start") { host = it }),
+            dispatcher = UnconfinedTestDispatcher(),
+        )
+
+        try {
+            assertEquals(start, shell.childStack.value.active.configuration)
+
+            // A feature requesting Back at the shell root must not drop the only configuration:
+            // an empty ChildStack would make `active` throw on the next access.
+            checkNotNull(host).back()
+
+            assertEquals(start, shell.childStack.value.active.configuration)
+        } finally {
+            lifecycle.destroy()
+        }
+    }
+
     private fun entry(featureId: String): DecomposeFeatureEntry =
         object : DecomposeFeatureEntry {
             override val featureId: String = featureId
@@ -93,5 +119,23 @@ class ShellComponentTest {
                 host: FeatureHost,
                 dispatcher: CoroutineDispatcher,
             ): FeatureRoot = object : FeatureRoot {}
+        }
+
+    private fun entryCapturingHost(
+        featureId: String,
+        onHost: (FeatureHost) -> Unit,
+    ): DecomposeFeatureEntry =
+        object : DecomposeFeatureEntry {
+            override val featureId: String = featureId
+
+            override fun create(
+                route: AppRoute,
+                context: ComponentContext,
+                host: FeatureHost,
+                dispatcher: CoroutineDispatcher,
+            ): FeatureRoot {
+                onHost(host)
+                return object : FeatureRoot {}
+            }
         }
 }

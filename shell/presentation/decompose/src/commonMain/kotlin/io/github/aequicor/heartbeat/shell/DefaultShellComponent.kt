@@ -37,7 +37,9 @@ internal class DefaultShellComponent(
         }
 
         override fun back() {
-            navigation.pop()
+            if (childStack.value.backStack.isNotEmpty()) {
+                navigation.pop()
+            }
         }
     }
 
