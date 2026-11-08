@@ -50,6 +50,11 @@ Heartbeat использует Kotlin Multiplatform. Общий код обсл�
 ```text
 project/
 │
+├── navigation/
+│   ├── api/
+│   ├── decompose/
+│   └── decompose-compose/
+│
 ├── platform/
 │   ├── android/
 │   ├── desktop/
@@ -356,7 +361,9 @@ ui/
 └── win32/
 ```
 
-`ui/compose` должен быть независим от конкретного Presentation Framework.
+`ui/compose` отображает собственный Decompose-flow через renderer SPI и может зависеть от
+собственного `presentation/decompose`. Универсальные экраны принимают контракты `api` и не зависят
+от Decompose.
 
 Например:
 
@@ -380,9 +387,22 @@ fun EditorScreen(
 
 Пример иллюстрирует контракт. В реальном Compose-приложении нужно использовать соответствующую lifecycle-aware подписку.
 
-Связывание `EditorComponent` с `EditorScreen` выполняется в интеграционном слое UI/оболочки, а не внутри универсального экрана.
+Связывание `EditorComponent` с `EditorScreen` выполняет renderer в `ui/compose` фичи, а не
+универсальный экран.
 
 Таким образом, один экран может использоваться с разными Presentation-адаптерами.
+
+## Навигация
+
+Навигация построена по модели feature-first: Shell управляет расположением фич, каждая фича —
+собственными экранами. Универсальные маршруты `AppRoute` находятся в `navigation/api`, SPI
+подключения Decompose-фич — в `navigation/decompose`, SPI Compose-рендереров — в
+`navigation/decompose-compose`.
+
+Фича предоставляет `DecomposeFeatureEntry` и `ComposeFeatureRenderer`, а Shell собирает их в реестры
+по `featureId`. Поэтому добавление фичи не изменяет `ShellComponent` и `ShellScreen`.
+
+Полный контракт — в [спецификации навигации](navigation.md).
 
 ## Архитектура Shell
 
@@ -431,7 +451,9 @@ shell/
 - Управление деревом компонентов.
 - Обработку глобальных навигационных событий.
 
-Зависит от контрактов и фабрик Decompose-адаптеров подключаемых фич, но не от их бизнес-реализаций.
+Содержит `FeatureRegistry`, который разрешает entry по `featureId`. Зависит от `navigation/decompose`
+и контрактов Shell, но не от Gradle-модулей фич: набор `DecomposeFeatureEntry` предоставляет
+composition root.
 
 ### `shell:presentation:block`
 
@@ -449,7 +471,9 @@ shell/
 - Общий layout приложения.
 - Передачу Store в экраны фич.
 
-Это интеграционный UI-модуль, поэтому ему разрешена зависимость от `shell:presentation:decompose` и API Decompose-адаптеров фич. При этом сами `features/*/ui/compose` от Decompose не зависят.
+Это интеграционный UI-модуль, поэтому ему разрешена зависимость от `shell:presentation:decompose`.
+Фичи подключаются через реестр renderers, который передаёт composition root; shell UI не перечисляет
+фичи.
 
 Для нативных платформ Root UI располагается в соответствующем `platform` или нативном UI-проекте.
 
@@ -716,7 +740,7 @@ notes:impl  ──> notes:api
 
 Такая фича может не иметь UI и Presentation — это допустимая **headless feature**.
 
-Для навигации между фичами используются callbacks, outputs и Shell, а не обращения к чужим Decompose-компонентам из бизнес-логики.
+Для навигации между фичами используются callbacks, outputs, `FeatureHost` и Shell, а не обращения к чужим Decompose-компонентам из бизнес-логики.
 
 ## Направление зависимостей
 
@@ -786,30 +810,35 @@ platform:windows
 | Роль модуля | Может зависеть от |
 | --- | --- |
 | `platform` | всех ролей: в платформенной компиляции находится итоговый граф Metro |
-| `shell:api` | `shell:api`, `features/*/api`, `di:api`, `core/*` |
+| `navigation/api` | `navigation/api` |
+| `navigation/decompose` | `navigation/api`, `navigation/decompose` |
+| `navigation/decompose-compose` | `navigation/api`, `navigation/decompose` |
+| `shell:api` | `shell:api`, `features/*/api`, `navigation/api`, `di:api`, `core/*` |
 | `shell:impl` | `shell:api`, `shell:impl`, `features/*/api`, `di:api`, `core/*` |
-| `shell:presentation/*` | `shell:api`, `shell:impl`, `shell:presentation/*`, `features/*/api`, `features/*/presentation/*`, `di:api`, `core/*` |
-| `shell:ui/*` | `shell:*`, `features/*/api`, `features/*/presentation/*`, `features/*/ui/*`, `designsystem/*`, `di:api`, `core/*` |
-| `features/*/api` | `features/*/api`, `core/*` |
+| `shell:presentation/*` | `shell:api`, `shell:impl`, `shell:presentation/*`, `features/*/api`, `features/*/presentation/*`, `navigation/*`, `di:api`, `core/*` |
+| `shell:ui/*` | `shell:*`, `features/*/api`, `features/*/presentation/*`, `features/*/ui/*`, `navigation/*`, `designsystem/*`, `di:api`, `core/*` |
+| `features/*/api` | `features/*/api`, `navigation/api`, `core/*` |
 | `features/*/impl` | `features/*/api`, `di:api`, `core/*` |
-| `features/*/presentation/*` | `features/*/api`, `di:api`, `core/*` |
-| `features/*/ui/*` | `features/*/api`, `designsystem/*`, `core/*` |
+| `features/*/presentation/*` | `features/*/api`, `navigation/*`, `di:api`, `core/*` |
+| `features/*/ui/*` | `features/<same>/presentation/*`, `features/*/api`, `navigation/decompose-compose`, `designsystem/*`, `core/*` |
 | `di:api` | `di:api`, `core/*` |
 | `core/*` | `core/*`, `di:api` |
 | `designsystem/*` | `designsystem/*`, `core/*` |
 
+`features/<same>/presentation/*` — presentation-адаптер той же фичи; адаптер другой фичи запрещён.
+
 Следствия, которые проверяются отдельными сообщениями:
 
-- `api` не зависит от `impl`, `presentation`, `ui`, `designsystem` и `di`: Metro в контрактах запрещён.
+- `api` не зависит от `impl`, `presentation`, `ui`, `designsystem` и `di`: Metro в контрактах запрещён; маршруты фичи размещаются в `navigation/api`.
 - `impl` не зависит от `presentation`, `ui` и `designsystem`; фичи взаимодействуют только через `api`.
-- Presentation-адаптер получает Store через `api` и не зависит от `impl`; адаптеры не зависят друг от друга.
-- `ui` не зависит от `impl`; связывать компоненты может только `shell:ui:compose`.
+- Presentation-адаптер получает Store через `api` и не зависит от `impl`; Decompose-адаптер зависит от `navigation/decompose`, адаптеры не зависят друг от друга.
+- `ui` не зависит от `impl`; `ui/compose` может зависеть от собственного `presentation/decompose`, а связывать компоненты с экранами может renderer этой же фичи.
 - `core` и `designsystem` не зависят от фич; `designsystem` не зависит от `di`.
-- `features/*/api` и `core` не зависят от UI-фреймворков и Metro; `designsystem` и `ui` — от Decompose и Metro; Presentation-адаптеры — от Compose.
+- `features/*/api`, `core` и `navigation/api` не зависят от UI-фреймворков и Metro; `designsystem` не зависит от Decompose и Metro; Presentation-адаптеры не зависят от Compose; `ui/compose` зависит от Compose, Metro и собственного Decompose-адаптера.
 
 Группы артефактов проверяются и в объявленных зависимостях, и в разрешённых compile/runtime/klib-графах универсальных модулей; импорты проверяются по той же роли модуля.
 
-Исключение: композиционный UI-модуль Shell может зависеть от Decompose Presentation API для отрисовки навигационного дерева.
+Исключение: `ui/compose` фичи может зависеть от собственного `presentation/decompose` и `navigation/decompose-compose` для отрисовки навигационного дерева.
 
 ## KMP Targets
 
@@ -945,11 +974,14 @@ kotlin {
 ```kotlin
 plugins {
     id("heartbeat-kmp-compose")
+    id("heartbeat-metro")
 }
 
 kotlin {
     sourceSets.commonMain.dependencies {
         implementation(project(":features:editor:api"))
+        implementation(project(":features:editor:presentation:decompose"))
+        implementation(project(":navigation:decompose-compose"))
         implementation(
             project(":designsystem:compose:components")
         )
@@ -979,6 +1011,13 @@ Convention Plugins должны обеспечивать единые верси
 - Проверка State restoration.
 - Тесты интеграции с Metro.
 - Контрактные тесты одинаковых сценариев для Decompose и BLoC.
+
+### Навигация
+
+- Тесты `FeatureRegistry`: разрешение по `featureId`, дубликаты и неизвестные регистрации.
+- Тесты соответствия `DecomposeFeatureEntry` и `ComposeFeatureRenderer`.
+- Тесты вложенных стеков, Back и восстановления состояния.
+- Негативные сценарии архитектурной проверки: `ui → чужая presentation`, `navigation/api → Compose`.
 
 ### UI
 
@@ -1017,6 +1056,7 @@ CI должен отклонять изменения, нарушающие за
 | --- | --- |
 | `platform` | Платформенные приложения |
 | `shell` | Общая оболочка приложения |
+| `navigation` | Универсальные маршруты и SPI навигации |
 | `features` | Бизнес-функциональность |
 | `api` | Публичные универсальные контракты |
 | `impl` | Универсальная бизнес-реализация |
@@ -1099,8 +1139,8 @@ features/<feature>/
 | HB-ARCH-009 | Модуль `api` фичи не должен содержать типов Decompose, Compose, Metro или BLoC; Coroutines и Flow допустимы. | Согласованная архитектура от 7 ноября 2026 | Собрать `api` для всех targets и проверить его транзитивные зависимости архитектурной проверкой. |
 | HB-ARCH-010 | Модуль `impl` фичи должен компилироваться для всех обязательных KMP targets, включая `mingwX64` и Linux Native. | Согласованная архитектура от 7 ноября 2026 | Скомпилировать `impl` для каждого обязательного target на поддерживающем хосте. |
 | HB-ARCH-011 | Presentation-адаптеры должны получать Store через фабрики `api` и не дублировать состояние и бизнес-логику `impl`. | Согласованная архитектура от 7 ноября 2026 | Сверить граф зависимостей адаптера и отсутствие копий UseCase/репозиториев в его коде. |
-| HB-ARCH-012 | Модуль `ui/compose` фичи не должен зависеть от `feature:impl` и от Presentation-фреймворков; экраны принимают контракты `api`. | Согласованная архитектура от 7 ноября 2026 | Архитектурная проверка и сборка `ui/compose` без зависимости от Decompose. |
-| HB-ARCH-013 | Модули `shell:api` и `shell:impl` не должны зависеть от Decompose или BLoC; `shell:presentation:decompose` должен зависеть от адаптеров фич только через их API. | Согласованная архитектура от 7 ноября 2026 | Сверить зависимости shell-модулей архитектурной проверкой. |
+| HB-ARCH-012 | Модуль `ui/compose` фичи не должен зависеть от `feature:impl`; универсальные экраны принимают контракты `api`, а Compose UI может зависеть от собственного `presentation/decompose` и `navigation/decompose-compose`. | Согласованная архитектура от 7 ноября 2026 и спецификация навигации от 8 ноября 2026 | Архитектурная проверка: рёбра `ui → impl` и `ui → presentation другой фичи` падают; renderer фичи собирается с её Decompose-адаптером. |
+| HB-ARCH-013 | Модули `shell:api` и `shell:impl` не должны зависеть от Decompose или BLoC; `shell:presentation:decompose` получает фичи через `DecomposeFeatureEntry` и не зависит от Gradle-модулей фич. | Согласованная архитектура от 7 ноября 2026 и спецификация навигации от 8 ноября 2026 | Сборка shell-модулей без модулей фич; архитектурная проверка зависимостей. |
 | HB-ARCH-014 | Финальный Metro `@DependencyGraph` должен располагаться в платформенной компиляции, чтобы видеть весь набор registrations. | Согласованная архитектура от 7 ноября 2026, документация Metro и восьмое код-ревью PR #20 | Тестовый граф `DesktopCompositionRootGraph` в `platform/desktop` запрашивает `EditorStoreFactory` и `EditorComponentFactory`; при отсутствии binding компиляция падает с `[Metro/MissingBinding]`. Тест подтверждает только сборку графа: production-граф в точке входа и запуск приложения с ним — отдельный этап. |
 | HB-ARCH-015 | DI должен использовать Metro с constructor injection и `@ContributesBinding`; runtime-параметры должны передаваться через фабрики или Assisted Injection. | Согласованная архитектура от 7 ноября 2026 | Собрать модули с Metro; тест графа в `commonTest` возвращает связанные зависимости. |
 | HB-ARCH-016 | Области видимости `AppScope`, `SessionScope` и время жизни Store должны задаваться Presentation-адаптером; Metro не заменяет Decompose lifecycle. | Согласованная архитектура от 7 ноября 2026 | Проверить определения scope в `di:api` и уничтожение Store при завершении компонента. |

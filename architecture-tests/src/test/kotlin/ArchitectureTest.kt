@@ -51,6 +51,8 @@ class ArchitectureTest {
 
     private val shellScope = Konsist.scopeFromProduction(moduleName = ":shell..")
 
+    private val navigationScope = Konsist.scopeFromProduction(moduleName = ":navigation..")
+
     private val platformScope = Konsist.scopeFromProduction(moduleName = ":platform..")
 
     /** Matches `...features.<any feature>.<role>` and its subpackages. */
@@ -113,7 +115,7 @@ class ArchitectureTest {
     @Test
     fun modulePackagesMatchTheGradleModule() {
         val files = featureScope.files + designSystemScope.files + infrastructureScope.files +
-            diScope.files + shellScope.files + platformScope.files
+            diScope.files + shellScope.files + navigationScope.files + platformScope.files
         val paths = files.map { it.projectPath.replace('\\', '/') }
         // The rule derives the module from the path, so a path without the `/src/` part, or a
         // path that does not start at the repository directory, would silently disable the check.
@@ -195,7 +197,9 @@ class ArchitectureTest {
             presentation.dependsOn(domain, api)
             di.dependsOn(api, domain, presentation)
             component.dependsOn(api)
-            ui.dependsOn(api)
+            // Compose UI renders the feature's own Decompose adapter, so it may depend on the
+            // component role. The module-level allowlist still rejects another feature's adapter.
+            ui.dependsOn(api, component)
         }
     }
 
@@ -207,6 +211,7 @@ class ArchitectureTest {
                 declarationName = declaration.name,
                 isPublic = declaration.isPublic,
                 annotations = declaration.annotations,
+                projectPath = declaration.projectPath,
             )
         }
 
@@ -219,6 +224,7 @@ class ArchitectureTest {
                 declarationKind = declaration.kind,
                 annotations = declaration.annotations,
                 modifiers = declaration.modifiers,
+                projectPath = declaration.projectPath,
             )
         }
 
@@ -235,6 +241,7 @@ class ArchitectureTest {
             rule(
                 DeclarationInfo(
                     packageName = packageName,
+                    projectPath = file.projectPath,
                     kind = kind,
                     name = name,
                     isPublic = declaration.isPublicOrDefault(),
@@ -247,6 +254,7 @@ class ArchitectureTest {
 
     private data class DeclarationInfo(
         val packageName: String,
+        val projectPath: String,
         val kind: DeclarationKind,
         val name: String,
         val isPublic: Boolean,

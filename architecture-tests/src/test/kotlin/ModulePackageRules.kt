@@ -24,8 +24,11 @@ internal object ModulePackageRules {
 
     private const val SHELL_ROOT = "$ROOT_PACKAGE.shell"
 
+    private const val NAVIGATION_ROOT = "$ROOT_PACKAGE.navigation"
+
     /** Repository areas that own a module tree: the first segment of the module path. */
-    private val moduleAreas = listOf("features", "designsystem", "core", "di", "shell", "platform")
+    private val moduleAreas =
+        listOf("features", "designsystem", "core", "di", "shell", "navigation", "platform")
 
     /** Roles of the universal implementation module: one Gradle module holds all of them. */
     private val implRoles = listOf("domain", "data", "presentation", "di")
@@ -45,6 +48,7 @@ internal object ModulePackageRules {
             "core" -> coreViolation(module, packageName)
             "di" -> diViolation(module, packageName)
             "shell" -> shellViolation(module, packageName)
+            "navigation" -> navigationViolation(module, packageName)
             "platform" -> platformViolation(module, packageName)
             else -> null
         }
@@ -52,7 +56,10 @@ internal object ModulePackageRules {
 
     private fun featureViolation(module: List<String>, packageName: String): String? {
         val feature = module[1]
-        val root = "$FEATURE_ROOT.$feature"
+        // A Gradle directory can use a hyphen, while a Kotlin package cannot: the feature
+        // `features/ai-studio` declares the package segment `aistudio`.
+        val packageFeature = feature.replace("-", "")
+        val root = "$FEATURE_ROOT.$packageFeature"
         val modulePath = module.joinToString("/")
         val rest = module.drop(2)
         val allowed = when (rest) {
@@ -99,6 +106,18 @@ internal object ModulePackageRules {
      */
     private fun shellViolation(module: List<String>, packageName: String): String? =
         mismatch(module.joinToString("/"), packageName, listOf(SHELL_ROOT))
+
+    /** Navigation modules keep one package area per module: routes, Decompose SPI, Compose SPI. */
+    private fun navigationViolation(module: List<String>, packageName: String): String? {
+        val modulePath = module.joinToString("/")
+        val role = when (module) {
+            listOf("navigation", "api") -> "api"
+            listOf("navigation", "decompose") -> "decompose"
+            listOf("navigation", "decompose-compose") -> "compose"
+            else -> return "unknown navigation module role: $modulePath"
+        }
+        return mismatch(modulePath, packageName, listOf("$NAVIGATION_ROOT.$role"))
+    }
 
     /**
      * Platform modules are entry points: their sources live in the application root package, so a

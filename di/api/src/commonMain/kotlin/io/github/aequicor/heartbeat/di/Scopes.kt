@@ -1,11 +1,15 @@
 package io.github.aequicor.heartbeat.di
 
-import dev.zacsweers.metro.Scope
+/**
+ * Application-wide scope key.
+ *
+ * Used both as the aggregation scope of the platform graph (`@DependencyGraph(AppScope::class)`,
+ * `@ContributesIntoSet(AppScope::class)`, `@ContributesBinding(AppScope::class)`) and as the
+ * lifetime key of app-wide singletons (`@SingleIn(AppScope::class)`).
+ */
+@Suppress("AbstractClassCanBeInterface")
+public abstract class AppScope private constructor()
 
-/** Lifetime of the application instance. */
-@Scope
-public annotation class AppScope
-
-/** Lifetime of the current user session. */
-@Scope
-public annotation class SessionScope
+/** Key of the current user session; reserved for future session-scoped graphs. */
+@Suppress("AbstractClassCanBeInterface")
+public abstract class SessionScope private constructor()

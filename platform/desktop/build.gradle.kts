@@ -33,14 +33,39 @@ dependencies {
     }
     implementation(libs.jewel.int.ui.standalone)
     implementation(libs.jewel.decorated.window)
+    implementation(project(":designsystem:compose:theme"))
+    implementation(project(":navigation:api"))
+    implementation(project(":navigation:decompose"))
+    implementation(project(":navigation:decompose-compose"))
+    implementation(project(":shell:presentation:decompose"))
+    implementation(project(":shell:ui:compose"))
+    implementation(project(":features:ai-studio:api"))
+    implementation(project(":features:ai-studio:impl"))
+    implementation(project(":features:ai-studio:presentation:decompose"))
+    implementation(project(":features:ai-studio:ui:compose"))
+    implementation(project(":features:settings:api"))
+    implementation(project(":features:settings:impl"))
+    implementation(project(":features:settings:presentation:decompose"))
+    implementation(project(":features:settings:ui:compose"))
+    implementation(project(":di:api"))
+    implementation(libs.metro.runtime)
 
     // Test-only: the composition root graph must see the feature bindings the platform
-    // wires together. The app itself does not depend on features yet.
+    // wires together. The application itself composes the AI studio screen only.
     testImplementation(project(":features:editor:api"))
     testImplementation(project(":features:editor:impl"))
     testImplementation(project(":features:editor:presentation:decompose"))
-    testImplementation(project(":di:api"))
-    testImplementation(libs.metro.runtime)
+    testImplementation(project(":features:ai-studio:api"))
+    testImplementation(project(":features:ai-studio:impl"))
+    testImplementation(project(":features:ai-studio:presentation:decompose"))
+    testImplementation(project(":features:ai-studio:ui:compose"))
+    testImplementation(project(":features:settings:api"))
+    testImplementation(project(":features:settings:impl"))
+    testImplementation(project(":features:settings:presentation:decompose"))
+    testImplementation(project(":features:settings:ui:compose"))
+    testImplementation(project(":shell:presentation:decompose"))
+    testImplementation(project(":navigation:decompose"))
+    testImplementation(project(":navigation:decompose-compose"))
     testImplementation(libs.junit)
     testImplementation(kotlin("test"))
 }
@@ -81,6 +106,33 @@ val isccCandidates = listOfNotNull(
 
 val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/Heartbeat")
 val installerDir = layout.buildDirectory.dir("compose/binaries/main/innosetup")
+
+// On Windows, a sandboxed dev environment can make the system temp directory read-only.
+// The app then crashes at startup: Jewel's IntUiTheme measures the Inter font with
+// Font.createFont, and the JDK writes a temporary font file into java.io.tmpdir. Redirect
+// the launched app's temp directory to a writable directory under the build output. This
+// affects only the local run task, not the packaged distribution.
+if (isWindows) {
+    val runTmpDir = layout.buildDirectory.dir("run-tmp")
+
+    val launchApp = tasks.register<Exec>("runDistributableWritableTemp") {
+        group = "compose desktop"
+        description = "Runs the packaged desktop app with a writable temp directory"
+        dependsOn("createDistributable")
+        workingDir = appImageDir.get().asFile
+        commandLine(appImageDir.get().asFile.resolve("Heartbeat.exe").absolutePath)
+        environment("TMP", runTmpDir.get().asFile.absolutePath)
+        environment("TEMP", runTmpDir.get().asFile.absolutePath)
+        doFirst {
+            runTmpDir.get().asFile.mkdirs()
+        }
+    }
+
+    tasks.matching { it.name == "runDistributable" }.configureEach {
+        actions.clear()
+        dependsOn(launchApp)
+    }
+}
 
 val packageInnoSetup = tasks.register<Exec>("packageInnoSetup") {
     group = "compose desktop"

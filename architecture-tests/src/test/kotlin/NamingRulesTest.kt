@@ -180,8 +180,41 @@ class NamingRulesTest {
         Assert.assertNull(violation(component, DeclarationKind.CLASS, "DefaultEditorComponent"))
         Assert.assertNull(violation(component, DeclarationKind.CLASS, "DefaultEditorComponentFactory"))
         Assert.assertEquals(
-            "component must be <Feature>Component or Default<Feature>Component: EditorAdapter",
+            "component must be <Feature>Component or <Feature>FeatureEntry: EditorAdapter",
             violation(component, DeclarationKind.CLASS, "EditorAdapter"),
+        )
+    }
+
+    @Test
+    fun hyphenatedFeatureUsesCamelCaseDisplayName() {
+        val aiStudioApi = "io.github.aequicor.heartbeat.features.aistudio.api"
+        val aiStudioComponent = "io.github.aequicor.heartbeat.features.aistudio.component"
+
+        Assert.assertNull(
+            NamingRules.violation(
+                packageName = aiStudioApi,
+                declarationKind = DeclarationKind.OBJECT,
+                declarationName = "AiStudioRoutes",
+                projectPath = "features/ai-studio/api/src/commonMain/kotlin/AiStudioRoutes.kt",
+            ),
+        )
+        Assert.assertNull(
+            NamingRules.violation(
+                packageName = aiStudioComponent,
+                declarationKind = DeclarationKind.INTERFACE,
+                declarationName = "AiStudioComponent",
+                projectPath =
+                    "features/ai-studio/presentation/decompose/src/commonMain/kotlin/AiStudioComponent.kt",
+            ),
+        )
+        Assert.assertNull(
+            NamingRules.violation(
+                packageName = aiStudioComponent,
+                declarationKind = DeclarationKind.CLASS,
+                declarationName = "AiStudioFeatureEntry",
+                projectPath =
+                    "features/ai-studio/presentation/decompose/src/commonMain/kotlin/AiStudioFeatureEntry.kt",
+            ),
         )
     }
 

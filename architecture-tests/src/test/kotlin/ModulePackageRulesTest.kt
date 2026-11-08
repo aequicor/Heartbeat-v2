@@ -81,6 +81,22 @@ class ModulePackageRulesTest {
     }
 
     @Test
+    fun hyphenatedFeatureDirectoryDeclaresThePackageWithoutHyphen() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "features/ai-studio/ui/compose/src/commonMain/kotlin/AiStudioScreen.kt",
+                "io.github.aequicor.heartbeat.features.aistudio.ui",
+            ),
+        )
+        assertViolation(
+            "features/ai-studio/ui/compose/src/commonMain/kotlin/AiStudioScreen.kt",
+            "io.github.aequicor.heartbeat.features.ai-studio.ui",
+            "features/ai-studio/ui/compose",
+            "io.github.aequicor.heartbeat.features.aistudio.ui",
+        )
+    }
+
+    @Test
     fun unknownFeatureModuleRoleIsAViolation() {
         Assert.assertEquals(
             "unknown feature module role: features/editor/extra",
@@ -158,6 +174,41 @@ class ModulePackageRulesTest {
             "shell/impl/src/commonMain/kotlin/Shell.kt",
             "com.example.unrelated",
             "shell/impl",
+        )
+    }
+
+    @Test
+    fun navigationModulesDeclareTheirOwnPackages() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "navigation/api/src/commonMain/kotlin/AppRoute.kt",
+                "io.github.aequicor.heartbeat.navigation.api",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "navigation/decompose/src/commonMain/kotlin/FeatureEntry.kt",
+                "io.github.aequicor.heartbeat.navigation.decompose",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "navigation/decompose-compose/src/commonMain/kotlin/Renderer.kt",
+                "io.github.aequicor.heartbeat.navigation.compose",
+            ),
+        )
+        assertViolation(
+            "navigation/api/src/commonMain/kotlin/AppRoute.kt",
+            "io.github.aequicor.heartbeat.navigation.decompose",
+            "navigation/api",
+            "io.github.aequicor.heartbeat.navigation.api",
+        )
+        Assert.assertEquals(
+            "unknown navigation module role: navigation/extra",
+            ModulePackageRules.violation(
+                "navigation/extra/src/commonMain/kotlin/Extra.kt",
+                "io.github.aequicor.heartbeat.navigation.api",
+            ),
         )
     }
 
