@@ -55,6 +55,31 @@ class KitInteractionTest {
     }
 
     @Test
+    fun tabsWrapAroundAtTheEdges() = runComposeUiTest {
+        var selected by mutableStateOf("История")
+        setContent {
+            HbTheme {
+                HbTabs(
+                    tabs = listOf("История", "Настройки", "Модели"),
+                    selected = selected,
+                    onSelect = { selected = it },
+                    tabLabel = { it },
+                )
+            }
+        }
+
+        onNodeWithText("История").requestFocus()
+        onNodeWithText("История").performKeyInput { pressKey(Key.DirectionLeft) }
+
+        onNodeWithText("Модели").assertIsSelected()
+
+        onNodeWithText("Модели").requestFocus()
+        onNodeWithText("Модели").performKeyInput { pressKey(Key.DirectionRight) }
+
+        onNodeWithText("История").assertIsSelected()
+    }
+
+    @Test
     fun radioGroupMovesSelectionWithArrowKeys() = runComposeUiTest {
         var selected by mutableStateOf("Точно")
         setContent {

@@ -73,7 +73,9 @@ fun <T> HbTabs(
                     else -> return@onPreviewKeyEvent false
                 }
                 val anchor = focusedIndex.takeIf { it in tabs.indices } ?: tabs.indexOf(selected)
-                val target = Math.floorMod(anchor + step, tabs.size)
+                // Kotlin `Int.mod` is inline stdlib arithmetic. `Math.floorMod` exists only from
+                // Android API 24, while the module supports API 23.
+                val target = (anchor + step).mod(tabs.size)
                 focusRequesters[target].requestFocus()
                 onSelect(tabs[target])
                 true
