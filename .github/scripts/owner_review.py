@@ -21,9 +21,10 @@ COMMAND = re.compile(
 CHECKLIST_HEADING = "## REVIEW CHECKLIST"
 CHECKLIST_MARKER = "<!-- owner-review-head: "
 TASK_ITEM = re.compile(r"- \[([ xX])\] (\S.*)")
-COMMIT_GROUP = re.compile(
+COMMIT_ITEM = re.compile(
     r"\*\*\[([0-9a-f]{7,40})\]\((https://github\.com/[^()\s]+/commit/([0-9a-f]{40}))\)\*\* — \S.*"
 )
+CHECK_ITEM = re.compile(r"\s{2,}- (?!\[[ xX]\] )(\S.*)")
 CONVERSATIONS_QUERY = """query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -71,35 +72,56 @@ def validate_checklist(body, sha, repository_url):
     if lines[start : start + 1] != [marker]:
         raise ReviewRejected("Обновите маркер `owner-review-head` в описании PR до полного SHA текущего HEAD.")
 
-    format_error = "Поместите непустой список с галочками или группы коммитов с пунктами в последний раздел REVIEW CHECKLIST."
+    format_error = (
+        "Поместите в последний раздел REVIEW CHECKLIST непустой список с галочками "
+        "или по одной галочке на коммит со списком проверок."
+    )
+    checks_error = "Добавьте под галочкой коммита список проверок."
     entries = []
     commits = set()
-    needs_item = False
+    flat = None
+    awaiting_checks = False
+    checks_count = 0
     unchecked_count = 0
     for line in lines[start + 1 :]:
         item = TASK_ITEM.fullmatch(line)
         if item:
+            commit_item = COMMIT_ITEM.fullmatch(item[2])
+            if flat is None:
+                flat = commit_item is None
+            if commit_item:
+                if flat:
+                    raise ReviewRejected(format_error)
+                if awaiting_checks and not checks_count:
+                    raise ReviewRejected(checks_error)
+                label, url, commit = commit_item.groups()
+                if not commit.startswith(label) or url != f"{repository_url}/commit/{commit}":
+                    raise ReviewRejected(
+                        "Укажите в галочке коммита SHA и ссылку на тот же коммит этого репозитория."
+                    )
+                if commit in commits:
+                    raise ReviewRejected(f"Оставьте для коммита `{label}` одну галочку.")
+                commits.add(commit)
+                awaiting_checks = True
+                checks_count = 0
+            elif not flat:
+                raise ReviewRejected(format_error)
             entries.append(f"- [x] {item[2]}")
             unchecked_count += item[1] == " "
-            needs_item = False
             continue
 
-        group = COMMIT_GROUP.fullmatch(line)
-        if not group or needs_item or (entries and not commits):
+        check = CHECK_ITEM.fullmatch(line)
+        if not check or flat is not False or not awaiting_checks:
             raise ReviewRejected(format_error)
-        label, url, commit = group.groups()
-        if not commit.startswith(label) or url != f"{repository_url}/commit/{commit}":
-            raise ReviewRejected("Укажите в заголовке группы SHA и ссылку на тот же коммит этого репозитория.")
-        if commit in commits:
-            raise ReviewRejected(f"Объедините проверки коммита `{label}` в одну группу.")
-        commits.add(commit)
         entries.append(line)
-        needs_item = True
+        checks_count += 1
 
-    if not entries or needs_item:
+    if not entries:
         raise ReviewRejected(format_error)
+    if awaiting_checks and not checks_count:
+        raise ReviewRejected(checks_error)
     if unchecked_count:
-        raise ReviewRejected(f"Отметьте все пункты в REVIEW CHECKLIST. Пунктов без отметки — {unchecked_count}.")
+        raise ReviewRejected(f"Отметьте все галочки в REVIEW CHECKLIST. Галочек без отметки — {unchecked_count}.")
     return entries
 
 
