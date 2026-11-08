@@ -5,4 +5,5 @@
 | [mkdocs-venv](environment/mkdocs-venv.md) | Сборка документации MkDocs в локальном `.venv` без pip |
 | [git-sandbox](environment/git-sandbox.md) | Сбой `git push` и подписанного `git commit` из-за блокировки вспомогательных процессов msys2 в песочнице DSH |
 | [pwsh-gradle-output](environment/pwsh-gradle-output.md) | Проверка результата команды `gradlew` в PowerShell: обрезанный пайплайн скрывает итог и прерывает сборку |
-| [gradle-android-jar-lock](environment/gradle-android-jar-lock.md) | Сбой `bundle*ClassesToCompileJar` на Windows из-за занятого `classes.jar`
+| [gradle-android-jar-lock](environment/gradle-android-jar-lock.md) | Сбой `bundle*ClassesToCompileJar` на Windows из-за занятого `classes.jar` |
+| [windows-sandbox-temp](environment/windows-sandbox-temp.md) | Сбой JVM-процесса с `AccessDeniedException` при записи в реальный `%TEMP%` в песочнице DSH на Windows |
