@@ -48,6 +48,10 @@ dependencies {
     implementation(project(":features:settings:presentation:decompose"))
     implementation(project(":features:settings:ui:compose"))
     implementation(project(":di:api"))
+    implementation(project(":core:database"))
+    implementation(project(":core:preferences:api"))
+    implementation(project(":core:preferences:datastore"))
+    implementation(project(":storage:database"))
     implementation(libs.metro.runtime)
 
     // Test-only: the composition root graph must see the feature bindings the platform
@@ -82,6 +86,8 @@ compose.desktop {
         }.get().metadata.installationPath.asFile.absolutePath
 
         nativeDistributions {
+            // SQLite JDBC loads java.sql; jpackage does not include it automatically.
+            modules("java.sql")
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the
             // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
