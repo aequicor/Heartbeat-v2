@@ -29,20 +29,6 @@ internal class DefaultShellComponent(
 
     private val navigation = StackNavigation<AppRoute>()
 
-    private val host: FeatureHost = object : FeatureHost {
-        override fun open(route: AppRoute) {
-            navigation.navigate { stack ->
-                if (stack.last() == route) stack else stack + route
-            }
-        }
-
-        override fun back() {
-            if (childStack.value.backStack.isNotEmpty()) {
-                navigation.pop()
-            }
-        }
-    }
-
     override val childStack: Value<ChildStack<AppRoute, FeatureRoot>> = childStack(
         source = navigation,
         serializer = AppRoute.serializer,
@@ -50,17 +36,23 @@ internal class DefaultShellComponent(
         key = "shell",
         childFactory = { route, context ->
             val entry = registry.find(route.featureId)
-            entry?.create(
-                route = route,
-                context = context,
-                host = host,
-                dispatcher = dispatcher,
-            ) ?: MissingFeatureRoot(route.featureId)
+            if (entry == null) {
+                MissingFeatureRoot(route.featureId)
+            } else {
+                entry.create(
+                    route = route,
+                    context = context,
+                    host = childHost(route),
+                    dispatcher = dispatcher,
+                )
+            }
         },
     )
 
     override fun open(route: AppRoute) {
-        host.open(route)
+        navigation.navigate { stack ->
+            if (stack.last() == route) stack else stack.filterNot { it == route } + route
+        }
     }
 
     override fun back(): Boolean {
@@ -70,5 +62,32 @@ internal class DefaultShellComponent(
 
         navigation.pop()
         return true
+    }
+
+    /**
+     * Host scoped to a single child. A feature that keeps the host after leaving the stack cannot
+     * mutate another feature's active stack, and navigating to an already-open route reuses it
+     * instead of pushing a duplicate, which Decompose rejects with "Configurations must be unique".
+     */
+    private fun childHost(route: AppRoute): FeatureHost {
+        val ownRoute = route
+        return object : FeatureHost {
+
+            private fun isActive(): Boolean = childStack.value.active.configuration == ownRoute
+
+            override fun open(route: AppRoute) {
+                if (!isActive()) return
+                navigation.navigate { stack ->
+                    if (stack.last() == route) stack else stack.filterNot { it == route } + route
+                }
+            }
+
+            override fun back() {
+                if (!isActive()) return
+                if (childStack.value.backStack.isNotEmpty()) {
+                    navigation.pop()
+                }
+            }
+        }
     }
 }

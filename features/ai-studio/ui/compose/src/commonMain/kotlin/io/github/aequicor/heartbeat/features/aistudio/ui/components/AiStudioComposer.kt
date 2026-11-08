@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +49,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 @Composable
 internal fun AiStudioComposerBar(modifier: Modifier = Modifier) {
     val colors = HbTheme.colors
-    var draft by remember { mutableStateOf("") }
+    var draft by rememberSaveable { mutableStateOf("") }
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val compact = maxWidth < HbLayoutBreakpoints.NarrowPane.dp

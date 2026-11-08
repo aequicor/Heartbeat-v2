@@ -109,6 +109,58 @@ class ShellComponentTest {
         }
     }
 
+    @Test
+    fun openingARouteAlreadyInTheStackReusesItInsteadOfPushingADuplicate() {
+        val lifecycle = LifecycleRegistry()
+        lifecycle.resume()
+        val shell = DefaultShellComponent(
+            componentContext = DefaultComponentContext(lifecycle),
+            initialRoute = start,
+            entries = setOf(entry("start"), entry("next")),
+            dispatcher = UnconfinedTestDispatcher(),
+        )
+
+        try {
+            shell.open(next)
+            shell.open(start) // `start` is now below the top; Decompose rejects duplicate configs
+
+            assertEquals(start, shell.childStack.value.active.configuration)
+            assertEquals(1, shell.childStack.value.backStack.size)
+        } finally {
+            lifecycle.destroy()
+        }
+    }
+
+    @Test
+    fun staleFeatureHostCannotMutateTheActiveStack() {
+        val lifecycle = LifecycleRegistry()
+        lifecycle.resume()
+
+        var startHost: FeatureHost? = null
+        val shell = DefaultShellComponent(
+            componentContext = DefaultComponentContext(lifecycle),
+            initialRoute = start,
+            entries = setOf(
+                entryCapturingHost("start") { startHost = it },
+                entry("next"),
+                entry("other"),
+            ),
+            dispatcher = UnconfinedTestDispatcher(),
+        )
+
+        try {
+            val captured = checkNotNull(startHost)
+            shell.open(next)
+
+            captured.open(AppRoute(featureId = "other"))
+
+            assertEquals(next, shell.childStack.value.active.configuration)
+            assertEquals(1, shell.childStack.value.backStack.size)
+        } finally {
+            lifecycle.destroy()
+        }
+    }
+
     private fun entry(featureId: String): DecomposeFeatureEntry =
         object : DecomposeFeatureEntry {
             override val featureId: String = featureId
