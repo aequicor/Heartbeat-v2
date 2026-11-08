@@ -60,10 +60,14 @@ PR, менять правила защиты и обращаться к ключ
 
 1. `docs.yml` собирает `docs-build` для готового к ревью PR и публикует Pages после push в `master`.
    Возврат PR в draft отменяет текущую сборку.
-2. `static-analysis.yml` по команде `/reviewed` выполняет `detektAll` и `architectureCheck` и
-   публикует статусы `static-analysis` и `architecture-check` для проверенного коммита. SHA из
-   команды сверяется с текущим HEAD, при несовпадении проверки не запускаются. Политика
-   проекта: до команды `/reviewed` эти проверки в CI не запускаются.
+2. `static-analysis.yml` по команде `/reviewed` выполняет `detektAll`, `architectureCheck`, тесты
+   `foundation` и `sandbox`, компиляцию компонентов и потребителя, пиксельную сверку эталонов
+   песочницы на Windows-образе и публикует статусы `static-analysis`, `architecture-check`,
+   `foundation-tests`, `sandbox-tests`, `sandbox-goldens`, `compose-compilation` и
+   `consumer-compilation` для проверенного коммита. Ветка с другим набором шрифтов передаёт
+   `HB_GOLDEN_MODE=render` и не сравнивает пиксели. SHA из команды сверяется с текущим HEAD, при
+   несовпадении проверки не запускаются. Политика проекта: до команды `/reviewed` эти проверки в CI
+   не запускаются.
 3. `cross-platform.yml` по команде `/reviewed` выполняет только проверки, недоступные на хосте
    владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux и компиляцию
    `linuxArm64` на ubuntu. Job фиксирует SHA в начале запуска, сверяет его с аргументом команды и

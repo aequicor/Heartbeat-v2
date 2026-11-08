@@ -16,6 +16,9 @@ kotlin {
 
 dependencies {
     testImplementation(libs.konsist)
+    // TokenUsageRules parses Kotlin sources with the Kotlin PSI, so comments and string literals
+    // cannot be mistaken for raw colors or sizes.
+    testImplementation(libs.kotlin.compiler.embeddable)
     testImplementation(libs.junit)
 }
 

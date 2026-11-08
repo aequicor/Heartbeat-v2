@@ -29,6 +29,9 @@ class ArchitectureTest {
 
     private val rootPackage = "io.github.aequicor.heartbeat"
 
+    /** Framework groups that would make the portable token contract renderer-specific. */
+    private val composeImportPrefixes = listOf("androidx.compose", "org.jetbrains.compose")
+
     private val featurePrefix = "$rootPackage.features"
 
     /** Production sources of all feature modules; the test runs with workingDir = repo root. */
@@ -61,6 +64,29 @@ class ArchitectureTest {
     @Test
     fun designSystemApiUsesHbPrefix() {
         Assert.assertEquals(listOf<String>(), namingViolations(designSystemScope.files))
+    }
+
+    /**
+     * HB-ARCH-045: the portable token contract must stay renderer-neutral, so the foundation
+     * module cannot import Compose. The module classpath is checked by
+     * `heartbeat-architecture-check`; this test catches the import that would pull Compose into
+     * the contract even if the dependency is declared under another name.
+     */
+    @Test
+    fun foundationStaysRendererNeutral() {
+        val foundationFiles = designSystemScope.files.filter { file ->
+            file.projectPath.replace('\\', '/').contains("/designsystem/foundation/")
+        }
+        Assert.assertTrue("No foundation sources found: $foundationFiles", foundationFiles.isNotEmpty())
+
+        val violations = foundationFiles.flatMap { file ->
+            file.imports
+                .map { it.name }
+                .filter { name -> composeImportPrefixes.any(name::startsWith) }
+                .map { name -> "${file.projectPath}: $name" }
+        }
+
+        Assert.assertEquals(listOf<String>(), violations)
     }
 
     @Test
@@ -100,6 +126,18 @@ class ArchitectureTest {
             ModulePackageRules.violation(file.projectPath, file.packagee?.name.orEmpty())
                 ?.let { "${file.projectPath}: $it" }
         }
+
+        Assert.assertEquals(listOf<String>(), violations)
+    }
+
+    @Test
+    fun featureUiUsesSemanticTokensInsteadOfRawValues() {
+        val uiFiles = featureScope.files.filter { file ->
+            file.projectPath.replace('\\', '/').contains("/ui/")
+        }
+        Assert.assertTrue("No feature UI sources found: $uiFiles", uiFiles.isNotEmpty())
+
+        val violations = uiFiles.flatMap { file -> TokenUsageRules.violations(file.projectPath, file.text) }
 
         Assert.assertEquals(listOf<String>(), violations)
     }

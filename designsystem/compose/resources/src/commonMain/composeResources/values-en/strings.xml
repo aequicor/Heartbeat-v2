@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hb_busy">Working…</string>
+    <string name="hb_no_options">No options</string>
+    <string name="hb_expand">Expand</string>
+    <string name="hb_collapse">Collapse</string>
+    <string name="hb_tree_level">Level %1$d</string>
+</resources>

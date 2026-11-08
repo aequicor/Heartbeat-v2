@@ -67,8 +67,8 @@ jobs:
   gates:
     name: ${{ matrix.name }}
     needs: resolve
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       statuses: write
@@ -84,9 +84,34 @@ jobs:
           - name: static-analysis
             task: detektAll
             description: detekt
+            runner: ubuntu-24.04
           - name: architecture-check
             task: architectureCheck
             description: architecture
+            runner: ubuntu-24.04
+          - name: foundation-tests
+            task: :designsystem:foundation:jvmTest
+            description: foundation tests
+            runner: ubuntu-24.04
+          # The golden references are produced on Windows, so the pixel gate runs on the same
+          # image; the Ubuntu job renders the scenes and keeps the interaction assertions only.
+          - name: sandbox-tests
+            task: :designsystem:sandbox:jvmTest
+            description: sandbox tests
+            runner: ubuntu-24.04
+            golden-mode: render
+          - name: sandbox-goldens
+            task: :designsystem:sandbox:jvmTest
+            description: sandbox goldens
+            runner: windows-latest
+          - name: compose-compilation
+            task: :designsystem:compose:components:compileKotlinJvm
+            description: compose compilation
+            runner: ubuntu-24.04
+          - name: consumer-compilation
+            task: :designsystem:consumer:compileKotlinJvm
+            description: consumer compilation
+            runner: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -115,6 +140,7 @@ jobs:
       - name: Run the gate
         env:
           GRADLE_TASK: ${{ matrix.task }}
+          HB_GOLDEN_MODE: ${{ matrix.golden-mode }}
         run: ./gradlew "$GRADLE_TASK" --no-daemon
       - name: Publish the result
         if: always()

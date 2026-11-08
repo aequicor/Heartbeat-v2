@@ -80,6 +80,7 @@ project/
 │   └── impl/
 │
 ├── designsystem/
+│   ├── foundation/
 │   ├── compose/
 │   │   ├── theme/
 │   │   ├── resources/
@@ -579,10 +580,32 @@ Metro не заменяет Decompose lifecycle.
 
 ## Design System / UI Kit
 
-UI Kit разделяется по UI-технологиям, а не по абстрактным кроссплатформенным слоям.
+UI Kit разделяется по UI-технологиям, а не по абстрактным кроссплатформенным слоям. Общие значения
+токенов вынесены в нейтральный к рендереру модуль `foundation`, который не импортирует Compose.
 
 ```text
 designsystem/
+├── foundation/
+│   └── src/commonMain/kotlin/
+│       ├── HbColor.kt
+│       ├── HbColorScheme.kt
+│       ├── HbIconGlyph.kt
+│       ├── HbContrastPreference.kt
+│       ├── HbContrastSchemes.kt
+│       ├── HbTypography.kt
+│       ├── HbGeometry.kt
+│       ├── HbMotion.kt
+│       ├── HbMotionPreference.kt
+│       ├── HbLayout.kt
+│       └── HbWorkspaceLayout.kt
+│
+├── sandbox/
+│   └── src/jvmMain/kotlin/
+│       ├── HbSandboxEntry.kt
+│       ├── SandboxContent.kt
+│       ├── SandboxFieldSamples.kt
+│       └── SandboxSectionSamples.kt
+│
 ├── compose/
 │   ├── theme/
 │   │   ├── HbTheme.kt
@@ -615,14 +638,19 @@ designsystem/
 ### Правила
 
 - Публичный API Design System имеет префикс `Hb`: компоненты (`HbButton`, `HbTextField`, `HbDialog`), токены и тема (`HbColors`, `HbTheme`).
+- `foundation` хранит портативную схему и значения токенов: цвета sRGB, логические размеры, масштабируемую типографику, длительности, кривые и идентификаторы иконок. Модуль не импортирует Compose и не содержит типов `Color`, `Dp`, `TextStyle`, объектов навигации, DI и клиентов среды исполнения.
+- `compose` разрешает портативные токены в типы Compose; `theme` и `resources` внутри него Compose-ориентированы.
+- `compose/resources` хранит встроенные ассеты: иконки — vector XML из Tabler Icons 3.35.0 (outline, MIT) в `composeResources/drawable/ic_*.xml`; кит ссылается на них только через `HbIcon`. Прямые ссылки на ассеты в UI-компонентах запрещены.
+- `sandbox` содержит исполняемые примеры кита: приложение песочницы и снимки, которые рендерятся тестом. Запуск — `gradlew :designsystem:sandbox:runSandbox`.
+- Продуктовые паттерны (composer, транскрипт, подтверждения) принадлежат UI соответствующих фич, а не общему киту; контракт оформления для них задан в [спецификации дизайн-системы](design-system.md).
 - Design System не зависит от фич.
 - Design System не зависит от Metro или Decompose.
-- `theme` и `resources` внутри `compose` являются Compose-ориентированными.
 - Фичи могут использовать Design System через свои UI-модули.
 - Компоненты с бизнес-семантикой остаются в UI конкретной фичи.
-- Платформенные UI Kit могут иметь разные реализации и следовать нативным паттернам ОС.
+- Платформенные UI Kit могут иметь разные реализации и следовать нативным паттернам ОС. Нативный адаптер разрешает те же портативные токены в собственные типы.
 
-При необходимости единого набора токенов для SwiftUI, Compose и Win32 можно добавить build-time генератор дизайн-токенов. Это не обязательный runtime-модуль KMP.
+Общие контракты токенов, компонентов, поверхностей и адаптивного поведения заданы в
+[спецификации дизайн-системы](design-system.md).
 
 ## Core — техническая инфраструктура
 
@@ -978,10 +1006,10 @@ CI должен отклонять изменения, нарушающие за
 Проверка разделена на пять уровней:
 
 - **Gradle (`heartbeat-architecture-check`).** Allowlist зависимостей по ролям модулей, запрещённые фреймворки в объявленных зависимостях, разрешённые compile/runtime/klib-графы универсальных модулей JVM, Android и Kotlin/Native и импорты по роли модуля. Правила покрыты unit-тестами в `buildSrc`.
-- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: стандарт именования ролей и размещение по пакетам, публичность контрактов `api` и видимость деталей `impl`, соответствие `Default<Contract>` одноимённому интерфейсу `Contract`, направление импортов пакетов-ролей фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`). Задача `architectureCheck` запускает `:architecture-tests:test`.
+- **Konsist (`:architecture-tests`).** Source-level проверки, которые Gradle не выражает: стандарт именования ролей и размещение по пакетам, публичность контрактов `api` и видимость деталей `impl`, соответствие `Default<Contract>` одноимённому интерфейсу `Contract`, направление импортов пакетов-ролей фичи (`api`, `domain`, `data`, `presentation`, `di`, `component`, `ui`), запрет сырых `Color`, `Dp`, `TextUnit`, `dp` и `sp` в UI фич. `TokenUsageRules` разбирает Kotlin PSI и проверяет только code-узлы, поэтому комментарии и строковые литералы не считаются нарушением, а исключения заданы якорными путями `designsystem/`, `build/generated/` и `platform/*/renderer|adapter/`, а не подстрокой в произвольном каталоге. Задача `architectureCheck` запускает `:architecture-tests:test`.
 - **detekt.** Синтаксические соглашения: `MatchingDeclarationName` (имя файла), `ClassNaming` (имена классов), `ForbiddenImport` (запрещённые фреймворки). Запускается задачей `detektAll` и пре-пуш хуком.
 - **explicit API (`heartbeat-kmp-api`).** Модули `features/*/api`, `shell:api` и `di:api` компилируются в explicit API mode: публичные объявления указывают видимость, публичные свойства и функции — тип.
-- **CI.** `static-analysis.yml` по команде `/reviewed` выполняет `architectureCheck` и `detektAll` и публикует статусы `static-analysis` и `architecture-check` для проверенного коммита. `cross-platform.yml` по команде `/reviewed` выполняет проверки, недоступные на хосте владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux на ubuntu. Метка `verify-platform` дополнительно собирает и запускает точки входа.
+- **CI.** `static-analysis.yml` по команде `/reviewed` выполняет `architectureCheck`, `detektAll`, тесты `foundation` и `sandbox`, компиляцию компонентов и потребителя, пиксельную сверку эталонов песочницы на Windows-образе и публикует статусы `static-analysis`, `architecture-check`, `foundation-tests`, `sandbox-tests`, `sandbox-goldens`, `compose-compilation` и `consumer-compilation` для проверенного коммита. `cross-platform.yml` по команде `/reviewed` выполняет проверки, недоступные на хосте владельца: компиляцию Apple-целей и тесты macOS на `macos-15`, нативные тесты Linux на ubuntu. Метка `verify-platform` дополнительно собирает и запускает точки входа.
 
 ## Соглашения по именованию
 
@@ -1104,5 +1132,6 @@ features/<feature>/
 | HB-ARCH-040 | Публичные контракты `features/*/api` и его подпакетов (`api.model`, `api.service`) должны быть `public`; детали реализации — `internal` или `private`. Публичными остаются только контрактные роли: интерфейс `*Repository`, доменная модель с модификатором `data`/`sealed`/`enum`/`value`, интерфейсы `<Feature>Component` и `<Feature>ComponentFactory`, `@Composable fun *Screen`; типы с Metro-аннотацией — единственное исключение, и только в ролях, которые видит финальный граф. | Запрос владельца от 7 ноября 2026, третье, четвёртое, девятое и десятое код-ревью PR #20 | Konsist-тесты `apiContractsArePublic` (включая подпакеты) и `implementationDetailsAreInternal`; unit-тесты `VisibilityRulesTest` покрывают роль, вид и модификаторы объявления: публичные вспомогательная модель в `domain.model`, helper в `di` и не-Screen композиция в `ui` дают нарушение; explicit API mode api-модулей. Правило видимости минимизирует внутренний API, а межмодульную границу защищает dependency graph: публичная доменная модель в `impl` допустима, потому что `impl -> impl` и `presentation -> impl` запрещены `architectureCheck`. |
 | HB-ARCH-043 | Размещение исходников должно соответствовать Gradle-модулю: `features/<feature>/api` объявляет только пакет `features.<feature>.api` и его подпакеты, `features/<feature>/impl` — роли `domain`, `data`, `presentation`, `di`, модуль `presentation/<adapter>` — `component`, модуль `ui/<platform>` — `ui`, `core/<module>` — `core.<module>`, `di/api` — `di`, модули `shell/...` — область `shell`, `platform/...` — корневой пакет `io.github.aequicor.heartbeat`; произвольный пакет вне этой таблицы — нарушение. | Четвёртое и восьмое код-ревью PR #20 от 7 ноября 2026 | Konsist-тест `modulePackagesMatchTheGradleModule` сканирует `features`, `designsystem`, `core`, `di`, `shell` и `platform`; unit-тесты `ModulePackageRulesTest` покрывают негативный случай для каждого типа модуля; таблица соответствий задана явно в `ModulePackageRules`. |
 | HB-ARCH-044 | Эффекты `<Feature>Store` должны быть необязательными одноразовыми уведомлениями: Store не ждёт подписчика, не воспроизводит пропущенный эффект, а критичный результат операции отражается в UI State. | Пятое код-ревью PR #20 от 7 ноября 2026 | Тесты `savedEffectIsNotReplayedToALateCollector` и `savesWithoutEffectCollectorDoNotBlock`; контракт доставки описан в KDoc `EditorStore`. |
+| HB-ARCH-045 | Модуль `designsystem/foundation` должен компилироваться для всех обязательных targets, не зависеть от Compose, Decompose, Metro и фич и не содержать типов рендерера; Compose-тема разрешает его токены в собственные значения. | Спецификация дизайн-системы 2.0 от 7 ноября 2026 | Konsist-тест `foundationStaysRendererNeutral` отклоняет импорт Compose в `designsystem/foundation`; `architectureCheck` проверяет зависимости модуля; `theme` собирается с зависимостью от `foundation`. |
 
 **Итог:** единственная реализация бизнес-логики и состояния фичи компилируется для всех платформ. Decompose и BLoC остаются заменяемыми Presentation-адаптерами. Compose и нативные интерфейсы используют одни и те же контракты. Metro собирает необходимые реализации в платформенном Composition Root.

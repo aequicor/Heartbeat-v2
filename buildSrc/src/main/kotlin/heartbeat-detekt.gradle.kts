@@ -27,6 +27,11 @@ subprojects {
         detektRuleSets.forEach { ruleSet -> add("detektPlugins", ruleSet) }
     }
 
+    tasks.withType(Detekt::class.java).configureEach {
+        // Compose resources generate Res.kt under build; generated files are not edited sources.
+        exclude("**/build/generated/**")
+    }
+
     extensions.getByType(DetektExtension::class.java).apply {
         buildUponDefaultConfig.set(true)
         parallel.set(true)
