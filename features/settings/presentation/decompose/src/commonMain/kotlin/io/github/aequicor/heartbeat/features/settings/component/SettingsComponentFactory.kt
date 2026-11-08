@@ -13,6 +13,7 @@ interface SettingsComponentFactory {
     fun create(
         componentContext: ComponentContext,
         requestedPageId: String?,
+        onBack: () -> Unit,
     ): SettingsComponent
 }
 
@@ -24,6 +25,7 @@ class DefaultSettingsComponentFactory(
     override fun create(
         componentContext: ComponentContext,
         requestedPageId: String?,
+        onBack: () -> Unit,
     ): SettingsComponent =
-        DefaultSettingsComponent(componentContext, requestedPageId, registry)
+        DefaultSettingsComponent(componentContext, requestedPageId, registry, onBack = onBack)
 }

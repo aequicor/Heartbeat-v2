@@ -39,6 +39,7 @@ fun SettingsScreen(
             query = query,
             onQueryChange = component::search,
             onSelect = component::select,
+            onBack = component::back,
             modifier = Modifier.width(HbPaneGeometry.SidebarPreferred.dp),
         )
         HbDivider(vertical = true)

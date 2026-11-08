@@ -22,4 +22,7 @@ interface SettingsComponent : FeatureRoot {
     fun select(pageId: SettingsPageId)
 
     fun search(query: String)
+
+    /** Leaves the settings shell and returns to the previous screen. */
+    fun back()
 }
