@@ -57,10 +57,52 @@ class HbWorkspaceLayoutTest {
 
     @Test
     fun inspectorCollapsesBeforeTheSecondPane() {
-        val fit = HbWorkspaceLayout.fit(availableWidth = 1038, secondPane = true)
+        val fit = HbWorkspaceLayout.fit(availableWidth = 1100, secondPane = true)
 
         assertTrue(fit.secondPane)
         assertFalse(fit.inspector)
+    }
+
+    @Test
+    fun requestedClosedSidebarStaysClosedOnAWideScreen() {
+        val fit = HbWorkspaceLayout.fit(availableWidth = 1920, sidebar = false)
+
+        assertFalse(fit.sidebar)
+        assertTrue(fit.inspector)
+    }
+
+    @Test
+    fun requestedSidebarIsDroppedWhenTheSumDoesNotFit() {
+        val fit = HbWorkspaceLayout.fit(availableWidth = 800, sidebar = true, secondPane = true)
+
+        assertTrue(fit.sidebar)
+        assertFalse(fit.secondPane)
+    }
+
+    @Test
+    fun splitterOccupiesItsHitTargetInTheFit() {
+        val withoutSeparator = HbWorkspaceLayout.fit(
+            availableWidth = 720,
+            sidebarWidth = 300,
+            splitterWidth = 0,
+        )
+        val withSeparator = HbWorkspaceLayout.fit(
+            availableWidth = 720,
+            sidebarWidth = 300,
+            splitterWidth = HbPaneGeometry.SplitterLayout,
+        )
+
+        assertTrue(withoutSeparator.sidebar)
+        assertFalse(withSeparator.sidebar)
+    }
+
+    @Test
+    fun touchDensityPassesWiderSplittersToTheFit() {
+        val dense = HbWorkspaceLayout.fit(availableWidth = 1100, secondPane = true, splitterWidth = 32)
+        val touch = HbWorkspaceLayout.fit(availableWidth = 1100, secondPane = true, splitterWidth = 48)
+
+        assertTrue(dense.secondPane)
+        assertFalse(touch.secondPane)
     }
 
     @Test

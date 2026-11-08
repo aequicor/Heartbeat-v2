@@ -31,16 +31,17 @@ public data class HbWorkspaceFit(
  */
 public object HbWorkspaceLayout {
 
-    /** Separator counted once between two adjacent regions. */
-    private const val SeparatorThickness: Int = 1
-
     /**
      * Resolves the visible regions for [availableWidth].
      *
      * [sidebarWidth] and [inspectorWidth] are the user-chosen widths clamped to the documented
-     * range by the caller; [secondPane] is the user preference for a second content pane; [inspector]
-     * is the requested visibility of the inspector, which stays closed when the owner keeps it
-     * closed and is dropped only when the width cannot fit it.
+     * range by the caller; [secondPane] is the user preference for a second content pane; [sidebar]
+     * and [inspector] are the requested visibility of those regions. A requested region stays
+     * closed when the owner keeps it closed and is dropped only when the width cannot fit it.
+     *
+     * [splitterWidth] is the layout width of one pane separator, which the caller resolves from the
+     * active density. It equals the resize hit target, not the painted line: the hit area is a real
+     * layout region, so the panes' minimums do not silently overlap it.
      */
     public fun fit(
         availableWidth: Int,
@@ -48,6 +49,8 @@ public object HbWorkspaceLayout {
         inspectorWidth: Int = HbPaneGeometry.InspectorPreferred,
         secondPane: Boolean = false,
         inspector: Boolean = true,
+        sidebar: Boolean = true,
+        splitterWidth: Int = HbPaneGeometry.SplitterLayout,
     ): HbWorkspaceFit {
         val compact = availableWidth <= HbLayoutBreakpoints.CompactMax
         val navigation = if (compact) HbNavigationMode.Drawer else HbNavigationMode.Rail
@@ -63,23 +66,43 @@ public object HbWorkspaceLayout {
         val navigationWidth = HbPaneGeometry.NavigationRail
         var inspectorVisible = inspector
         var pane = secondPane
-        var sidebar = true
+        var sidebarVisible = sidebar
 
-        while (!fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspectorVisible, pane, sidebar)) {
+        while (
+            !fits(
+                availableWidth,
+                navigationWidth,
+                sidebarWidth,
+                inspectorWidth,
+                inspectorVisible,
+                pane,
+                sidebarVisible,
+                splitterWidth,
+            )
+        ) {
             when {
                 inspectorVisible -> inspectorVisible = false
                 pane -> pane = false
-                sidebar -> sidebar = false
+                sidebarVisible -> sidebarVisible = false
                 else -> break
             }
         }
 
-        val fit = fits(availableWidth, navigationWidth, sidebarWidth, inspectorWidth, inspectorVisible, pane, sidebar)
+        val layoutFits = fits(
+            availableWidth,
+            navigationWidth,
+            sidebarWidth,
+            inspectorWidth,
+            inspectorVisible,
+            pane,
+            sidebarVisible,
+            splitterWidth,
+        )
         return HbWorkspaceFit(
             navigation = navigation,
-            sidebar = sidebar && fit,
-            inspector = inspectorVisible && fit,
-            secondPane = pane && fit,
+            sidebar = sidebarVisible && layoutFits,
+            inspector = inspectorVisible && layoutFits,
+            secondPane = pane && layoutFits,
         )
     }
 
@@ -91,21 +114,18 @@ public object HbWorkspaceLayout {
         inspector: Boolean,
         secondPane: Boolean,
         sidebar: Boolean,
+        splitterWidth: Int,
     ): Boolean {
         var required = navigationWidth + HbPaneGeometry.SplitPaneMin
-        var separators = 0
         if (sidebar) {
-            required += sidebarWidth
-            separators += SeparatorThickness
+            required += sidebarWidth + splitterWidth
         }
         if (secondPane) {
-            required += HbPaneGeometry.SplitPaneMin
-            separators += SeparatorThickness
+            required += HbPaneGeometry.SplitPaneMin + splitterWidth
         }
         if (inspector) {
-            required += inspectorWidth
-            separators += SeparatorThickness
+            required += inspectorWidth + splitterWidth
         }
-        return required + separators <= availableWidth
+        return required <= availableWidth
     }
 }

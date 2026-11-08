@@ -3,7 +3,8 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,12 +14,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbColors
@@ -32,8 +41,14 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * The header names the columns and a row is one action only when [onRowClick] is provided; without
  * a handler a row is plain content, so the table does not announce actions without a result. The
  * table exposes collection and item semantics, so a screen reader can describe the position of a
- * cell. Columns keep a bounded width and the table scrolls horizontally instead of squeezing its
- * cells; ordinary key/value records should use a stacked list instead of this table.
+ * cell.
+ *
+ * The row action is attached without merging the descendants: a clickable row would hide the cell
+ * nodes and their collection coordinates, so the row receives a pointer tap, a keyboard activation
+ * and the `onClick` semantics action of a `Button`, while each cell keeps its own
+ * `CollectionItemInfo` and the header keeps the column headings. Columns keep a bounded width and
+ * the table scrolls horizontally instead of squeezing its cells; ordinary key/value records should
+ * use a stacked list instead of this table.
  *
  * Every row is composed at once, so the table is intended for a bounded, screen-sized number of
  * rows; a large or unbounded dataset belongs to a lazy or paginated list, not this component.
@@ -110,7 +125,29 @@ private fun TableRow(
         modifier = Modifier
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(role = Role.Button, onClick = onClick)
+                    Modifier
+                        .focusable()
+                        .onKeyEvent { event ->
+                            if (
+                                event.type == KeyEventType.KeyDown &&
+                                (event.key == Key.Enter || event.key == Key.Spacebar)
+                            ) {
+                                onClick()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        .pointerInput(onClick) {
+                            detectTapGestures { onClick() }
+                        }
+                        .semantics {
+                            role = Role.Button
+                            onClick(label = null) {
+                                onClick()
+                                true
+                            }
+                        }
                 } else {
                     Modifier
                 },

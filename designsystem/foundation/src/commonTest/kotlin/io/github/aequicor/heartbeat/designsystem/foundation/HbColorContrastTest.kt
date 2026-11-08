@@ -97,6 +97,20 @@ class HbColorContrastTest {
     }
 
     @Test
+    fun selectionIndicatorReachesNonTextMinimum() {
+        // The selected container tint alone is below 3:1 against the surface, so the kit marks the
+        // selection with an independent indicator; that indicator carries the contrast requirement.
+        listOf(HbColorPalettes.Light, HbColorPalettes.Dark).forEach { palette ->
+            listOf(palette.surface.base, palette.surface.subtle).forEach { surface ->
+                assertAboveContrast(
+                    expected = HbContrast.NonTextMinimum,
+                    actual = palette.selection.indicator.contrastRatio(surface),
+                )
+            }
+        }
+    }
+
+    @Test
     fun statusPairsReachTextMinimum() {
         listOf(HbColorPalettes.Light, HbColorPalettes.Dark).forEach { palette ->
             val statuses = listOf(

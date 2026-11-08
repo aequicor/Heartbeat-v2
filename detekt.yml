@@ -71,6 +71,7 @@ Compose:
       - LocalGeometry
       - LocalLabel
       - LocalError
+      - LocalTextScale
   CompositionLocalNaming:
     active: true
   ConditionHoist:

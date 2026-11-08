@@ -50,9 +50,9 @@ fun HbMenuItem(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = HbSizes.controlHeight)
-            .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,

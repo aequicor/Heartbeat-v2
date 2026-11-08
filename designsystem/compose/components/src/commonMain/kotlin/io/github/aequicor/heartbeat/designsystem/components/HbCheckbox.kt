@@ -55,17 +55,24 @@ fun HbCheckbox(
         checked -> ToggleableState.On
         else -> ToggleableState.Off
     }
+    // A mixed state resolves to On, independent of the value of [checked]: the first click of an
+    // indeterminate box must turn the whole group on, not toggle the unrelated stored value.
+    val nextChecked = when (state) {
+        ToggleableState.Indeterminate -> true
+        ToggleableState.Off -> true
+        ToggleableState.On -> false
+    }
     val labelColor = if (enabled) colors.text.primary else colors.text.primary.copy(HbEffects.DisabledContent)
 
     Row(
         modifier = modifier
-            .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .heightIn(min = HbSizes.minimumTarget)
             .triStateToggleable(
                 state = state,
-                onClick = { onCheckedChange(!checked) },
+                onClick = { onCheckedChange(nextChecked) },
                 enabled = enabled,
                 role = Role.Checkbox,
             )

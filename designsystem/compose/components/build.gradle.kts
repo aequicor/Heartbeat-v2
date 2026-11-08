@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+
 plugins {
     id("heartbeat-compose-designsystem")
 }
@@ -11,6 +13,8 @@ kotlin {
     }
     sourceSets.jvmTest.dependencies {
         implementation(libs.compose.ui)
+        implementation(compose.uiTest)
+        implementation(compose.desktop.currentOs)
     }
 }
 

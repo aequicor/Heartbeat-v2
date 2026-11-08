@@ -61,6 +61,8 @@ fun HbNavigationItem(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = HbSizes.navigationRowHeight)
+            .onFocusChanged { focused = it.isFocused }
+            .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
             .clip(HbShapes.Small)
             .background(background)
             .drawBehind {
@@ -74,8 +76,6 @@ fun HbNavigationItem(
                     )
                 }
             }
-            .onFocusChanged { focused = it.isFocused }
-            .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
             .selectable(
                 selected = selected,
                 enabled = enabled,

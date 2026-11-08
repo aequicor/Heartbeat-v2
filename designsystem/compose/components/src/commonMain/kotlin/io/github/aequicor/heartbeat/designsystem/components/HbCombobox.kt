@@ -19,6 +19,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -35,6 +39,12 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * reaches a surrounding surface. The popup is non-focusable so opening the suggestions never moves
  * the focus away from the editor, and disabling the control closes the popup. [noResultsText]
  * renders the no-results state on the same choice surface as the option list.
+ *
+ * The editor carries the combobox contract of the suggestions: the expanded and collapsed states,
+ * their accessibility actions, and the active suggestion (or the no-results text) as the state
+ * description, so a screen reader hears the same surface the mouse and keyboard users see. The
+ * active index is normalized against the filtered options, so a shrinking result set never leaves
+ * Enter pointing outside the list.
  */
 @Composable
 fun <T> HbCombobox(
@@ -52,6 +62,9 @@ fun <T> HbCombobox(
     var expanded by remember { mutableStateOf(false) }
     var activeIndex by remember { mutableIntStateOf(0) }
     val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
+    // The stored index can outlive its options after an asynchronous filtering pass.
+    val active = activeIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
+    val activeSuggestion = options.getOrNull(active)?.let(optionLabel)
 
     if (!enabled) expanded = false
 
@@ -69,27 +82,32 @@ fun <T> HbCombobox(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { if (it.isFocused && enabled) expanded = true }
-                .onPreviewKeyEvent { event ->
-                    comboboxKeyEvent(
-                        event = event,
-                        options = options,
-                        expanded = expanded,
-                        activeIndex = activeIndex,
-                        onExpand = { expanded = true },
-                        onDismiss = { expanded = false },
-                        onActiveChange = { activeIndex = it },
-                        onSelect = {
-                            onSelect(it)
-                            expanded = false
-                        },
-                    )
-                },
+                .comboboxKeys(
+                    options = options,
+                    activeIndex = active,
+                    expanded = expanded,
+                    onExpand = { expanded = true },
+                    onDismiss = { expanded = false },
+                    onActiveChange = { activeIndex = it },
+                    onSelect = { option ->
+                        onSelect(option)
+                        expanded = false
+                    },
+                )
+                .comboboxSemantics(
+                    expanded = expanded,
+                    enabled = enabled,
+                    activeSuggestion = activeSuggestion,
+                    noResultsText = noResultsText,
+                    onExpand = { expanded = true },
+                    onCollapse = { expanded = false },
+                ),
         )
 
         if (expanded && enabled) {
             ComboboxPopup(
                 options = options,
-                activeIndex = activeIndex,
+                activeIndex = active,
                 optionLabel = optionLabel,
                 noResultsText = noResultsText,
                 offset = popupOffset,
@@ -131,6 +149,8 @@ private fun <T> ComboboxPopup(
                 onSelect = onSelect,
                 onActiveChange = onActiveChange,
                 onDismiss = onDismiss,
+                // The editor keeps the focus, so the suggestions never take it from typing.
+                focusOnOpen = false,
             )
         }
     }
@@ -146,7 +166,7 @@ private fun NoResults(
     }
     val colors = HbTheme.colors
 
-    HbOptionSurface(modifier = modifier) {
+    HbOptionSurface(modifier = modifier) { _ ->
         BasicText(
             text = text,
             style = HbTypography.Caption,
@@ -154,6 +174,53 @@ private fun NoResults(
             modifier = Modifier.padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         )
     }
+}
+
+/**
+ * Combobox contract of the editor: the expanded and collapsed actions, and the active suggestion
+ * (or the no-results text) as the announced state of the suggestions.
+ */
+private fun Modifier.comboboxSemantics(
+    expanded: Boolean,
+    enabled: Boolean,
+    activeSuggestion: String?,
+    noResultsText: String?,
+    onExpand: () -> Unit,
+    onCollapse: () -> Unit,
+): Modifier = semantics {
+    if (expanded) {
+        (activeSuggestion ?: noResultsText)?.let { stateDescription = it }
+        collapse {
+            onCollapse()
+            true
+        }
+    } else if (enabled) {
+        expand {
+            onExpand()
+            true
+        }
+    }
+}
+
+private fun <T> Modifier.comboboxKeys(
+    options: List<T>,
+    activeIndex: Int,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onDismiss: () -> Unit,
+    onActiveChange: (Int) -> Unit,
+    onSelect: (T) -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    comboboxKeyEvent(
+        event = event,
+        options = options,
+        activeIndex = activeIndex,
+        expanded = expanded,
+        onExpand = onExpand,
+        onDismiss = onDismiss,
+        onActiveChange = onActiveChange,
+        onSelect = onSelect,
+    )
 }
 
 /**
@@ -174,12 +241,16 @@ private fun <T> comboboxKeyEvent(
     return when (event.key) {
         Key.DirectionDown -> {
             onExpand()
-            onActiveChange((activeIndex + 1).coerceAtMost(options.lastIndex))
+            if (options.isNotEmpty()) {
+                onActiveChange((activeIndex + 1).coerceAtMost(options.lastIndex))
+            }
             true
         }
 
         Key.DirectionUp -> {
-            onActiveChange((activeIndex - 1).coerceAtLeast(0))
+            if (options.isNotEmpty()) {
+                onActiveChange((activeIndex - 1).coerceAtLeast(0))
+            }
             true
         }
 
@@ -187,8 +258,11 @@ private fun <T> comboboxKeyEvent(
             if (!expanded) {
                 false
             } else {
-                options.getOrNull(activeIndex)?.let(onSelect)
-                onDismiss()
+                val option = options.getOrNull(activeIndex)
+                if (option != null) {
+                    onSelect(option)
+                    onDismiss()
+                }
                 true
             }
         }

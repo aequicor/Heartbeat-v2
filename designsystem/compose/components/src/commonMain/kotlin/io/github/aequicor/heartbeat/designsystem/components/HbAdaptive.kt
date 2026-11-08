@@ -9,6 +9,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbWindowHeight
 import io.github.aequicor.heartbeat.designsystem.foundation.HbWindowWidth
 import io.github.aequicor.heartbeat.designsystem.foundation.HbWorkspaceFit
 import io.github.aequicor.heartbeat.designsystem.foundation.HbWorkspaceLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import kotlin.math.roundToInt
 
 /**
@@ -18,7 +19,9 @@ import kotlin.math.roundToInt
  * narrow desktop window and a wide tablet get the same treatment, and a short host gets the same
  * reduced-chrome signal as a tall one. The callback receives the width class, the height class and
  * the regions that fit; the owner keeps its preferred arrangement in the workspace state and
- * restores it when the width returns.
+ * restores it when the width returns. [sidebar], [inspector] and [secondPane] are the preferred
+ * visibility of those regions: a requested region stays closed when the owner keeps it closed, and
+ * only a width that cannot fit it hides it.
  */
 @Composable
 fun HbAdaptive(
@@ -27,6 +30,7 @@ fun HbAdaptive(
     inspectorWidth: Int = HbPaneGeometry.InspectorPreferred,
     secondPane: Boolean = false,
     inspector: Boolean = true,
+    sidebar: Boolean = true,
     content: @Composable (windowWidth: HbWindowWidth, windowHeight: HbWindowHeight, fit: HbWorkspaceFit) -> Unit,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -41,6 +45,8 @@ fun HbAdaptive(
                 inspectorWidth = inspectorWidth,
                 secondPane = secondPane,
                 inspector = inspector,
+                sidebar = sidebar,
+                splitterWidth = HbSizes.minimumTarget.value.roundToInt(),
             ),
         )
     }

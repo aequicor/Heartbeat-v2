@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -32,11 +34,14 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import io.github.aequicor.heartbeat.designsystem.resources.Res
+import io.github.aequicor.heartbeat.designsystem.resources.hb_no_options
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Selection from a closed list (HB-DS-018).
@@ -47,6 +52,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * selected value and the expanded state through semantics, keeps the shared focus outline, closes
  * the popup when it becomes disabled, and reads the label and error of the surrounding
  * [HbFormField].
+ *
+ * Both ways of opening the popup — a pointer click and the accessibility `expand` action — run the
+ * same [open] function, so the active option always starts at the selected value. Closing returns
+ * the focus to the trigger, which is the element that opened the surface.
  */
 @Composable
 fun <T> HbSelect(
@@ -61,14 +70,30 @@ fun <T> HbSelect(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var activeIndex by remember { mutableIntStateOf(0) }
+    val triggerRequester = remember { FocusRequester() }
     val popupOffset = with(LocalDensity.current) { POPUP_OFFSET.roundToPx() }
+    val noOptionsText = stringResource(Res.string.hb_no_options)
     val formLabel = HbFormFieldLocals.LocalLabel.current
     val formError = HbFormFieldLocals.LocalError.current
     val effectiveLabel = label.ifEmpty { formLabel.orEmpty() }
+    // The stored index can outlive its options after an asynchronous refresh of the list.
+    val active = activeIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
 
     if (!enabled) expanded = false
 
-    Box(modifier = modifier) {        SelectTrigger(
+    fun open() {
+        if (!enabled || expanded) return
+        activeIndex = options.indexOf(selected).coerceAtLeast(0)
+        expanded = true
+    }
+
+    fun close() {
+        expanded = false
+        triggerRequester.requestFocus()
+    }
+
+    Box(modifier = modifier) {
+        SelectTrigger(
             text = selected?.let(optionLabel) ?: placeholder,
             isPlaceholder = selected == null,
             expanded = expanded,
@@ -76,13 +101,17 @@ fun <T> HbSelect(
             label = effectiveLabel,
             value = selected?.let(optionLabel),
             error = formError,
+            focusRequester = triggerRequester,
             onClick = {
-                if (enabled && !expanded) {
-                    activeIndex = options.indexOf(selected).coerceAtLeast(0)
+                if (expanded) {
+                    close()
+                } else {
+                    open()
                 }
-                if (enabled) expanded = !expanded
             },
-            onExpandedChange = { expanded = it },
+            onExpandedChange = { shouldExpand ->
+                if (shouldExpand) open() else close()
+            },
         )
 
         if (expanded && enabled) {
@@ -94,14 +123,16 @@ fun <T> HbSelect(
                 HbOptionList(
                     options = options,
                     selected = selected,
-                    activeIndex = activeIndex,
+                    activeIndex = active,
                     optionLabel = optionLabel,
                     onSelect = { option ->
                         onSelect(option)
                         expanded = false
+                        triggerRequester.requestFocus()
                     },
                     onActiveChange = { activeIndex = it },
-                    onDismiss = { expanded = false },
+                    onDismiss = { close() },
+                    emptyText = noOptionsText,
                 )
             }
         }
@@ -117,6 +148,7 @@ private fun SelectTrigger(
     label: String,
     value: String?,
     error: String?,
+    focusRequester: FocusRequester,
     onClick: () -> Unit,
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -132,11 +164,12 @@ private fun SelectTrigger(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = HbSizes.controlHeight)
+            .onFocusChanged { focused = it.isFocused }
+            .hbFocusRing(focused = enabled && focused, shape = HbShapes.Medium, color = colors.focus)
             .clip(HbShapes.Medium)
             .background(colors.surface.input)
             .border(FIELD_BORDER, border, HbShapes.Medium)
-            .onFocusChanged { focused = it.isFocused }
-            .hbFocusRing(focused = enabled && focused, shape = HbShapes.Medium, color = colors.focus)
+            .focusRequester(focusRequester)
             .clickable(
                 enabled = enabled,
                 role = Role.DropdownList,

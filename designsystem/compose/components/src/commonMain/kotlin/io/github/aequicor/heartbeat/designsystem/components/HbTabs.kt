@@ -28,7 +28,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
@@ -43,7 +45,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * Selection is exposed by the `selectable` semantics and marked by an underline drawn across the
  * measured tab, so it is not encoded by color alone and a horizontally scrolling strip keeps the
  * indicator aligned. The strip is one keyboard group: the left and right arrows move the selection
- * and the focus together, and a long strip scrolls instead of shrinking its labels.
+ * and the focus together, mirrored in a right-to-left layout, and a long strip scrolls instead of
+ * shrinking its labels. The arrow steps from the actually focused tab, not from the selected one.
  */
 @Composable
 fun <T> HbTabs(
@@ -55,6 +58,8 @@ fun <T> HbTabs(
     enabled: Boolean = true,
 ) {
     val focusRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
+    var focusedIndex by remember(tabs.size) { mutableStateOf(-1) }
+    val layoutDirection = LocalLayoutDirection.current
 
     Row(
         modifier = modifier
@@ -62,12 +67,13 @@ fun <T> HbTabs(
             .focusGroup()
             .onPreviewKeyEvent { event ->
                 if (!enabled || tabs.isEmpty() || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val current = tabs.indexOf(selected)
-                val target = when (event.key) {
-                    Key.DirectionRight -> (current + 1) % tabs.size
-                    Key.DirectionLeft -> (current - 1 + tabs.size) % tabs.size
+                val step = when (event.key) {
+                    Key.DirectionRight -> if (layoutDirection == LayoutDirection.Rtl) -1 else 1
+                    Key.DirectionLeft -> if (layoutDirection == LayoutDirection.Rtl) 1 else -1
                     else -> return@onPreviewKeyEvent false
                 }
+                val anchor = focusedIndex.takeIf { it in tabs.indices } ?: tabs.indexOf(selected)
+                val target = Math.floorMod(anchor + step, tabs.size)
                 focusRequesters[target].requestFocus()
                 onSelect(tabs[target])
                 true
@@ -80,6 +86,7 @@ fun <T> HbTabs(
                 selected = tab == selected,
                 enabled = enabled,
                 onClick = { onSelect(tab) },
+                onFocus = { focusedIndex = index },
                 modifier = Modifier.focusRequester(focusRequesters[index]),
             )
         }
@@ -92,6 +99,7 @@ private fun HbTab(
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    onFocus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
@@ -104,9 +112,12 @@ private fun HbTab(
 
     Column(
         modifier = modifier
-            .clip(HbShapes.Small)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .heightIn(min = HbSizes.minimumTarget)
             .selectable(
                 selected = selected,

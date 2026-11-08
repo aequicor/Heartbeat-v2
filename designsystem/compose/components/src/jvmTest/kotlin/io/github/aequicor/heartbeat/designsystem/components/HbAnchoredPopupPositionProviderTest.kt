@@ -78,6 +78,44 @@ class HbAnchoredPopupPositionProviderTest {
         assertEquals(136, position.y)
     }
 
+    @Test
+    fun clampsAPopupTallerThanTheWindow() {
+        val position = provider.calculatePosition(
+            anchorBounds = IntRect(left = 10, top = 100, right = 210, bottom = 132),
+            windowSize = IntSize(width = 800, height = 600),
+            layoutDirection = LayoutDirection.Ltr,
+            popupContentSize = IntSize(width = 200, height = 700),
+        )
+
+        assertEquals(0, position.y)
+    }
+
+    @Test
+    fun tooltipOpensAboveWhenTheSpaceFits() {
+        val tooltip = HbAnchoredPopupPositionProvider(gap = GAP, preferAbove = true)
+        val position = tooltip.calculatePosition(
+            anchorBounds = IntRect(left = 10, top = 300, right = 210, bottom = 332),
+            windowSize = IntSize(width = 800, height = 600),
+            layoutDirection = LayoutDirection.Ltr,
+            popupContentSize = IntSize(width = 200, height = 100),
+        )
+
+        assertEquals(IntOffset(x = 10, y = 196), position)
+    }
+
+    @Test
+    fun tooltipFlipsBelowWhenTheSpaceAboveIsSmaller() {
+        val tooltip = HbAnchoredPopupPositionProvider(gap = GAP, preferAbove = true)
+        val position = tooltip.calculatePosition(
+            anchorBounds = IntRect(left = 10, top = 60, right = 210, bottom = 92),
+            windowSize = IntSize(width = 800, height = 600),
+            layoutDirection = LayoutDirection.Ltr,
+            popupContentSize = IntSize(width = 200, height = 100),
+        )
+
+        assertEquals(IntOffset(x = 10, y = 96), position)
+    }
+
     private companion object {
         private const val GAP = 4
     }

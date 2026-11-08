@@ -20,6 +20,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
  * [initials] stay readable and [contentDescription] names the identity, so the circle is not the
  * only information. Without a description the avatar is decorative and carries no text semantics
  * beyond its initials.
+ *
+ * The circle scales with the resolved text preference: initials use a scalable type role, so a
+ * fixed 24-unit circle would clip them at a large text scale. The geometry and the type grow
+ * together, so the initials stay inside the circle at every supported scale.
  */
 @Composable
 fun HbAvatar(
@@ -28,10 +32,11 @@ fun HbAvatar(
     contentDescription: String? = null,
 ) {
     val colors = HbTheme.colors
+    val avatarSize = AVATAR_SIZE * HbTheme.textScale
 
     Box(
         modifier = modifier
-            .size(AVATAR_SIZE)
+            .size(avatarSize)
             .clip(CircleShape)
             .background(colors.accent.container)
             .semantics {
@@ -45,6 +50,7 @@ fun HbAvatar(
             text = initials,
             style = HbTypography.Metadata,
             color = { colors.accent.foreground },
+            maxLines = 1,
         )
     }
 }

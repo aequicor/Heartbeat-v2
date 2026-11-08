@@ -131,6 +131,18 @@ class ArchitectureTest {
     }
 
     @Test
+    fun featureUiUsesSemanticTokensInsteadOfRawValues() {
+        val uiFiles = featureScope.files.filter { file ->
+            file.projectPath.replace('\\', '/').contains("/ui/")
+        }
+        Assert.assertTrue("No feature UI sources found: $uiFiles", uiFiles.isNotEmpty())
+
+        val violations = uiFiles.flatMap { file -> TokenUsageRules.violations(file.projectPath, file.text) }
+
+        Assert.assertEquals(listOf<String>(), violations)
+    }
+
+    @Test
     fun implementationDetailsAreInternal() {
         Assert.assertEquals(listOf<String>(), visibilityViolations(featureScope.files))
     }

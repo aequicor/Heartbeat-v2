@@ -68,8 +68,9 @@ public object HbLayoutBreakpoints {
 
 /**
  * Pane geometry of the workspace (HB-DS-032). A split arrangement requires the navigation, both
- * pane minimums, the inspector if present and the actual separators: two 360-unit conversations, a
- * 264-unit sidebar and two 1-unit separators need 986 usable units.
+ * pane minimums, the inspector if present and the actual separators. A separator occupies its hit
+ * target in the layout, not the one-unit visual line: two 360-unit conversations, a 264-unit
+ * sidebar, a 52-unit navigation rail and two 32-unit separators need 1100 usable units.
  */
 public object HbPaneGeometry {
     public const val NavigationRail: Int = 52
@@ -97,10 +98,14 @@ public object HbPaneGeometry {
 
     public const val PaneHeaderTouch: Int = 56
 
-    /** Width of one pane separator, counted twice in [TwoPaneWithSidebar]. */
-    private const val SeparatorThickness: Int = 1
+    /**
+     * Layout width of one pane separator in the dense geometry. It equals the dense minimum target,
+     * because the resize hit area is part of the layout and cannot overlap the panes: only the
+     * painted line is one unit wide.
+     */
+    public const val SplitterLayout: Int = 32
 
     /** Width required by the navigation rail, two split panes, a sidebar and two separators. */
     public const val TwoPaneWithSidebar: Int =
-        NavigationRail + SidebarPreferred + 2 * SplitPaneMin + 2 * SeparatorThickness
+        NavigationRail + SidebarPreferred + 2 * SplitPaneMin + 2 * SplitterLayout
 }

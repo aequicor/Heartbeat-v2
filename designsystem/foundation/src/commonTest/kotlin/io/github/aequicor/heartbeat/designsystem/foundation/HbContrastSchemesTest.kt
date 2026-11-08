@@ -54,7 +54,23 @@ class HbContrastSchemesTest {
             val mapped = HbContrastSchemes.highContrast(base)
             assertEquals(base.action, mapped.action)
             assertEquals(base.status, mapped.status)
-            assertEquals(base.selection, mapped.selection)
+        }
+    }
+
+    @Test
+    fun selectionIsStrengthenedInsteadOfTinted() {
+        listOf(HbColorPalettes.Light, HbColorPalettes.Dark).forEach { base ->
+            val mapped = HbContrastSchemes.highContrast(base)
+            assertTrue(
+                mapped.selection.background.contrastRatio(mapped.surface.base) >=
+                    HbContrast.NonTextMinimum,
+                "Selected container must be distinguishable from the adjacent surface",
+            )
+            assertTrue(
+                mapped.selection.foreground.contrastRatio(mapped.selection.background) >=
+                    HbContrast.TextMinimum,
+                "Selected content must reach the text minimum on its container",
+            )
         }
     }
 

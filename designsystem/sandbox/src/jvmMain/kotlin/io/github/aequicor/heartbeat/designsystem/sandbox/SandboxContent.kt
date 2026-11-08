@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbButtonVariant
 import io.github.aequicor.heartbeat.designsystem.components.HbDialog
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbTooltip
@@ -62,6 +63,7 @@ internal fun SandboxScreen(modifier: Modifier = Modifier) {
         SandboxSection("Действия") { Actions(colors) }
         SandboxSection("Поля") { Fields() }
         SandboxSection("Выбор") { Selection() }
+        SandboxSection("Расширенный набор") { ExtendedKit(colors) }
         SandboxSection("Раскладка") { LayoutSamples(colors) }
         SandboxSection("Навигация и списки") { NavigationAndLists(colors) }
         SandboxSection("Структура") { Structure() }
@@ -218,8 +220,12 @@ private fun DialogsAndPopups(colors: HbColors) {
             title = "Удалить диалог?",
             onDismissRequest = { showDialog = false },
             actions = {
-                HbButton(text = "Отмена", onClick = { showDialog = false })
-                HbButton(text = "Удалить", onClick = { showDialog = false })
+                HbButton(text = "Отмена", onClick = { showDialog = false }, variant = HbButtonVariant.Ghost)
+                HbButton(
+                    text = "Удалить",
+                    onClick = { showDialog = false },
+                    variant = HbButtonVariant.Destructive,
+                )
             },
         ) {
             BasicText(

@@ -34,6 +34,16 @@ object HbTheme {
         @Composable
         @ReadOnlyComposable
         get() = HbThemeDefaults.LocalMotion.current
+
+    /**
+     * Resolved user text scale. A component that draws a fixed geometry around scalable text, such
+     * as an avatar or a badge, multiplies that geometry by this value so the text never outgrows its
+     * container.
+     */
+    val textScale: Float
+        @Composable
+        @ReadOnlyComposable
+        get() = HbThemeDefaults.LocalTextScale.current
 }
 
 /**
@@ -80,8 +90,9 @@ fun HbTheme(
     val resolvedMotion = motion.resolve(systemMotion)
     val geometry = HbGeometries.forDensity(density)
     val typeScale = if (density == HbDensity.Touch) HbTypeScales.Touch else HbTypeScales.Desktop
-    val typeStyles = remember(density, textScale) {
-        typeScale.toStyles(textScale.coerceIn(MinTextScale, MaxTextScale))
+    val resolvedTextScale = textScale.coerceIn(MinTextScale, MaxTextScale)
+    val typeStyles = remember(density, resolvedTextScale) {
+        typeScale.toStyles(resolvedTextScale)
     }
 
     CompositionLocalProvider(
@@ -89,6 +100,7 @@ fun HbTheme(
         HbThemeDefaults.LocalMotion provides resolvedMotion,
         HbThemeDefaults.LocalTypography provides typeStyles,
         HbThemeDefaults.LocalGeometry provides geometry,
+        HbThemeDefaults.LocalTextScale provides resolvedTextScale,
         content = content,
     )
 }

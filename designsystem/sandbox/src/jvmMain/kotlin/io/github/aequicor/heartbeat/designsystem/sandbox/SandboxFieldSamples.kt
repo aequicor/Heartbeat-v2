@@ -1,25 +1,39 @@
+@file:Suppress("MagicNumber")
+
 package io.github.aequicor.heartbeat.designsystem.sandbox
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbButtonVariant
 import io.github.aequicor.heartbeat.designsystem.components.HbCheckbox
 import io.github.aequicor.heartbeat.designsystem.components.HbCombobox
 import io.github.aequicor.heartbeat.designsystem.components.HbCopyButton
 import io.github.aequicor.heartbeat.designsystem.components.HbFormField
 import io.github.aequicor.heartbeat.designsystem.components.HbKeyHint
+import io.github.aequicor.heartbeat.designsystem.components.HbLazyList
 import io.github.aequicor.heartbeat.designsystem.components.HbLink
+import io.github.aequicor.heartbeat.designsystem.components.HbMenu
+import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
 import io.github.aequicor.heartbeat.designsystem.components.HbRadioGroup
+import io.github.aequicor.heartbeat.designsystem.components.HbScrollArea
 import io.github.aequicor.heartbeat.designsystem.components.HbSearchField
 import io.github.aequicor.heartbeat.designsystem.components.HbSecretField
 import io.github.aequicor.heartbeat.designsystem.components.HbSegmentedControl
 import io.github.aequicor.heartbeat.designsystem.components.HbSelect
+import io.github.aequicor.heartbeat.designsystem.components.HbSettingsRow
 import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
 import io.github.aequicor.heartbeat.designsystem.components.HbTextArea
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
@@ -42,7 +56,11 @@ internal fun Actions(colors: HbColors) {
         verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {
         HbButton(text = "Сохранить", onClick = {})
+        HbButton(text = "Настроить", onClick = {}, variant = HbButtonVariant.Secondary)
+        HbButton(text = "Отмена", onClick = {}, variant = HbButtonVariant.Ghost)
+        HbButton(text = "Удалить", onClick = {}, variant = HbButtonVariant.Destructive)
         HbButton(text = "Недоступно", onClick = {}, enabled = false)
+        HbButton(text = "Удаление…", onClick = {}, busy = true)
         HbButton(text = "Сохранение…", onClick = {}, busy = true, busyLabel = "Выполняется")
         HbLink(text = "Открыть проект", onClick = {})
         HbCopyButton(label = "Копировать", copiedLabel = "Скопировано", onCopy = { true })
@@ -71,6 +89,13 @@ internal fun Fields() {
                 value = "https://",
                 onValueChange = {},
                 errorMessage = "Проверьте адрес и повторите",
+            )
+        }
+        HbFormField(label = "Идентификатор", helpText = "Изменяется в настройках проекта") {
+            HbTextField(
+                value = "project-2026-11",
+                onValueChange = {},
+                readOnly = true,
             )
         }
         HbFormField(label = "Модель") {
@@ -163,20 +188,86 @@ internal fun LayoutSamples(colors: HbColors) {
 
 private val FLOW_WIDTH = 420.dp
 
+private val SCROLL_WIDTH = 280.dp
+
+private val SCROLL_HEIGHT = 72.dp
+
+private val LAZY_HEIGHT = 120.dp
+
+/** Menu, settings row, lazy list and scroll area of the extended kit (HB-DS-039). */
 @Composable
-private fun DisabledFieldSample(modifier: Modifier = Modifier) {
-    HbTextField(
-        value = "Недоступное значение",
+internal fun ExtendedKit(colors: HbColors) {
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
+            HbMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                actions = listOf(
+                    HbMenuAction(label = "Переименовать", onClick = {}),
+                    HbMenuAction(label = "Архивировать", onClick = {}, enabled = false),
+                ),
+            ) {
+                HbButton(
+                    text = "Действия",
+                    onClick = { menuOpen = true },
+                    variant = HbButtonVariant.Secondary,
+                )
+            }
+            HbScrollArea(modifier = Modifier.width(SCROLL_WIDTH).height(SCROLL_HEIGHT)) {
+                Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs)) {
+                    repeat(5) {
+                        BasicText(
+                            text = "Строка ${it + 1}",
+                            style = HbTypography.Caption,
+                            color = { colors.text.secondary },
+                        )
+                    }
+                }
+            }
+        }
+        HbSettingsRow(
+            title = "Автозапуск",
+            description = "Запускать Heartbeat при входе в систему",
+            control = { HbSwitch(label = "", checked = true, onCheckedChange = {}) },
+        )
+        HbSettingsRow(
+            title = "Анонимная телеметрия",
+            description = "Недоступно в этой сборке",
+            enabled = false,
+            control = { HbSwitch(label = "", checked = false, onCheckedChange = {}, enabled = false) },
+        )
+        HbLazyList(
+            items = (1..6).map { "Элемент $it" },
+            key = { it },
+            modifier = Modifier.height(LAZY_HEIGHT),
+        ) { item ->
+            BasicText(
+                text = item,
+                style = HbTypography.Label,
+                color = { colors.text.primary },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DisabledFieldSample(modifier: Modifier = Modifier) {    HbTextField(
+        value = "",
         onValueChange = {},
         label = "Отключено",
+        placeholder = "Недоступно для ввода",
         enabled = false,
+        trailing = {
+            HbLink(text = "Справка", onClick = {}, enabled = false)
+        },
         modifier = modifier,
     )
 }
 
 @Composable
-private fun SecurityFieldSamples(modifier: Modifier = Modifier) {
-    Column(
+private fun SecurityFieldSamples(modifier: Modifier = Modifier) {    Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
     ) {

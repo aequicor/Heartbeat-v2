@@ -21,6 +21,12 @@ import kotlin.test.fail
  * exceeds the global budget, and also when a local region differs more than its own budget, so a
  * small indicator, border or icon that disappears is not hidden by the size of the whole catalog
  * image. Run the tests with `HB_UPDATE_GOLDENS=1` to rewrite the references deliberately.
+ *
+ * Pixel comparison is the CI gate: the `sandbox-goldens` job runs it on the Windows image that
+ * produced the references, so a visual regression fails the build instead of being skipped. A host
+ * with a different font stack or Skia build passes `HB_GOLDEN_MODE=render` to render every scene and
+ * run the interaction assertions without comparing pixels; the gate never disables itself just
+ * because it runs in CI.
  */
 internal object GoldenImage {
 
@@ -36,12 +42,7 @@ internal object GoldenImage {
         if (!goldenFile.exists()) {
             fail("Golden image $name is missing. Run the tests with $UpdateVariable=1 to create it.")
         }
-
-        // CI hosts do not share the local fixed-rendering configuration (fonts and Skia build), so a
-        // pixel comparison there would fail on antialiasing instead of on a real regression. The
-        // sandbox gate still renders every scene and runs the interaction assertions; the golden
-        // comparison stays a local check in the controlled graphics environment.
-        if (System.getenv("CI") == "true") {
+        if (System.getenv(ModeVariable) == RenderOnlyMode) {
             return
         }
 
@@ -139,6 +140,10 @@ internal object GoldenImage {
     private const val GoldenDirectory = "src/jvmTest/resources/golden"
 
     private const val UpdateVariable = "HB_UPDATE_GOLDENS"
+
+    private const val ModeVariable = "HB_GOLDEN_MODE"
+
+    private const val RenderOnlyMode = "render"
 
     private const val ChannelMask = 0xFF
 

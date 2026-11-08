@@ -31,6 +31,7 @@ import io.github.aequicor.heartbeat.designsystem.components.HbOrientation
 import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
 import io.github.aequicor.heartbeat.designsystem.components.HbProgress
 import io.github.aequicor.heartbeat.designsystem.components.HbSheet
+import io.github.aequicor.heartbeat.designsystem.components.HbSidebar
 import io.github.aequicor.heartbeat.designsystem.components.HbSnackbar
 import io.github.aequicor.heartbeat.designsystem.components.HbSplitter
 import io.github.aequicor.heartbeat.designsystem.components.HbSplitterLabels
@@ -98,7 +99,14 @@ internal fun Structure() {
             stateDescription = "Развёрнуто",
         )
         HbTreeItem(label = "foundation", depth = 1, expanded = false, onExpandedChange = {})
-        HbTreeItem(label = "compose", depth = 1, expanded = true, onExpandedChange = {})
+        HbTreeItem(
+            label = "components",
+            depth = 1,
+            expanded = true,
+            onExpandedChange = {},
+            onClick = {},
+            selected = true,
+        )
         HbTreeItem(label = "components", depth = 2, expanded = false, onExpandedChange = {})
         HbTable(
             columns = listOf("Файл", "Изменён", "Статус"),
@@ -200,6 +208,13 @@ internal fun Workspace(colors: HbColors) {
             message = "Черновик сохранён",
             actionLabel = "Отменить",
         )
+        HbSidebar(
+            title = "Диалоги",
+            modifier = Modifier.width(SIDEBAR_WIDTH).height(SIDEBAR_HEIGHT),
+        ) {
+            HbNavigationItem(label = "Разбор релиза", selected = true, onClick = {})
+            HbNavigationItem(label = "Конспект", selected = false, onClick = {})
+        }
     }
 }
 
@@ -236,3 +251,7 @@ internal fun Surfaces(colors: HbColors) {
 private val SURFACE_WIDTH = 320.dp
 
 private val SURFACE_HEIGHT = 180.dp
+
+private val SIDEBAR_WIDTH = 264.dp
+
+private val SIDEBAR_HEIGHT = 140.dp

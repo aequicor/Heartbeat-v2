@@ -39,9 +39,9 @@ fun HbIconButton(
     Box(
         modifier = modifier
             .size(HbSizes.minimumTarget)
-            .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .clickable(
                 enabled = enabled,
                 role = Role.Button,

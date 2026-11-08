@@ -19,9 +19,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -60,6 +62,7 @@ fun <T> HbSegmentedControl(
 ) {
     val colors = HbTheme.colors
     val focusRequesters = remember(options.size) { List(options.size) { FocusRequester() } }
+    var focusedIndex by remember(options.size) { mutableStateOf(-1) }
     val layoutDirection = LocalLayoutDirection.current
 
     Row(
@@ -77,7 +80,9 @@ fun <T> HbSegmentedControl(
                     else -> return@onPreviewKeyEvent false
                 }
                 val direction = if (layoutDirection == LayoutDirection.Rtl) -step else step
-                val target = (options.indexOf(selected) + direction).coerceIn(0, options.lastIndex)
+                // The arrow steps from the actually focused segment, not from the selected one.
+                val anchor = focusedIndex.takeIf { it in options.indices } ?: options.indexOf(selected)
+                val target = (anchor + direction).coerceIn(0, options.lastIndex)
                 focusRequesters[target].requestFocus()
                 onSelect(options[target])
                 true
@@ -89,6 +94,7 @@ fun <T> HbSegmentedControl(
                 selected = option == selected,
                 enabled = enabled,
                 onClick = { onSelect(option) },
+                onFocus = { focusedIndex = index },
                 modifier = Modifier.focusRequester(focusRequesters[index]),
             )
         }
@@ -101,6 +107,7 @@ private fun RowScope.Segment(
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    onFocus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
@@ -115,10 +122,27 @@ private fun RowScope.Segment(
     Box(
         modifier = modifier
             .weight(1f)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
+            .hbFocusRing(focused = enabled && focused, shape = HbShapes.Medium, color = colors.focus)
             .clip(HbShapes.Medium)
             .background(background)
-            .onFocusChanged { focused = it.isFocused }
-            .hbFocusRing(focused = enabled && focused, shape = HbShapes.Medium, color = colors.focus)
+            .drawBehind {
+                if (selected) {
+                    // A permanent indicator marks the selection independently of the container
+                    // fill, so the selected segment is not conveyed by color contrast alone.
+                    val stroke = segmentIndicator.toPx()
+                    val y = size.height - stroke / 2f
+                    drawLine(
+                        color = colors.selection.indicator,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = stroke,
+                    )
+                }
+            }
             .heightIn(min = HbSizes.minimumTarget)
             .selectable(
                 selected = selected,
@@ -138,3 +162,5 @@ private fun RowScope.Segment(
 }
 
 private val segmentBorder = 1.dp
+
+private val segmentIndicator = 2.dp

@@ -39,9 +39,9 @@ fun HbLink(
 
     Box(
         modifier = modifier
-            .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .heightIn(min = HbSizes.minimumTarget)
             .clickable(
                 enabled = enabled,

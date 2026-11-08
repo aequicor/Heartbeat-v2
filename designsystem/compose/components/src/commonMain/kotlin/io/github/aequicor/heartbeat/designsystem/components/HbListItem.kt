@@ -50,9 +50,9 @@ fun HbListItem(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .clip(HbShapes.Small)
                 .onFocusChanged { focused = it.isFocused }
                 .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+                .clip(HbShapes.Small)
                 .clickable(
                     enabled = enabled,
                     role = Role.Button,

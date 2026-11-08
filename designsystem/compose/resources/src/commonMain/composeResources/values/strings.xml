@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hb_busy">Выполняется…</string>
+    <string name="hb_no_options">Нет вариантов</string>
+    <string name="hb_expand">Развернуть</string>
+    <string name="hb_collapse">Свернуть</string>
+    <string name="hb_tree_level">Уровень %1$d</string>
+</resources>

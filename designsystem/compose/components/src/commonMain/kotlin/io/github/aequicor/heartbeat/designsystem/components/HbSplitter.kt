@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +25,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -39,9 +39,9 @@ import kotlin.math.roundToInt
  *
  * Dragging reports the delta in logical units through [onResize]; the same operation is available
  * from accessibility actions and from the arrow keys, and Home resets the arrangement when
- * [onReset] exists. The effective hit area matches the density minimum target while the visual line
- * stays one logical unit, so the separator stays usable on touch without covering the adjacent
- * content with a thick line.
+ * [onReset] exists. The separator occupies its density minimum target in the layout and paints a
+ * one-unit line inside it: the hit area is a real layout region, so it never overlaps the panes
+ * whose minimum widths the fit policy counts.
  */
 @Composable
 fun HbSplitter(
@@ -54,7 +54,7 @@ fun HbSplitter(
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val density = LocalDensity.current
+    val currentOnResize by rememberUpdatedState(onResize)
     val step = STEP.value.roundToInt()
     val vertical = orientation == HbOrientation.Vertical
 
@@ -69,26 +69,32 @@ fun HbSplitter(
             )
             .pointerInput(enabled, orientation) {
                 if (!enabled) return@pointerInput
+                // A pointer delta is fractional on a high-density host: accumulate it and report
+                // only whole logical units, so the pane does not lose sub-unit movement.
+                var remainder = 0f
                 detectDragGestures { change, dragAmount ->
                     change.consume()
                     val deltaPx = if (vertical) dragAmount.x else dragAmount.y
-                    val delta = (deltaPx / density.density).roundToInt()
-                    onResize(delta)
+                    val delta = remainder + deltaPx / density
+                    val whole = delta.roundToInt()
+                    remainder = delta - whole
+                    if (whole != 0) currentOnResize(whole)
                 }
             }
             .onFocusChanged { focused = it.isFocused }
             .focusable(enabled)
             .splitterKeys(
                 enabled = enabled,
+                vertical = vertical,
                 step = step,
-                onResize = onResize,
+                onResize = currentOnResize,
                 onReset = onReset,
             )
             .splitterActions(
                 enabled = enabled,
                 labels = labels,
                 step = step,
-                onResize = onResize,
+                onResize = currentOnResize,
                 onReset = onReset,
             )
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus),
@@ -108,28 +114,31 @@ fun HbSplitter(
     }
 }
 
-/** Arrow keys resize the pane, and Home restores the preferred arrangement. */
+/** Arrow keys of the orientation resize the pane, and Home restores the preferred arrangement. */
 private fun Modifier.splitterKeys(
     enabled: Boolean,
+    vertical: Boolean,
     step: Int,
     onResize: (Int) -> Unit,
     onReset: (() -> Unit)?,
 ): Modifier = onKeyEvent { event ->
         if (!enabled || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+        val narrowKey = if (vertical) Key.DirectionLeft else Key.DirectionUp
+        val widenKey = if (vertical) Key.DirectionRight else Key.DirectionDown
         when (event.key) {
-            Key.DirectionLeft, Key.DirectionUp -> {
+            narrowKey -> {
                 onResize(-step)
                 true
             }
 
-            Key.DirectionRight, Key.DirectionDown -> {
+            widenKey -> {
                 onResize(step)
                 true
             }
 
             Key.MoveHome -> {
                 onReset?.invoke()
-                true
+                onReset != null
             }
 
             else -> false

@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbEffects
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -52,6 +54,7 @@ fun <T> HbRadioGroup(
     enabled: Boolean = true,
 ) {
     val focusRequesters = remember(options.size) { List(options.size) { FocusRequester() } }
+    var focusedIndex by remember(options.size) { mutableStateOf(-1) }
 
     Column(
         modifier = modifier
@@ -61,10 +64,12 @@ fun <T> HbRadioGroup(
                 if (!enabled || options.isEmpty() || event.type != KeyEventType.KeyDown) {
                     return@onPreviewKeyEvent false
                 }
-                val current = options.indexOf(selected)
+                // The arrow moves from the actually focused option, not from the selected one: a
+                // focus that moved programmatically must not make the next arrow jump back.
+                val anchor = focusedIndex.takeIf { it in options.indices } ?: options.indexOf(selected)
                 val target = when (event.key) {
-                    Key.DirectionDown -> (current + 1).coerceIn(0, options.lastIndex)
-                    Key.DirectionUp -> (current - 1).coerceIn(0, options.lastIndex)
+                    Key.DirectionDown -> (anchor + 1).coerceIn(0, options.lastIndex)
+                    Key.DirectionUp -> (anchor - 1).coerceIn(0, options.lastIndex)
                     else -> return@onPreviewKeyEvent false
                 }
                 focusRequesters[target].requestFocus()
@@ -79,6 +84,7 @@ fun <T> HbRadioGroup(
                 selected = option == selected,
                 enabled = enabled,
                 onClick = { onSelect(option) },
+                onFocus = { focusedIndex = index },
                 modifier = Modifier.focusRequester(focusRequesters[index]),
             )
         }
@@ -91,6 +97,7 @@ private fun HbRadioOption(
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    onFocus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
@@ -103,9 +110,13 @@ private fun HbRadioOption(
 
     Row(
         modifier = modifier
-            .clip(HbShapes.Small)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
+            .heightIn(min = HbSizes.minimumTarget)
             .selectable(
                 selected = selected,
                 enabled = enabled,

@@ -55,9 +55,9 @@ fun HbDisclosure(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(HbShapes.Small)
                 .onFocusChanged { focused = it.isFocused }
                 .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+                .clip(HbShapes.Small)
                 .heightIn(min = HbSizes.minimumTarget)
                 .clickable(
                     enabled = enabled,

@@ -76,9 +76,9 @@ private fun SnackbarAction(
 
     Box(
         modifier = Modifier
-            .clip(HbShapes.Small)
             .onFocusChanged { focused = it.isFocused }
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus)
+            .clip(HbShapes.Small)
             .heightIn(min = HbSizes.minimumTarget)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = HbSpacing.Xs),

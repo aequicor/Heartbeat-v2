@@ -19,4 +19,6 @@ internal object HbThemeDefaults {
     internal val LocalTypography = staticCompositionLocalOf { defaultTypeStyles(defaultTypeScale()) }
 
     internal val LocalGeometry = staticCompositionLocalOf { HbGeometries.Dense }
+
+    internal val LocalTextScale = staticCompositionLocalOf { 1f }
 }
