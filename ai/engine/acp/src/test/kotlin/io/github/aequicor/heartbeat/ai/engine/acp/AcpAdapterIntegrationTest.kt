@@ -8,13 +8,22 @@ import com.agentclientprotocol.agent.Agent
 import com.agentclientprotocol.agent.AgentInfo
 import com.agentclientprotocol.agent.AgentSession
 import com.agentclientprotocol.agent.AgentSupport
+import com.agentclientprotocol.agent.client
 import com.agentclientprotocol.annotations.UnstableApi
 import com.agentclientprotocol.client.ClientInfo
 import com.agentclientprotocol.common.Event
 import com.agentclientprotocol.common.SessionCreationParameters
 import com.agentclientprotocol.model.AgentCapabilities
+import com.agentclientprotocol.model.AuthMethod
+import com.agentclientprotocol.model.AuthMethodId
+import com.agentclientprotocol.model.AuthenticateResponse
+import com.agentclientprotocol.model.CloseSessionResponse
 import com.agentclientprotocol.model.ContentBlock
+import com.agentclientprotocol.model.PermissionOption
+import com.agentclientprotocol.model.PermissionOptionId
+import com.agentclientprotocol.model.PermissionOptionKind
 import com.agentclientprotocol.model.PromptResponse
+import com.agentclientprotocol.model.RequestPermissionOutcome
 import com.agentclientprotocol.model.SessionCapabilities
 import com.agentclientprotocol.model.SessionCloseCapabilities
 import com.agentclientprotocol.model.SessionId
@@ -23,9 +32,11 @@ import com.agentclientprotocol.model.SessionListCapabilities
 import com.agentclientprotocol.model.SessionResumeCapabilities
 import com.agentclientprotocol.model.SessionUpdate
 import com.agentclientprotocol.model.StopReason
+import com.agentclientprotocol.model.ToolCallId
 import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.transport.StdioTransport
 import io.github.aequicor.heartbeat.ai.engine.api.AiEngineException
+import io.github.aequicor.heartbeat.ai.engine.api.AuthResult
 import io.github.aequicor.heartbeat.ai.engine.api.EngineCapability
 import io.github.aequicor.heartbeat.ai.engine.api.EngineConnection
 import io.github.aequicor.heartbeat.ai.engine.api.EngineEvent
@@ -42,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -57,6 +69,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -147,6 +160,126 @@ class AcpAdapterIntegrationTest {
         assertTrue(adapter.state.value is EngineState.NotInitialized)
     }
 
+    @Test
+    fun resumeOpensTheSavedSession() = runBlocking {
+        val stub = StubAgent()
+        val adapter = adapterFor(stub)
+        try {
+            stub.start()
+            adapter.dispatch(EngineEvent.Connect)
+            withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+            val saved = SessionKey(adapterKey, "stub-session", title = "Stub session")
+
+            val session = adapter.createSession(SessionConfig(WORKSPACE), saved)
+            val again = adapter.createSession(SessionConfig(WORKSPACE), saved)
+
+            assertEquals(saved, session.key)
+            assertEquals(listOf(session.key), adapter.sessions.value)
+            assertSame(session, again)
+        } finally {
+            adapter.dispose()
+        }
+    }
+
+    @Test
+    fun closeSessionReleasesTheRuntimeSession() = runBlocking {
+        val stub = StubAgent()
+        val adapter = adapterFor(stub)
+        try {
+            stub.start()
+            adapter.dispatch(EngineEvent.Connect)
+            withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+            val session = adapter.createSession(SessionConfig(WORKSPACE))
+
+            adapter.closeSession(session.key)
+
+            assertEquals(listOf<SessionKey>(), adapter.sessions.value)
+            assertTrue(session.state.value is SessionState.Closed)
+            assertEquals(null, adapter.getSession(session.key))
+        } finally {
+            adapter.dispose()
+        }
+    }
+
+    @Test
+    fun permissionRequestRoundTrips() = runBlocking {
+        val stub = StubAgent(askPermission = true)
+        val adapter = adapterFor(stub)
+        try {
+            stub.start()
+            adapter.dispatch(EngineEvent.Connect)
+            withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+            val session = adapter.createSession(SessionConfig(WORKSPACE))
+            val updates = mutableListOf<EngineSessionUpdate>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                session.updates.take(4).toList(updates)
+            }
+
+            session.dispatch(SessionEvent.SendPrompt("run tests"))
+            val awaiting = withTimeout(TIMEOUT_MILLIS) {
+                session.state.first { it is SessionState.AwaitingPermission }
+            } as SessionState.AwaitingPermission
+            assertEquals("Run tests", awaiting.prompt.title)
+            assertEquals("Allow once", awaiting.prompt.options.single().name)
+
+            session.dispatch(
+                SessionEvent.AnswerPermission(
+                    requestId = awaiting.prompt.requestId,
+                    optionId = awaiting.prompt.options.single().id,
+                ),
+            )
+            withTimeout(TIMEOUT_MILLIS) { session.state.first { it is SessionState.Idle } }
+            collector.join()
+
+            assertTrue(
+                updates.filterIsInstance<EngineSessionUpdate.AgentText>()
+                    .any { it.text == "allowed: true" },
+            )
+            assertTrue(updates.any { it is EngineSessionUpdate.Completed })
+        } finally {
+            adapter.dispose()
+        }
+    }
+
+    @Test
+    fun connectIsIdempotent() = runBlocking {
+        val stub = StubAgent()
+        val adapter = adapterFor(stub)
+        try {
+            stub.start()
+            adapter.dispatch(EngineEvent.Connect)
+            withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+
+            adapter.dispatch(EngineEvent.Connect)
+            delay(100)
+
+            assertEquals(1, stub.stdioStarts)
+        } finally {
+            adapter.dispose()
+        }
+    }
+
+    @Test
+    fun authorizationCompletesBeforeReady() = runBlocking {
+        val stub = StubAgent(requireAuth = true)
+        val adapter = adapterFor(stub)
+        try {
+            stub.start()
+            adapter.dispatch(EngineEvent.Connect)
+            withTimeout(TIMEOUT_MILLIS) {
+                adapter.state.first { it is EngineState.AuthorizationRequired }
+            }
+            assertFalse(stub.authenticated)
+
+            adapter.dispatch(EngineEvent.AuthorizationCompleted(AuthResult.Success))
+
+            withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+            assertTrue(stub.authenticated)
+        } finally {
+            adapter.dispose()
+        }
+    }
+
     private fun adapterFor(stub: StubAgent): AcpAdapter = AcpAdapter(
         key = adapterKey,
         resolveLaunch = { AcpLaunchSpec(executable = "stub") },
@@ -162,6 +295,8 @@ class AcpAdapterIntegrationTest {
 /** ACP agent that mirrors prompts and advertises the capabilities the adapter probes. */
 private class StubAgent(
     private val advertiseResume: Boolean = true,
+    private val askPermission: Boolean = false,
+    private val requireAuth: Boolean = false,
 ) {
     private val clientToAgent = Channel<String>(Channel.UNLIMITED)
     private val agentToClient = Channel<String>(Channel.UNLIMITED)
@@ -176,36 +311,52 @@ private class StubAgent(
             name = "stub-agent",
         ),
     )
-    private val agent = Agent(protocol, StubSupport(advertiseResume))
+    private val support = StubSupport(advertiseResume, askPermission, requireAuth)
+    private val agent = Agent(protocol, support)
 
     var terminated: Boolean = false
         private set
+
+    var stdioStarts: Int = 0
+        private set
+
+    val authenticated: Boolean
+        get() = support.authenticated
 
     fun start() {
         check(agent.protocol === protocol)
         protocol.start()
     }
 
-    fun clientStdio(): AcpStdio = object : AcpStdio {
-        override val input: Flow<String> = agentToClient.receiveAsFlow()
+    fun clientStdio(): AcpStdio {
+        stdioStarts += 1
+        return object : AcpStdio {
+            override val input: Flow<String> = agentToClient.receiveAsFlow()
 
-        override suspend fun write(line: String) {
-            clientToAgent.send(line)
-        }
+            override suspend fun write(line: String) {
+                clientToAgent.send(line)
+            }
 
-        override fun diagnostics(): String = ""
+            override fun diagnostics(): String = ""
 
-        override fun terminate() {
-            terminated = true
-            clientToAgent.close()
-            agentToClient.close()
-            scope.cancel()
+            override fun terminate() {
+                terminated = true
+                clientToAgent.close()
+                agentToClient.close()
+                scope.cancel()
+            }
         }
     }
 
     private class StubSupport(
         private val advertiseResume: Boolean,
+        private val askPermission: Boolean,
+        private val requireAuth: Boolean,
     ) : AgentSupport {
+
+        var authenticated: Boolean = false
+            private set
+
         override suspend fun initialize(clientInfo: ClientInfo): AgentInfo = AgentInfo(
             capabilities = AgentCapabilities(
                 sessionCapabilities = SessionCapabilities(
@@ -214,16 +365,29 @@ private class StubAgent(
                     close = SessionCloseCapabilities(),
                 ),
             ),
+            authMethods = if (requireAuth) {
+                listOf(AuthMethod.AgentAuth(AuthMethodId("login"), "Sign in"))
+            } else {
+                listOf()
+            },
         )
+
+        override suspend fun authenticate(
+            methodId: AuthMethodId,
+            _meta: JsonElement?,
+        ): AuthenticateResponse {
+            authenticated = true
+            return AuthenticateResponse()
+        }
 
         override suspend fun createSession(
             sessionParameters: SessionCreationParameters,
-        ): AgentSession = StubSession(SessionId("stub-session"))
+        ): AgentSession = StubSession(SessionId("stub-session"), askPermission)
 
         override suspend fun resumeSession(
             sessionId: SessionId,
             sessionParameters: SessionCreationParameters,
-        ): AgentSession = StubSession(sessionId)
+        ): AgentSession = StubSession(sessionId, askPermission)
 
         override suspend fun listSessions(
             cwd: String?,
@@ -244,11 +408,45 @@ private class StubAgent(
 
     private class StubSession(
         override val sessionId: SessionId,
+        private val askPermission: Boolean,
     ) : AgentSession {
+
+        override suspend fun close(_meta: JsonElement?): CloseSessionResponse = CloseSessionResponse()
+
         override suspend fun prompt(
             content: List<ContentBlock>,
             _meta: JsonElement?,
         ): Flow<Event> = flow {
+            if (askPermission) {
+                emit(
+                    Event.SessionUpdateEvent(
+                        SessionUpdate.ToolCallUpdate(
+                            toolCallId = ToolCallId("tool-1"),
+                            title = "Run tests",
+                            status = com.agentclientprotocol.model.ToolCallStatus.IN_PROGRESS,
+                        ),
+                    ),
+                )
+                val response = currentCoroutineContext().client.requestPermissions(
+                    toolCall = SessionUpdate.ToolCallUpdate(
+                        toolCallId = ToolCallId("tool-1"),
+                        title = "Run tests",
+                    ),
+                    permissions = listOf(
+                        PermissionOption(
+                            optionId = PermissionOptionId("allow"),
+                            name = "Allow once",
+                            kind = PermissionOptionKind.ALLOW_ONCE,
+                        ),
+                    ),
+                )
+                val allowed = response.outcome is RequestPermissionOutcome.Selected
+                emit(
+                    Event.SessionUpdateEvent(
+                        SessionUpdate.AgentMessageChunk(ContentBlock.Text("allowed: $allowed")),
+                    ),
+                )
+            }
             val text = content.filterIsInstance<ContentBlock.Text>().joinToString(" ") { it.text }
             emit(
                 Event.SessionUpdateEvent(
