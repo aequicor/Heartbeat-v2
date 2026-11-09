@@ -29,6 +29,10 @@ object ArchitectureRules {
         FeatureImpl,
         FeaturePresentation,
         FeatureUi,
+        AiEngineApi,
+        AiEngineImpl,
+        AiEngineAcp,
+        AiEngineProvider,
         Storage,
         DiApi,
         Core,
@@ -123,6 +127,20 @@ object ArchitectureRules {
             Role.DiApi,
             Role.Core,
         ),
+        // The engine contracts stay framework-free: no Metro, Compose or Decompose.
+        Role.AiEngineApi to setOf(Role.AiEngineApi, Role.Core),
+        // The facade aggregates engine states, so it owns the aggregation scope binding.
+        Role.AiEngineImpl to setOf(Role.AiEngineApi, Role.AiEngineImpl, Role.DiApi, Role.Core),
+        // The ACP adapter talks to an external process and registers no Metro bindings.
+        Role.AiEngineAcp to setOf(Role.AiEngineApi, Role.AiEngineAcp, Role.Core),
+        // An agent provider registers itself in Metro and builds its adapter.
+        Role.AiEngineProvider to setOf(
+            Role.AiEngineApi,
+            Role.AiEngineAcp,
+            Role.AiEngineProvider,
+            Role.DiApi,
+            Role.Core,
+        ),
         // Schema composition is the one reason storage depends on feature implementations.
         // Features never depend on storage: they receive the connection through core contracts.
         Role.Storage to setOf(
@@ -154,6 +172,11 @@ object ArchitectureRules {
         Role.ShellPresentation to composeFrameworkGroups,
         Role.FeatureUi to uiFrameworkGroups + METRO_GROUP,
         Role.ShellUi to listOf(METRO_GROUP),
+        // The engine contracts and the ACP adapter stay free of Metro and UI frameworks.
+        Role.AiEngineApi to uiFrameworkGroups + METRO_GROUP,
+        Role.AiEngineImpl to uiFrameworkGroups,
+        Role.AiEngineAcp to uiFrameworkGroups + METRO_GROUP,
+        Role.AiEngineProvider to uiFrameworkGroups,
         // Storage owns persistence and Metro bindings, but never renders UI.
         Role.Storage to uiFrameworkGroups,
         Role.DiApi to uiFrameworkGroups,
@@ -209,6 +232,10 @@ object ArchitectureRules {
         path == ":navigation:decompose" -> Role.NavigationDecompose
         path == ":navigation:decompose-compose" -> Role.NavigationCompose
         path.startsWith(":storage:") -> Role.Storage
+        path == ":ai:engine:api" -> Role.AiEngineApi
+        path == ":ai:engine:impl" -> Role.AiEngineImpl
+        path == ":ai:engine:acp" -> Role.AiEngineAcp
+        path.startsWith(":ai:engines:") -> Role.AiEngineProvider
         isFeature(path) && isApi(path) -> Role.FeatureApi
         isFeature(path) && isImpl(path) -> Role.FeatureImpl
         isFeature(path) && pathSegments(path).contains("presentation") -> Role.FeaturePresentation
@@ -321,6 +348,10 @@ object ArchitectureRules {
         Role.FeaturePresentation, Role.ShellPresentation -> "presentation adapters"
         Role.NavigationApi, Role.NavigationDecompose, Role.NavigationCompose -> "navigation"
         Role.Storage -> "storage"
+        Role.AiEngineApi -> "ai engine contracts"
+        Role.AiEngineImpl -> "ai engine implementation"
+        Role.AiEngineAcp -> "ai engine ACP adapter"
+        Role.AiEngineProvider -> "ai engine provider"
         Role.Platform -> "platform"
         Role.Other -> "module"
     }
