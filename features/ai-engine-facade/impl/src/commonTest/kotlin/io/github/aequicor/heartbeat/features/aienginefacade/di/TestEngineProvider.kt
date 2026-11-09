@@ -10,9 +10,11 @@ internal class TestEngineProvider(
 ) : AiEngineProvider {
     var creations: Int = 0
         private set
+    var latestRuntime: TestEngine? = null
+        private set
 
     override fun create(): AiEngine {
         creations++
-        return createEngine(key)
+        return createEngine(key).also { latestRuntime = it }
     }
 }

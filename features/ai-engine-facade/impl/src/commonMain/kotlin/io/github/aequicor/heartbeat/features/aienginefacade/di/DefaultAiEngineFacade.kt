@@ -58,7 +58,7 @@ class DefaultAiEngineFacade(
             changes.tryReceive()
             // Read current states so a removed instance cannot publish a stale update.
             engineStates.value = registryLock.withLock {
-                keys.associateWith { active[it.id]?.engine?.state?.value ?: AiEngineState.NotInitialized }
+                keys.associateWith { active[it.id]?.state?.value ?: AiEngineState.NotInitialized }
             }
         }
     }
@@ -71,26 +71,20 @@ class DefaultAiEngineFacade(
             val engine = provider.create()
             val observer = appScope.launch { engine.state.collect { changes.trySend(Unit) } }
             changes.trySend(Unit)
-            ActiveEngine(engine, observer)
+            ActiveEngine(id, engine, observer)
         }
         check(!entry.disposing) { "AI engine $id is pending disposal" }
-        entry.engine
-    }
-
-    override suspend fun dispose(key: AiEngineKey) {
-        disposalLock.withLock {
-            withContext(NonCancellable) { release(key.id) }
-        }
+        entry
     }
 
     override suspend fun dispose() {
         disposalLock.withLock {
             withContext(NonCancellable) {
-                val ids = registryLock.withLock {
+                val entries = registryLock.withLock {
                     closed = true
-                    active.keys.toList()
+                    active.values.toList()
                 }
-                val failures = ids.mapNotNull { id -> runCatching { release(id) }.exceptionOrNull() }
+                val failures = entries.mapNotNull { entry -> runCatching { entry.release() }.exceptionOrNull() }
                 failures.firstOrNull()?.let { first ->
                     failures.drop(1).filter { it !== first }.forEach(first::addSuppressed)
                     throw first
@@ -102,15 +96,30 @@ class DefaultAiEngineFacade(
         }
     }
 
-    private suspend fun release(id: String) {
-        val entry = registryLock.withLock { active[id]?.also { it.disposing = true } } ?: return
-        entry.engine.dispose()
-        entry.observer.cancel()
-        registryLock.withLock { active.remove(id) }
-        changes.trySend(Unit)
-    }
+    private inner class ActiveEngine(
+        private val id: String,
+        private val runtime: AiEngine,
+        private val observer: Job,
+    ) : AiEngine by runtime {
+        var disposing = false
 
-    private class ActiveEngine(val engine: AiEngine, val observer: Job, var disposing: Boolean = false)
+        override suspend fun dispose() {
+            disposalLock.withLock {
+                withContext(NonCancellable) { release() }
+            }
+        }
+
+        suspend fun release() {
+            registryLock.withLock {
+                if (active[id] !== this) return
+                disposing = true
+            }
+            runtime.dispose()
+            observer.cancel()
+            registryLock.withLock { active.remove(id) }
+            changes.trySend(Unit)
+        }
+    }
 
     private companion object {
         const val STATE_WINDOW_MILLIS = 500L

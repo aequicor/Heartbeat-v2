@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
@@ -38,12 +39,13 @@ class DefaultAiEngineFacadeTest {
     fun aggregationPublishesTheLatestStateAtTheEndOfTheWindow() = runTest {
         val provider = TestEngineProvider(TestEngineKey("test"))
         val facade = DefaultAiEngineFacade(setOf(provider), AppCoroutineScope(backgroundScope))
-        val engine = facade.getEngine(provider.key) as TestEngine
+        val engine = facade.getEngine(provider.key)
+        val runtime = assertNotNull(provider.latestRuntime)
 
-        engine.state.value = AiEngineState.Connecting
+        runtime.state.value = AiEngineState.Connecting
         runCurrent()
         advanceTimeBy(STATE_WINDOW - 1)
-        engine.state.value = AiEngineState.Ready
+        runtime.state.value = AiEngineState.Ready
         assertEquals(AiEngineState.Ready, engine.state.value)
         assertEquals(AiEngineState.NotInitialized, facade.engines.value[provider.key])
 
@@ -51,8 +53,8 @@ class DefaultAiEngineFacadeTest {
         runCurrent()
         assertEquals(AiEngineState.Ready, facade.engines.value[provider.key])
 
-        facade.dispose(provider.key)
-        engine.state.value = AiEngineState.Failed("Stale instance")
+        engine.dispose()
+        runtime.state.value = AiEngineState.Failed("Stale instance")
         runCurrent()
         advanceTimeBy(STATE_WINDOW)
         runCurrent()
@@ -64,20 +66,24 @@ class DefaultAiEngineFacadeTest {
         val canDispose = CompletableDeferred<Unit>()
         val provider = TestEngineProvider(TestEngineKey("test")) { TestEngine(it) { canDispose.await() } }
         val facade = DefaultAiEngineFacade(setOf(provider), AppCoroutineScope(backgroundScope))
-        val original = facade.getEngine(provider.key) as TestEngine
-        val disposing = launch { facade.dispose(provider.key) }
+        val original = facade.getEngine(provider.key)
+        val originalRuntime = assertNotNull(provider.latestRuntime)
+        val disposing = launch { original.dispose() }
         runCurrent()
 
         assertFailsWith<IllegalStateException> { facade.getEngine(provider.key) }
         canDispose.complete(Unit)
         disposing.join()
-        facade.dispose(provider.key)
 
-        val replacement = facade.getEngine(provider.key) as TestEngine
+        val replacement = facade.getEngine(provider.key)
+        val replacementRuntime = assertNotNull(provider.latestRuntime)
         assertNotSame(original, replacement)
-        assertEquals(1, original.disposals)
+        original.dispose()
+        assertSame(replacement, facade.getEngine(provider.key))
+        assertEquals(1, originalRuntime.disposals)
+        assertEquals(0, replacementRuntime.disposals)
         facade.dispose()
-        assertEquals(1, replacement.disposals)
+        assertEquals(1, replacementRuntime.disposals)
         assertFailsWith<IllegalStateException> { facade.getEngine(provider.key) }
     }
 
@@ -89,8 +95,10 @@ class DefaultAiEngineFacadeTest {
         }
         val second = TestEngineProvider(TestEngineKey("second"))
         val facade = DefaultAiEngineFacade(setOf(first, second), AppCoroutineScope(backgroundScope))
-        val firstEngine = facade.getEngine(first.key) as TestEngine
-        val secondEngine = facade.getEngine(second.key) as TestEngine
+        facade.getEngine(first.key)
+        facade.getEngine(second.key)
+        val firstEngine = assertNotNull(first.latestRuntime)
+        val secondEngine = assertNotNull(second.latestRuntime)
 
         assertFailsWith<IllegalStateException> { facade.dispose() }
         assertEquals(1, secondEngine.disposals)

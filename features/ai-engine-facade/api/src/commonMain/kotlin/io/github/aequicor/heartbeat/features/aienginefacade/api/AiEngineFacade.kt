@@ -15,14 +15,12 @@ public interface AiEngineFacade {
 
     /**
      * Returns the engine for [key]'s ID and creates it on first access.
+     * A successful [AiEngine.dispose] allows the next call to create a new instance.
      *
      * @throws IllegalArgumentException if the ID is unknown.
      * @throws IllegalStateException if engine disposal is pending or the facade is closed.
      */
     public fun getEngine(key: AiEngineKey): AiEngine
-
-    /** Releases the runtime for [key]'s ID, if present. Retry this call if cleanup fails. */
-    public suspend fun dispose(key: AiEngineKey)
 
     /**
      * Closes the facade and releases all engine runtimes. Call before ending the owning scope.
