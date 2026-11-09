@@ -221,6 +221,9 @@ class AcpAdapterIntegrationTest {
             } as SessionState.AwaitingPermission
             assertEquals("Run tests", awaiting.prompt.title)
             assertEquals("Allow once", awaiting.prompt.options.single().name)
+            assertFailsWith<AiEngineException.SessionBusy> {
+                session.dispatch(SessionEvent.SendPrompt("second prompt"))
+            }
 
             session.dispatch(
                 SessionEvent.AnswerPermission(
@@ -277,6 +280,31 @@ class AcpAdapterIntegrationTest {
             assertTrue(stub.authenticated)
         } finally {
             adapter.dispose()
+        }
+    }
+
+    @Test
+    fun cancelEndsThePermissionWait() {
+        runBlocking {
+            val stub = StubAgent(askPermission = true)
+            val adapter = adapterFor(stub)
+            try {
+                stub.start()
+                adapter.dispatch(EngineEvent.Connect)
+                withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+                val session = adapter.createSession(SessionConfig(WORKSPACE))
+
+                session.dispatch(SessionEvent.SendPrompt("run tests"))
+                withTimeout(TIMEOUT_MILLIS) {
+                    session.state.first { it is SessionState.AwaitingPermission }
+                }
+
+                session.dispatch(SessionEvent.Cancel)
+
+                withTimeout(TIMEOUT_MILLIS) { session.state.first { it is SessionState.Idle } }
+            } finally {
+                adapter.dispose()
+            }
         }
     }
 
