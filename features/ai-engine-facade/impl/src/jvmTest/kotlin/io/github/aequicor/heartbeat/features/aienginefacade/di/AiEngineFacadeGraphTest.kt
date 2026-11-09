@@ -7,10 +7,10 @@ import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraphFactory
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacadeEngine
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineProvider
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
-import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacadeProvider
-import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacadeEngineKey
 import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.Executors
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -66,12 +66,12 @@ class AiEngineFacadeGraphTest {
 
 @ContributesIntoSet(AppScope::class)
 @SingleIn(AppScope::class)
-internal class MetroTestEngineProvider : AiEngineFacadeProvider {
+internal class MetroTestEngineProvider : AiEngineProvider {
     private val delegate = TestEngineProvider(TestEngineKey("metro-test"))
-    override val key: AiEngineFacadeEngineKey = delegate.key
+    override val key: AiEngineKey = delegate.key
     val creations: Int get() = delegate.creations
 
-    override fun create(): AiEngineFacadeEngine = delegate.create()
+    override fun create(): AiEngine = delegate.create()
 }
 
 @DependencyGraph(AppScope::class, excludes = [MetroTestEngineProvider::class])
@@ -87,7 +87,7 @@ internal interface EmptyEngineGraph {
 @DependencyGraph(AppScope::class)
 internal interface EngineGraph {
     val facade: AiEngineFacade
-    val providers: Set<AiEngineFacadeProvider>
+    val providers: Set<AiEngineProvider>
     val provider: MetroTestEngineProvider get() = providers.single() as MetroTestEngineProvider
 
     @DependencyGraph.Factory
