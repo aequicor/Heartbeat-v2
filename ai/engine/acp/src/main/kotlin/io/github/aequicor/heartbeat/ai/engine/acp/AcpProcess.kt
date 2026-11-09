@@ -107,20 +107,24 @@ internal object AcpProcessLauncher : AcpProcessStarter {
     }
 
     /**
-     * Windows cannot execute a `.cmd` or `.bat` shim directly, and the `dsh` command is such a
-     * shim. The wrapper runs the script through the command interpreter.
+     * Windows cannot start a `.cmd` or `.bat` shim directly, and the `dsh` and `dsh-acp-server`
+     * commands are such shims (or extensionless wrappers). Everything that is not an `.exe` goes
+     * through the command interpreter; a POSIX host runs the executable as is.
      */
-    private fun command(spec: AcpLaunchSpec): List<String> {
-        val isWindows = System.getProperty("os.name").startsWith("windows", ignoreCase = true)
-        val isBatch = spec.executable.endsWith(".cmd", ignoreCase = true) ||
-            spec.executable.endsWith(".bat", ignoreCase = true)
-        val executable = if (isWindows && isBatch) {
-            listOf("cmd.exe", "/c", spec.executable)
-        } else {
-            listOf(spec.executable)
-        }
-        return executable + spec.arguments
-    }
+    private fun command(spec: AcpLaunchSpec): List<String> =
+        launchCommand(spec, isWindows = System.getProperty("os.name").startsWith("windows", true))
 
     private const val MAX_STDERR_CHARS = 4_000
+}
+
+/** Builds the process command line; pure so the Windows shim rule is unit-tested. */
+internal fun launchCommand(spec: AcpLaunchSpec, isWindows: Boolean): List<String> {
+    val name = spec.executable.replace('\\', '/').substringAfterLast('/')
+    val needsInterpreter = isWindows && !name.endsWith(".exe", ignoreCase = true)
+    val executable = if (needsInterpreter) {
+        listOf("cmd.exe", "/c", spec.executable)
+    } else {
+        listOf(spec.executable)
+    }
+    return executable + spec.arguments
 }

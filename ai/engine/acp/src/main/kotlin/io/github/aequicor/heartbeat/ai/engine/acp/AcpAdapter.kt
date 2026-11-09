@@ -224,6 +224,7 @@ public class AcpAdapter internal constructor(
             }
             val token = Any()
             connectToken = token
+            transportFailure = null
             mutableState.value = EngineState.Connecting
             connectJob = engineScope.launch { establish(token) }
         }

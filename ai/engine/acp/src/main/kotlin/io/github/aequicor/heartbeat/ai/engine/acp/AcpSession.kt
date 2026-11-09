@@ -84,7 +84,12 @@ internal class SessionCore(
                     }
                 }
             } catch (cancelled: CancellationException) {
-                mutableState.value = SessionState.Idle
+                // A concurrent close or disconnect already published the terminal state.
+                if (mutableState.value !is SessionState.Closed &&
+                    mutableState.value !is SessionState.Unavailable
+                ) {
+                    mutableState.value = SessionState.Idle
+                }
                 throw cancelled
             } catch (error: Exception) {
                 val message = error.message ?: error::class.simpleName.orEmpty()

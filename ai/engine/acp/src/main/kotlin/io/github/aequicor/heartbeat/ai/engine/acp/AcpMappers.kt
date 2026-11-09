@@ -87,11 +87,16 @@ internal class PermissionBridge(
             title = title ?: DEFAULT_TITLE,
             options = options.map { it.toEngineOption() },
         )
-        pending.set(PendingPermission(requestId, deferred))
+        val request = PendingPermission(requestId, deferred)
+        // A newer request replaces an unanswered one: the old agent call must not wait forever.
+        pending.getAndSet(request)?.deferred?.complete(
+            RequestPermissionResponse(RequestPermissionOutcome.Cancelled),
+        )
         onPrompt(prompt)
         val response = deferred.await()
-        pending.set(null)
-        onResolved()
+        if (pending.compareAndSet(request, null)) {
+            onResolved()
+        }
         return response
     }
 

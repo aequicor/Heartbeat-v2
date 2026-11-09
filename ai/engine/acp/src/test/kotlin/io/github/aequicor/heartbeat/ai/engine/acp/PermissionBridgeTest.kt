@@ -74,6 +74,21 @@ class PermissionBridgeTest {
     }
 
     @Test
+    fun newerRequestCancelsTheUnansweredOne() = runTest {
+        val prompts = mutableListOf<PermissionPrompt>()
+        val bridge = PermissionBridge(onPrompt = { prompts += it }, onResolved = {})
+
+        val first = async { bridge.await("First", options) }
+        runCurrent()
+        val second = async { bridge.await("Second", options) }
+        runCurrent()
+
+        assertIs<RequestPermissionOutcome.Cancelled>(first.await().outcome)
+        assertTrue(bridge.answer(prompts.last().requestId, "allow"))
+        assertIs<RequestPermissionOutcome.Selected>(second.await().outcome)
+    }
+
+    @Test
     fun resolvingWithoutPendingRequestIsSafe() {
         val bridge = PermissionBridge(onPrompt = {}, onResolved = {})
 
