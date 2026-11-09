@@ -24,12 +24,11 @@ internal class TestEngine(
     override suspend fun listSessions(cursor: String?): AiEngineSessionPage =
         AiEngineSessionPage(listOf())
 
-    override suspend fun createSession(
+    override suspend fun getOrCreateSession(
         config: AiEngineSessionConfig,
         existing: AiEngineSessionKey?,
     ): AiEngineSession = error("Sessions are not used in facade tests")
 
-    override fun getSession(key: AiEngineSessionKey): AiEngineSession? = null
     override suspend fun closeSession(key: AiEngineSessionKey) = Unit
 
     override suspend fun dispose() {

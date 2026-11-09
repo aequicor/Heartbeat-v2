@@ -17,15 +17,13 @@ public interface AiEngine {
     public suspend fun listSessions(cursor: String? = null): AiEngineSessionPage
 
     /**
-     * Creates a session when [existing] is `null`. Otherwise opens the specified session or returns
-     * its open runtime. An engine that cannot reopen the requested session reports an error.
+     * Creates a session when [existing] is `null`. With a key, returns the open runtime if present
+     * or reopens the specified session. Reports an error if it cannot reopen that session.
      */
-    public suspend fun createSession(
+    public suspend fun getOrCreateSession(
         config: AiEngineSessionConfig,
         existing: AiEngineSessionKey? = null,
     ): AiEngineSession
-
-    public fun getSession(key: AiEngineSessionKey): AiEngineSession?
 
     public suspend fun closeSession(key: AiEngineSessionKey)
 
