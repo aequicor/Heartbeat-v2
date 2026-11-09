@@ -7,7 +7,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSession
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionPage
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionSnapshot
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -16,7 +16,7 @@ internal class TestEngine(
     private val onDispose: suspend () -> Unit = {},
 ) : AiEngine {
     override val state = MutableStateFlow<AiEngineState>(AiEngineState.NotInitialized)
-    override val sessions = MutableStateFlow<List<AiEngineSessionSnapshot>>(listOf())
+    override val sessions = MutableStateFlow<Map<AiEngineSessionKey, AiEngineSessionState>>(mapOf())
     var disposals: Int = 0
         private set
 
