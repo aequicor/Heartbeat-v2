@@ -1,20 +1,9 @@
 package io.github.aequicor.heartbeat.features.aienginefacade.di
 
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineEvent
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineProvider
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSession
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionConfig
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionKey
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionPage
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionSnapshot
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -116,50 +105,5 @@ class DefaultAiEngineFacadeTest {
 
     private companion object {
         const val STATE_WINDOW = 500L
-    }
-}
-
-internal data class TestEngineKey(override val id: String, override val name: String = id) : AiEngineKey {
-    override val description: String = name
-    override val connection: AiEngineConnection = AiEngineConnection.EMBEDDED
-}
-
-internal class TestEngineProvider(
-    override val key: AiEngineKey,
-    private val createEngine: (AiEngineKey) -> TestEngine = { TestEngine(it) },
-) : AiEngineProvider {
-    var creations: Int = 0
-        private set
-
-    override fun create(): AiEngine {
-        creations++
-        return createEngine(key)
-    }
-}
-
-internal class TestEngine(
-    override val key: AiEngineKey,
-    private val onDispose: suspend () -> Unit = {},
-) : AiEngine {
-    override val state = MutableStateFlow<AiEngineState>(AiEngineState.NotInitialized)
-    override val sessions = MutableStateFlow<List<AiEngineSessionSnapshot>>(listOf())
-    var disposals: Int = 0
-        private set
-
-    override fun dispatch(event: AiEngineEvent) = Unit
-    override suspend fun listSessions(cursor: String?): AiEngineSessionPage =
-        AiEngineSessionPage(listOf())
-
-    override suspend fun createSession(
-        config: AiEngineSessionConfig,
-        existing: AiEngineSessionKey?,
-    ): AiEngineSession = error("Sessions are not used in facade tests")
-
-    override fun getSession(key: AiEngineSessionKey): AiEngineSession? = null
-    override suspend fun closeSession(key: AiEngineSessionKey) = Unit
-
-    override suspend fun dispose() {
-        disposals++
-        onDispose()
     }
 }

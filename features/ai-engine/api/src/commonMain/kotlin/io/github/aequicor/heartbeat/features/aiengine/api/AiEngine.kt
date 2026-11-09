@@ -32,23 +32,3 @@ public interface AiEngine {
     /** Releases the connection and open runtime sessions. Cleanup can be retried after an error. */
     public suspend fun dispose()
 }
-
-public sealed interface AiEngineState {
-    public data object NotInitialized : AiEngineState
-    public data object Connecting : AiEngineState
-    public data class AuthorizationRequired(val authFeatureId: String) : AiEngineState
-    public data object Ready : AiEngineState
-    public data class Failed(val reason: String) : AiEngineState
-}
-
-public sealed interface AiEngineEvent {
-    public data object Connect : AiEngineEvent
-    public data object Disconnect : AiEngineEvent
-    public data class AuthorizationCompleted(val result: AiEngineAuthResult) : AiEngineEvent
-}
-
-public sealed interface AiEngineAuthResult {
-    public data object Success : AiEngineAuthResult
-    public data object Cancelled : AiEngineAuthResult
-    public data class Failure(val reason: String) : AiEngineAuthResult
-}
