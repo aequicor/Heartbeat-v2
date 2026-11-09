@@ -31,7 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,10 +78,19 @@ public class AcpAdapter internal constructor(
     private val sessionLock = Any()
     private val sessionsByKey = LinkedHashMap<SessionKey, AcpSession>()
 
+    @Volatile
     private var connection: Connection? = null
     private var connectJob: Job? = null
+
+    @Volatile
+    private var connectToken: Any? = null
     private var activeLaunch: AcpLaunchSpec? = null
+
+    @Volatile
     private var pendingAuthMethodId: String? = null
+
+    @Volatile
+    private var transportFailure: String? = null
 
     private class Connection(
         val stdio: AcpStdio,
@@ -193,14 +201,18 @@ public class AcpAdapter internal constructor(
     }
 
     override suspend fun dispose() {
+        connectToken = null
+        connectJob?.cancel()
+        connectJob = null
         val active = connection
         connection = null
         pendingAuthMethodId = null
         closeAllSessions(SessionState.Closed)
         mutableState.value = EngineState.NotInitialized
         mutableCapabilities.value = EngineCapabilities()
-        runCatching { active?.protocol?.close() }
-        active?.stdio?.terminate()
+        if (active != null) {
+            closeConnection(active)
+        }
         engineScope.cancel()
     }
 
@@ -210,28 +222,27 @@ public class AcpAdapter internal constructor(
                 is EngineState.Connecting, is EngineState.Ready -> return
                 else -> Unit
             }
+            val token = Any()
+            connectToken = token
             mutableState.value = EngineState.Connecting
-            connectJob = engineScope.launch { establish() }
+            connectJob = engineScope.launch { establish(token) }
         }
     }
 
-    @Suppress("TooGenericExceptionCaught") // Launch and protocol failures surface as engine state.
-    private suspend fun establish() {
+    @Suppress("TooGenericExceptionCaught", "ReturnCount")
+    // Early exits separate launch resolution, process start and a connection cancelled mid-handshake.
+    private suspend fun establish(token: Any) {
         val spec = try {
             resolveLaunch()
         } catch (error: Exception) {
-            mutableState.value = EngineState.Failed(
-                "Cannot resolve the launch configuration: ${error.message}",
-            )
+            failConnect(token, "Cannot resolve the launch configuration: ${error.message}")
             return
         }
         activeLaunch = spec
         val stdio = try {
             processStarter.start(spec, engineScope)
         } catch (error: Exception) {
-            mutableState.value = EngineState.Failed(
-                "Cannot start ${spec.executable}: ${error.message}",
-            )
+            failConnect(token, "Cannot start ${spec.executable}: ${error.message}")
             return
         }
         try {
@@ -250,8 +261,15 @@ public class AcpAdapter internal constructor(
                     implementation = Implementation(name = "Heartbeat", version = "2.0"),
                 ),
             )
+            if (connectToken !== token) {
+                stdio.terminate()
+                return
+            }
             mutableCapabilities.value = info.capabilities.toEngineCapabilities()
-            connection = Connection(stdio, protocol, client)
+            val active = Connection(stdio, protocol, client)
+            connection = active
+            transport.onError { error -> onTransportError(active, error) }
+            transport.onClose { onTransportClosed(active) }
             val authMethod = info.authMethods.firstOrNull()
             if (authMethod == null) {
                 mutableState.value = EngineState.Ready
@@ -267,10 +285,41 @@ public class AcpAdapter internal constructor(
             throw cancelled
         } catch (error: Exception) {
             stdio.terminate()
-            mutableState.value = EngineState.Failed(
-                error.message ?: "The agent rejected the connection",
+            failConnect(
+                token,
+                (error.message ?: "The agent rejected the connection") + stdio.diagnosticsSuffix(),
             )
         }
+    }
+
+    private fun failConnect(token: Any, reason: String) {
+        if (connectToken === token) {
+            mutableState.value = EngineState.Failed(reason)
+        }
+    }
+
+    /**
+     * The agent closed the connection or its process died. The runtime sessions become
+     * unavailable and the engine reports a failure, so the UI cannot keep a dead `Ready` state.
+     */
+    private fun onTransportClosed(closed: Connection) {
+        if (connection !== closed) return
+        connection = null
+        pendingAuthMethodId = null
+        closeAllSessions(SessionState.Unavailable)
+        mutableCapabilities.value = EngineCapabilities()
+        val failure = transportFailure
+        transportFailure = null
+        mutableState.value = EngineState.Failed(
+            failure?.let { "The agent connection was lost: $it" }
+                ?: "The agent connection was lost",
+        )
+        runCatching { closed.stdio.terminate() }
+    }
+
+    private fun onTransportError(closed: Connection, error: Throwable) {
+        if (connection !== closed) return
+        transportFailure = error.message ?: error::class.simpleName
     }
 
     private fun onAuthorizationCompleted(result: AuthResult) {
@@ -292,7 +341,9 @@ public class AcpAdapter internal constructor(
         engineScope.launch {
             try {
                 active.client.authenticate(AuthMethodId(methodId))
-                mutableState.value = EngineState.Ready
+                if (connection === active) {
+                    mutableState.value = EngineState.Ready
+                }
             } catch (error: Exception) {
                 mutableState.value = EngineState.Failed(
                     error.message ?: "Authentication failed",
@@ -303,21 +354,27 @@ public class AcpAdapter internal constructor(
     }
 
     private fun disconnect() {
-        val job = connectJob
+        connectToken = null
+        connectJob?.cancel()
         connectJob = null
+        val active = connection
+        connection = null
         closeAllSessions(SessionState.Unavailable)
         mutableState.value = EngineState.NotInitialized
         mutableCapabilities.value = EngineCapabilities()
         pendingAuthMethodId = null
-        engineScope.launch {
-            job?.cancelAndJoin()
-            stopConnection()
+        if (active != null) {
+            closeConnection(active)
         }
     }
 
     private fun stopConnection() {
         val active = connection ?: return
         connection = null
+        closeConnection(active)
+    }
+
+    private fun closeConnection(active: Connection) {
         runCatching { active.protocol.close() }
         active.stdio.terminate()
     }
@@ -371,3 +428,9 @@ private fun AgentCapabilities.toEngineCapabilities(): EngineCapabilities = Engin
         if (sessionCapabilities.close != null) add(EngineCapability.SESSION_CLOSE)
     },
 )
+
+/** Stderr tail of the agent process, appended to a failure so the user sees the real cause. */
+private fun AcpStdio.diagnosticsSuffix(): String {
+    val details = diagnostics()
+    return if (details.isBlank()) "" else "\n$details"
+}

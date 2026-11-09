@@ -308,6 +308,28 @@ class AcpAdapterIntegrationTest {
         }
     }
 
+    @Test
+    fun agentCrashMovesEngineToFailed() {
+        runBlocking {
+            val stub = StubAgent()
+            val adapter = adapterFor(stub)
+            try {
+                stub.start()
+                adapter.dispatch(EngineEvent.Connect)
+                withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Ready } }
+                val session = adapter.createSession(SessionConfig(WORKSPACE))
+
+                stub.crash()
+
+                withTimeout(TIMEOUT_MILLIS) { adapter.state.first { it is EngineState.Failed } }
+                assertTrue(session.state.value is SessionState.Unavailable)
+                assertEquals(listOf<SessionKey>(), adapter.sessions.value)
+            } finally {
+                adapter.dispose()
+            }
+        }
+    }
+
     private fun adapterFor(stub: StubAgent): AcpAdapter = AcpAdapter(
         key = adapterKey,
         resolveLaunch = { AcpLaunchSpec(executable = "stub") },
@@ -354,6 +376,12 @@ private class StubAgent(
     fun start() {
         check(agent.protocol === protocol)
         protocol.start()
+    }
+
+    fun crash() {
+        clientToAgent.close()
+        agentToClient.close()
+        scope.cancel()
     }
 
     fun clientStdio(): AcpStdio {
