@@ -14,6 +14,8 @@ internal object NamingRules {
 
     private const val FEATURE_PACKAGE = "io.github.aequicor.heartbeat.features"
 
+    private const val AI_ENGINE_SESSION_API = "$FEATURE_PACKAGE.aiengine.api.session"
+
     private const val DESIGN_SYSTEM_PACKAGE = "io.github.aequicor.heartbeat.designsystem"
 
     /** State holders are Stores; these names belong to other presentation frameworks. */
@@ -53,6 +55,11 @@ internal object NamingRules {
         val path = featurePath(packageName)
         return when {
             path == null -> null
+            packageName == AI_ENGINE_SESSION_API -> if (declarationName.startsWith("AiEngine")) {
+                "session API declaration must omit the AiEngine prefix: $declarationName"
+            } else {
+                null
+            }
             // The api package holds every public contract: Store, State, Action, Effect, models
             // and services. Only the feature prefix is mandatory, so a model keeps its own name.
             isApiPackage(packageName) ->

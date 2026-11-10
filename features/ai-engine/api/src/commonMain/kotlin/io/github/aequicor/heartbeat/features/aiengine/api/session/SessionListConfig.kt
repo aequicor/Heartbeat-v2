@@ -1,18 +1,18 @@
-package io.github.aequicor.heartbeat.features.aiengine.api
+package io.github.aequicor.heartbeat.features.aiengine.api.session
 
 /** Selects a page of sessions. Use a cursor returned for the same project or parent. */
-public sealed interface AiEngineSessionListConfig {
+public sealed interface SessionListConfig {
     public val cursor: String?
 
     /** Lists root sessions in the specified project. */
     public data class ByProject(
         val projectId: String,
         override val cursor: String? = null,
-    ) : AiEngineSessionListConfig
+    ) : SessionListConfig
 
     /** Lists direct children of the specified session. */
     public data class ByParent(
-        val parentSessionKey: AiEngineSessionKey,
+        val parentSessionKey: SessionKey,
         override val cursor: String? = null,
-    ) : AiEngineSessionListConfig
+    ) : SessionListConfig
 }
