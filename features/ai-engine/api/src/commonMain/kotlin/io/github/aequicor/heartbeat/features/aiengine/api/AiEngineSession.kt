@@ -1,14 +1,12 @@
 package io.github.aequicor.heartbeat.features.aiengine.api
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 public interface AiEngineSession {
     public val key: AiEngineSessionKey
-    public val state: StateFlow<AiEngineSessionState>
 
-    /** Session updates delivered independently of the facade's state aggregation. */
-    public val updates: Flow<AiEngineSessionUpdate>
+    /** The current status and message window. A newly opened session shows its latest partition. */
+    public val state: StateFlow<AiEngineSessionState>
 
     public fun dispatch(event: AiEngineSessionEvent)
 }

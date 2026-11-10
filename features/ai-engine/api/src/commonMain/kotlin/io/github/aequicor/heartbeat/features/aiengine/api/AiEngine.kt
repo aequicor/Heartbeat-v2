@@ -8,8 +8,8 @@ public interface AiEngine {
     /** The current state of this engine. */
     public val state: StateFlow<AiEngineState>
 
-    /** Current states of open runtime sessions, indexed by session key. */
-    public val sessions: StateFlow<Map<AiEngineSessionKey, AiEngineSessionState>>
+    /** Current statuses of open runtime sessions, indexed by session key. */
+    public val sessions: StateFlow<Map<AiEngineSessionKey, AiEngineSessionStatus>>
 
     public fun dispatch(event: AiEngineEvent)
 
