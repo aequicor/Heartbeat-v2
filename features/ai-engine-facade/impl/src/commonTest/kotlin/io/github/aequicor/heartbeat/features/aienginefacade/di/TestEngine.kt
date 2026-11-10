@@ -6,6 +6,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSession
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionKey
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionListConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionPage
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineSessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
@@ -21,7 +22,7 @@ internal class TestEngine(
         private set
 
     override fun dispatch(event: AiEngineEvent) = Unit
-    override suspend fun listSessions(cursor: String?): AiEngineSessionPage =
+    override suspend fun getListSessions(config: AiEngineSessionListConfig): AiEngineSessionPage =
         AiEngineSessionPage(listOf())
 
     override suspend fun getOrCreateSession(

@@ -13,8 +13,8 @@ public interface AiEngine {
 
     public fun dispatch(event: AiEngineEvent)
 
-    /** Lists sessions known to the engine, including sessions that are not open. */
-    public suspend fun listSessions(cursor: String? = null): AiEngineSessionPage
+    /** Lists sessions matching [config], including sessions that are not open. */
+    public suspend fun getListSessions(config: AiEngineSessionListConfig): AiEngineSessionPage
 
     /**
      * Creates a session when [existing] is `null`. With a key, returns the open runtime if present
