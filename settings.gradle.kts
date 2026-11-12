@@ -39,6 +39,7 @@ include(
 )
 include(
     ":features:ai-engine:api",
+    ":features:ai-engine-acp-adapter:impl",
     ":features:ai-engine-facade:api",
     ":features:ai-engine-facade:impl",
     ":features:ai-studio:api",

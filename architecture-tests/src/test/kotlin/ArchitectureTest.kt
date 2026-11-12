@@ -185,7 +185,8 @@ class ArchitectureTest {
 
     @Test
     fun featureLayersFollowImportDirection() {
-        featureScope.assertArchitecture {
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        (featureScope - adapter).assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domain = Layer("Domain", rolePattern("domain"))
             val data = Layer("Data", rolePattern("data"))
@@ -203,6 +204,18 @@ class ArchitectureTest {
             // Compose UI renders the feature's own Decompose adapter, so it may depend on the
             // component role. The module-level allowlist still rejects another feature's adapter.
             ui.dependsOn(api, component)
+        }
+    }
+
+    @Test
+    fun acpAdapterImplementsEngineApiInDataLayer() {
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        val engine = Konsist.scopeFromProduction(moduleName = ":features:ai-engine:api")
+        (adapter + engine).assertArchitecture {
+            val api = Layer("AI Engine API", "$featurePrefix.aiengine.api..")
+            val data = Layer("ACP adapter", "$featurePrefix.aiengineacpadapter.data..")
+            api.dependsOnNothing()
+            data.dependsOn(api)
         }
     }
 

@@ -2,6 +2,8 @@
 android-gradle-plugin = "9.5.1"
 androidx-activity = "1.13.0"
 kotlin = "2.4.21"
+acp = "0.34.0"
+slf4j = "2.0.17"
 compose-multiplatform = "1.12.2"
 decompose = "3.6.0-beta02"
 metro = "1.5.2"
@@ -22,6 +24,8 @@ faire-detekt-rules = "0.5.9"
 # buildSrc exports the plugin classes to every module, so modules declare plugin ids without
 # versions and the catalog stays the only place that pins them.
 [libraries]
+acp = { module = "com.agentclientprotocol:acp", version.ref = "acp" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "android-gradle-plugin" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
