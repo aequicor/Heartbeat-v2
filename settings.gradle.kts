@@ -38,6 +38,9 @@ include(
     ":navigation:decompose-compose",
 )
 include(
+    ":features:ai-engine:api",
+    ":features:ai-engine-facade:api",
+    ":features:ai-engine-facade:impl",
     ":features:ai-studio:api",
     ":features:ai-studio:impl",
     ":features:ai-studio:presentation:decompose",

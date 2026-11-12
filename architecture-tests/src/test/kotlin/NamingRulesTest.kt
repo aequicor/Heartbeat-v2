@@ -186,6 +186,24 @@ class NamingRulesTest {
     }
 
     @Test
+    fun aiEngineSessionApiUsesSessionNames() {
+        val engineApi = "io.github.aequicor.heartbeat.features.aiengine.api"
+        val sessionApi = "$engineApi.session"
+        val path = "features/ai-engine/api/src/commonMain/kotlin/"
+
+        Assert.assertNull(NamingRules.violation(engineApi, DeclarationKind.INTERFACE, "AiEngine", projectPath = path))
+        Assert.assertNull(NamingRules.violation(sessionApi, DeclarationKind.INTERFACE, "Session", projectPath = path))
+        Assert.assertEquals(
+            "api declaration must start with AiEngine: Session",
+            NamingRules.violation(engineApi, DeclarationKind.INTERFACE, "Session", projectPath = path),
+        )
+        Assert.assertEquals(
+            "session API declaration must omit the AiEngine prefix: AiEngineSession",
+            NamingRules.violation(sessionApi, DeclarationKind.INTERFACE, "AiEngineSession", projectPath = path),
+        )
+    }
+
+    @Test
     fun hyphenatedFeatureUsesCamelCaseDisplayName() {
         val aiStudioApi = "io.github.aequicor.heartbeat.features.aistudio.api"
         val aiStudioComponent = "io.github.aequicor.heartbeat.features.aistudio.component"
