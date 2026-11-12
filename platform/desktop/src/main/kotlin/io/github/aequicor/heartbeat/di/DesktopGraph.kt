@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.di
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
+import io.github.aequicor.heartbeat.ai.engine.api.AiEngineFacade
 import io.github.aequicor.heartbeat.core.database.JvmSqlDriverFactory
 import io.github.aequicor.heartbeat.core.database.SqlDriverFactory
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
@@ -31,6 +32,9 @@ interface DesktopGraph {
     val renderers: Set<ComposeFeatureRenderer>
 
     val databaseInitializer: DatabaseInitializer
+
+    /** AI engines of the desktop app; every contributed provider joins this catalog. */
+    val aiEngineFacade: AiEngineFacade
 
     val appCoroutineScope: AppCoroutineScope
 

@@ -24,6 +24,10 @@ class ArchitectureRulesTest {
         ":features:editor:impl" to Role.FeatureImpl,
         ":features:editor:presentation:decompose" to Role.FeaturePresentation,
         ":features:editor:ui:compose" to Role.FeatureUi,
+        ":ai:engine:api" to Role.AiEngineApi,
+        ":ai:engine:impl" to Role.AiEngineImpl,
+        ":ai:engine:acp" to Role.AiEngineAcp,
+        ":ai:engines:deepseek-harness" to Role.AiEngineProvider,
         ":storage:database" to Role.Storage,
         ":di:api" to Role.DiApi,
         ":core:network" to Role.Core,
@@ -101,8 +105,7 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun featuresInteractOnlyThroughApi() {
-        assertNull(
+    fun featuresInteractOnlyThroughApi() {        assertNull(
             ArchitectureRules.projectDependencyViolation(":features:editor:impl", ":features:home:api"),
         )
         assertEquals(
@@ -422,6 +425,102 @@ class ArchitectureRulesTest {
             ArchitectureRules.isRelevantClasspathConfiguration(
                 "commonMainImplementation",
                 true,
+            ),
+        )
+    }
+
+    @Test
+    fun featuresReachAgentsOnlyThroughEngineContracts() {
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(
+                ":features:ai-studio:api",
+                ":ai:engine:api",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(
+                ":features:ai-studio:impl",
+                ":ai:engine:api",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(
+                ":features:ai-studio:ui:compose",
+                ":ai:engine:api",
+            ),
+        )
+        assertEquals(
+            "impl must not depend on presentation, ui or designsystem",
+            ArchitectureRules.projectDependencyViolation(
+                ":features:ai-studio:impl",
+                ":ai:engines:deepseek-harness",
+            ),
+        )
+    }
+
+    @Test
+    fun engineModulesFollowTheAllowlist() {
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(":ai:engine:impl", ":ai:engine:api"),
+        )
+        assertNull(ArchitectureRules.projectDependencyViolation(":ai:engine:impl", ":di:api"))
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(":ai:engine:acp", ":ai:engine:api"),
+        )
+        assertNull(
+            ArchitectureRules.projectDependencyViolation(
+                ":ai:engines:deepseek-harness",
+                ":ai:engine:acp",
+            ),
+        )
+        assertEquals(
+            "AiEngineApi must not depend on DiApi: :ai:engine:api -> :di:api",
+            ArchitectureRules.projectDependencyViolation(":ai:engine:api", ":di:api"),
+        )
+        assertEquals(
+            "AiEngineAcp must not depend on AiEngineImpl: :ai:engine:acp -> :ai:engine:impl",
+            ArchitectureRules.projectDependencyViolation(":ai:engine:acp", ":ai:engine:impl"),
+        )
+        assertEquals(
+            "ai engine ACP adapter must not depend on Metro",
+            ArchitectureRules.moduleDependencyViolation(":ai:engine:acp", "dev.zacsweers.metro"),
+        )
+    }
+
+    @Test
+    fun engineContractsAndProvidersStayFrameworkFree() {
+        assertEquals(
+            "ai engine contracts must not depend on Metro",
+            ArchitectureRules.moduleDependencyViolation(":ai:engine:api", "dev.zacsweers.metro"),
+        )
+        assertEquals(
+            "ai engine contracts must not depend on Compose",
+            ArchitectureRules.moduleDependencyViolation(
+                ":ai:engine:api",
+                "org.jetbrains.compose.runtime",
+            ),
+        )
+        assertEquals(
+            "ai engine provider must not depend on Compose",
+            ArchitectureRules.moduleDependencyViolation(
+                ":ai:engines:deepseek-harness",
+                "org.jetbrains.compose.runtime",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.moduleDependencyViolation(
+                ":ai:engines:deepseek-harness",
+                "dev.zacsweers.metro",
+            ),
+        )
+        assertNull(
+            ArchitectureRules.moduleDependencyViolation(":ai:engine:impl", "dev.zacsweers.metro"),
+        )
+        assertEquals(
+            "ai engine ACP adapter must not depend on Compose",
+            ArchitectureRules.transitiveModuleDependencyViolation(
+                ":ai:engine:acp",
+                "org.jetbrains.compose.runtime",
             ),
         )
     }

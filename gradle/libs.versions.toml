@@ -7,6 +7,8 @@ decompose = "3.6.0-beta02"
 metro = "1.5.2"
 kotlinx-atomicfu = "0.33.0"
 kotlinx-coroutines = "1.11.0"
+agent-client-protocol = "0.34.0"
+slf4j = "2.0.17"
 kotlinx-serialization = "1.6.3"
 junit = "4.13.2"
 konsist = "1.0.0-beta.1"
@@ -34,6 +36,8 @@ decompose = { module = "com.arkivanov.decompose:decompose", version.ref = "decom
 decompose-extensions-compose = { module = "com.arkivanov.decompose:extensions-compose", version.ref = "decompose" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
 metro-gradle-plugin = { module = "dev.zacsweers.metro:gradle-plugin", version.ref = "metro" }
+agent-client-protocol = { module = "com.agentclientprotocol:acp", version.ref = "agent-client-protocol" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "kotlinx-atomicfu" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

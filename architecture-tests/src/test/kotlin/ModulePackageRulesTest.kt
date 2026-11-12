@@ -272,6 +272,47 @@ class ModulePackageRulesTest {
     }
 
     @Test
+    fun aiEngineModulesDeclareTheirPathPackages() {
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "ai/engine/api/src/commonMain/kotlin/AiEngineFacade.kt",
+                "io.github.aequicor.heartbeat.ai.engine.api",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "ai/engine/impl/src/commonMain/kotlin/DefaultAiEngineFacade.kt",
+                "io.github.aequicor.heartbeat.ai.engine.impl",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "ai/engine/acp/src/main/kotlin/AcpAdapter.kt",
+                "io.github.aequicor.heartbeat.ai.engine.acp",
+            ),
+        )
+        Assert.assertNull(
+            ModulePackageRules.violation(
+                "ai/engines/deepseek-harness/src/main/kotlin/DeepSeekHarnessProvider.kt",
+                "io.github.aequicor.heartbeat.ai.engines.deepseekharness",
+            ),
+        )
+        assertViolation(
+            "ai/engine/acp/src/main/kotlin/AcpAdapter.kt",
+            "io.github.aequicor.heartbeat.features.aistudio.api",
+            "ai/engine/acp",
+            "io.github.aequicor.heartbeat.ai.engine.acp",
+        )
+        Assert.assertEquals(
+            "unknown ai module role: ai/support",
+            ModulePackageRules.violation(
+                "ai/support/src/main/kotlin/Support.kt",
+                "io.github.aequicor.heartbeat.ai.support",
+            ),
+        )
+    }
+
+    @Test
     fun pathsOutsideArchitectureAreasHaveNoRule() {
         Assert.assertNull(
             ModulePackageRules.violation("buildSrc/src/main/kotlin/Plugin.gradle.kts", "plugin"),

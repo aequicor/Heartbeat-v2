@@ -4,6 +4,9 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraph
+import io.github.aequicor.heartbeat.ai.engine.api.AiEngineFacade
+import io.github.aequicor.heartbeat.ai.engine.api.EngineState
+import io.github.aequicor.heartbeat.ai.engines.deepseekharness.DeepSeekHarness
 import io.github.aequicor.heartbeat.core.database.JvmSqlDriverFactory
 import io.github.aequicor.heartbeat.core.database.SqlDriverFactory
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
@@ -25,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -49,6 +53,7 @@ internal interface DesktopCompositionRootGraph {
     val featureEntries: Set<DecomposeFeatureEntry>
     val featureRenderers: Set<ComposeFeatureRenderer>
     val databaseInitializer: DatabaseInitializer
+    val aiEngineFacade: AiEngineFacade
 
     @Provides
     @SingleIn(AppScope::class)
@@ -102,6 +107,17 @@ class CompositionRootGraphTest {
 
         assertTrue(graph.settingsRegistry.pages.any { it.id.value == "ai-studio" })
         assertTrue(graph.settingsPageProviders.any { "ai-studio" in it.pageIds })
+    }
+
+    @Test
+    fun engineProviderJoinsTheCatalog() {
+        val graph = newGraph()
+
+        assertTrue(graph.aiEngineFacade.availableEngines.value.any { it.id == DeepSeekHarness.key.id })
+        assertEquals(
+            EngineState.NotInitialized,
+            graph.aiEngineFacade.engines.value[DeepSeekHarness.key],
+        )
     }
 
     /**

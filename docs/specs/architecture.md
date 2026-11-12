@@ -40,6 +40,7 @@ Heartbeat использует Kotlin Multiplatform. Общий код обсл�
 | `shell/` | Общая оболочка приложения: корневая навигация, состояние сессии, координация фич |
 | `features/` | Бизнес-функциональность: контракты, реализация, адаптеры Presentation и UI |
 | `storage/` | Композиция SQL-схем, глобальная версия и миграции физической БД, инициализация хранилища |
+| `ai/` | Контракты ИИ-движка, фасад, ACP-адаптер и провайдеры конкретных агентов; см. [спецификацию AI Engine](ai-engine.md) |
 | `frameworks/` | Собственные переиспользуемые фреймворки, например BLoC |
 | `di/` | Общие определения областей видимости Metro и общие registrations |
 | `designsystem/` | UI Kit по UI-технологиям |
@@ -77,6 +78,14 @@ project/
 │   ├── home/
 │   ├── editor/
 │   └── settings/
+│
+├── ai/
+│   ├── engine/
+│   │   ├── api/
+│   │   ├── impl/
+│   │   └── acp/
+│   └── engines/
+│       └── deepseek-harness/
 │
 ├── storage/
 │   └── database/
@@ -717,6 +726,21 @@ core/
 
 Каждый модуль `core` должен объявлять только те KMP targets, которые он действительно поддерживает. Универсальные инфраструктурные зависимости, используемые в `feature:impl`, обязаны поддерживать все targets этого `impl`.
 
+## AI Engine
+
+Фичи работают с ИИ-агентом только через контракты `:ai:engine:api`. Фасад, агрегация состояний и
+ACP-адаптер находятся в отдельных модулях, а конкретный агент подключается модулем-провайдером.
+Спецификация контрактов, состояний и первого среза — [AI Engine](ai-engine.md).
+
+```text
+features/*  ──> ai/engine/api
+                    ▲
+                    │
+              ai/engine/impl        (фасад, агрегация)
+              ai/engine/acp         (ACP-адаптер)
+              ai/engines/<agent>    (провайдер агента)
+```
+
 ## Межфичевое взаимодействие
 
 Фичи не должны зависеть от чужих `impl`.
@@ -828,10 +852,14 @@ platform:windows
 | `shell:impl` | `shell:api`, `shell:impl`, `features/*/api`, `di:api`, `core/*` |
 | `shell:presentation/*` | `shell:api`, `shell:impl`, `shell:presentation/*`, `features/*/api`, `features/*/presentation/*`, `navigation/*`, `di:api`, `core/*` |
 | `shell:ui/*` | `shell:*`, `features/*/api`, `features/*/presentation/*`, `features/*/ui/*`, `navigation/*`, `designsystem/*`, `di:api`, `core/*` |
-| `features/*/api` | `features/*/api`, `navigation/api`, `core/*` |
-| `features/*/impl` | `features/*/api`, `di:api`, `core/*` |
-| `features/*/presentation/*` | `features/*/api`, `navigation/*`, `di:api`, `core/*` |
-| `features/*/ui/*` | `features/<same>/presentation/*`, `features/*/api`, `navigation/decompose-compose`, `designsystem/*`, `core/*` |
+| `features/*/api` | `features/*/api`, `navigation/api`, `ai/engine/api`, `core/*` |
+| `features/*/impl` | `features/*/api`, `ai/engine/api`, `di:api`, `core/*` |
+| `features/*/presentation/*` | `features/*/api`, `navigation/*`, `ai/engine/api`, `di:api`, `core/*` |
+| `features/*/ui/*` | `features/<same>/presentation/*`, `features/*/api`, `navigation/decompose-compose`, `designsystem/*`, `ai/engine/api`, `core/*` |
+| `ai/engine/api` | `ai/engine/api`, `core/*` |
+| `ai/engine/impl` | `ai/engine/api`, `ai/engine/impl`, `di:api`, `core/*` |
+| `ai/engine/acp` | `ai/engine/api`, `ai/engine/acp`, `core/*` |
+| `ai/engines/*` | `ai/engine/api`, `ai/engine/acp`, `ai/engines/*`, `di:api`, `core/*` |
 | `storage/database` | `storage/database`, `features/*/impl` (только композиция SQL-схем), `di:api`, `core/*` |
 | `di:api` | `di:api`, `core/*` |
 | `core/*` | `core/*`, `di:api` |
@@ -848,6 +876,8 @@ platform:windows
 - `core` и `designsystem` не зависят от фич; `designsystem` не зависит от `di`.
 - Фичи не зависят от `storage`: SQL-драйвер и соединение приходят через контракты `core`, а физическую БД открывает и мигрирует `storage/database`. Зависимость `storage → features/*/impl` существует только для композиции SQL-схем и не даёт доступа к бизнес-логике фичи.
 - `features/*/api`, `core` и `navigation/api` не зависят от UI-фреймворков и Metro; `designsystem` не зависит от Decompose и Metro; Presentation-адаптеры не зависят от Compose; `ui/compose` зависит от Compose, Metro и собственного Decompose-адаптера.
+- `ai/engine/api` не зависит от Metro, Compose, Decompose и конкретных агентов; `ai/engine/acp` не зависит от Metro и UI-фреймворков; `ai/engines/*` может использовать Metro для регистрации провайдера.
+- `:ai:*` не зависит от `features`, `storage` и `designsystem`: историю диалога хранит фича, а движок работает только с runtime-сессиями.
 
 Группы артефактов проверяются и в объявленных зависимостях, и в разрешённых compile/runtime/klib-графах универсальных модулей; импорты проверяются по той же роли модуля.
 
@@ -1085,6 +1115,7 @@ CI должен отклонять изменения, нарушающие за
 | `di` | Общие контракты и регистрации Metro |
 | `designsystem` | UI Kit по технологиям |
 | `core` | Универсальная техническая инфраструктура |
+| `ai` | Контракты ИИ-движка, фасад, ACP-адаптер и провайдеры агентов |
 | `buildSrc` | Precompiled-плагины соглашений сборки |
 
 ### Имена архитектурных ролей
