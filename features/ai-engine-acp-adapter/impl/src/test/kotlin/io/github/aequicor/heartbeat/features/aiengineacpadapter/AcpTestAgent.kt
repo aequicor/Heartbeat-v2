@@ -17,13 +17,13 @@ internal object AcpTestAgent {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        val minimal = args.single() == "minimal"
+        val profile = args.single()
         System.`in`.bufferedReader(Charsets.UTF_8).use { reader ->
-            runAgent(reader.lineSequence(), minimal)
+            runAgent(reader.lineSequence(), profile)
         }
     }
 
-    private fun runAgent(lines: Sequence<String>, minimal: Boolean) {
+    private fun runAgent(lines: Sequence<String>, profile: String) {
         var promptId: JsonElement? = null
         var cancelled = false
         for (line in lines) {
@@ -31,17 +31,18 @@ internal object AcpTestAgent {
             val id = message["id"]
             val params = message["params"]?.jsonObject
             when (message["method"]?.jsonPrimitive?.content) {
-                "initialize" -> {
-                    check(params?.get("protocolVersion") == JsonPrimitive(1))
-                    val supported = """{"loadSession":true,"sessionCapabilities":{"list":{}}}"""
-                    val capabilities = if (minimal) "{}" else supported
-                    reply(id, """{"protocolVersion":1,"agentCapabilities":$capabilities}""")
-                }
+                "initialize" -> initialize(id, params, profile)
                 "session/new" -> reply(id, """{"sessionId":"$Session"}""")
                 "session/load" -> {
+                    check(profile == "default")
                     check(params?.get("sessionId") == JsonPrimitive(Session))
                     chunk("user_message_chunk", "older")
                     chunk("agent_message_chunk", "reply")
+                    reply(id, "{}")
+                }
+                "session/resume", "session/close" -> {
+                    check(profile == "resume")
+                    check(params?.get("sessionId") == JsonPrimitive(Session))
                     reply(id, "{}")
                 }
                 "session/list" -> list(id, checkNotNull(params))
@@ -79,6 +80,16 @@ internal object AcpTestAgent {
                 else -> error("Unexpected ACP message: $message")
             }
         }
+    }
+
+    private fun initialize(id: JsonElement?, params: JsonObject?, profile: String) {
+        check(params?.get("protocolVersion") == JsonPrimitive(1))
+        val capabilities = when (profile) {
+            "minimal" -> "{}"
+            "resume" -> """{"sessionCapabilities":{"list":{},"resume":{},"close":{}}}"""
+            else -> """{"loadSession":true,"sessionCapabilities":{"list":{}}}"""
+        }
+        reply(id, """{"protocolVersion":1,"agentCapabilities":$capabilities}""")
     }
 
     private fun list(id: JsonElement?, params: JsonObject) {

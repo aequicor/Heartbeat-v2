@@ -11,6 +11,7 @@ import com.agentclientprotocol.model.NewSessionRequest
 import com.agentclientprotocol.model.PROTOCOL_VERSION_V1
 import com.agentclientprotocol.model.RequestPermissionOutcome
 import com.agentclientprotocol.model.RequestPermissionResponse
+import com.agentclientprotocol.model.ResumeSessionRequest
 import com.agentclientprotocol.model.SessionId
 import com.agentclientprotocol.model.SessionUpdate
 import com.agentclientprotocol.protocol.Protocol
@@ -104,11 +105,18 @@ internal class AcpConnection(
         }
     }
 
-    suspend fun load(session: AcpSession, directory: String) {
-        check(agent.agentCapabilities.loadSession) { "Agent does not support loading sessions" }
+    suspend fun reopen(session: AcpSession, directory: String) {
+        val replay = agent.agentCapabilities.loadSession
+        check(replay || agent.agentCapabilities.sessionCapabilities.resume != null) {
+            "Agent does not support reopening sessions"
+        }
         val id = SessionId(session.key.id)
         synchronized(routingLock) { sessions[id] = session }
-        V1.SessionLoad(protocol, LoadSessionRequest(id, directory, listOf()))
+        if (replay) {
+            V1.SessionLoad(protocol, LoadSessionRequest(id, directory, listOf()))
+        } else {
+            V1.SessionResume(protocol, ResumeSessionRequest(id, directory))
+        }
     }
 
     fun forget(session: AcpSession) {
@@ -123,9 +131,18 @@ internal class AcpConnection(
 
     override fun close() {
         try {
-            process.destroyForcibly()
+            process.terminateTree()
         } finally {
             protocol.close()
         }
+    }
+}
+
+internal fun Process.terminateTree() {
+    val descendants = descendants().use { it.toList() }
+    try {
+        destroyForcibly()
+    } finally {
+        descendants.forEach { it.destroyForcibly() }
     }
 }

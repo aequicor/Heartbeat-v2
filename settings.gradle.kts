@@ -42,6 +42,7 @@ include(
     ":features:ai-engine-acp-adapter:impl",
     ":features:ai-engine-facade:api",
     ":features:ai-engine-facade:impl",
+    ":features:engines:dsh",
     ":features:ai-studio:api",
     ":features:ai-studio:impl",
     ":features:ai-studio:presentation:decompose",

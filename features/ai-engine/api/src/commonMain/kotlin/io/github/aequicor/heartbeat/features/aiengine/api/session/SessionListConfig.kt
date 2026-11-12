@@ -4,10 +4,11 @@ package io.github.aequicor.heartbeat.features.aiengine.api.session
 public sealed interface SessionListConfig {
     public val cursor: String?
 
-    /** Lists root sessions in the specified project. */
+    /** Lists root sessions in the specified project. [workingDirectory] is its absolute path, if known. */
     public data class ByProject(
         val projectId: String,
         override val cursor: String? = null,
+        val workingDirectory: String? = null,
     ) : SessionListConfig
 
     /** Lists direct children of the specified session. */

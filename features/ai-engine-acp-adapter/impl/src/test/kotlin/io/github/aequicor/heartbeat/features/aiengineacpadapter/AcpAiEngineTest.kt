@@ -105,6 +105,25 @@ internal class AcpAiEngineTest {
     }
 
     @Test
+    fun resumesExistingSessionWithoutTranscriptReplay() = withAgent("resume") { engine ->
+        val config = SessionConfig(directory.toString())
+        val first = engine.getOrCreateSession(config)
+        engine.closeSession(first.key)
+
+        val project = SessionListConfig.ByProject("opaque-project-id", workingDirectory = directory.toString())
+        val listed = engine.getListSessions(project).sessions.single()
+        assertEquals(directory.toString(), listed.workingDirectory)
+        assertEquals(first.key, listed)
+
+        val resumed = engine.getOrCreateSession(SessionConfig(), listed)
+        assertNotSame(first, resumed)
+        assertEquals(first.key, resumed.key)
+        assertEquals(SessionStatus.Idle, resumed.state.value.status)
+        assertEquals(HistorySyncStatus.LOCAL_ONLY, resumed.state.value.messages.sync)
+        assertTrue(resumed.state.value.messages.items.isEmpty())
+    }
+
+    @Test
     fun cancelsAWaitingTurnAndDetectsAgentExit() = withAgent { engine ->
         val session = engine.getOrCreateSession(SessionConfig(directory.toString()))
         session.dispatch(SessionEvent.SendPrompt("hello"))

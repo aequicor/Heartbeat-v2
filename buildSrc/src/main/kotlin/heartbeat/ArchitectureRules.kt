@@ -197,7 +197,8 @@ object ArchitectureRules {
 
     fun isImpl(path: String): Boolean =
         path == ":shell:impl" ||
-            (isFeature(path) && pathSegments(path).last() == "impl")
+            (isFeature(path) && pathSegments(path).last() == "impl") ||
+            path == ":features:engines:dsh"
 
     fun role(path: String): Role = when {
         path.startsWith(":platform:") -> Role.Platform

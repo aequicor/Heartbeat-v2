@@ -13,6 +13,6 @@ public class AcpAgentDataSource(private val scope: AppCoroutineScope) {
     public fun provider(
         key: AiEngineKey,
         command: List<String>,
-        projectDirectory: suspend (projectId: String) -> Path?,
+        projectDirectory: suspend (projectId: String) -> Path? = { null },
     ): AiEngineProvider = AcpAiEngineProvider(key, command, scope, projectDirectory)
 }

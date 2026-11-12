@@ -73,7 +73,9 @@ internal class AcpAiEngine(
 
     override suspend fun getListSessions(config: SessionListConfig): SessionPage {
         require(config is SessionListConfig.ByProject) { "ACP cannot list child sessions" }
-        val cwd = requireNotNull(projectDirectory(config.projectId)) { "Project has no working directory" }
+        val cwd = requireNotNull(config.workingDirectory?.let(Path::of) ?: projectDirectory(config.projectId)) {
+            "Project has no working directory"
+        }
         return request { active ->
             checkNotNull(active.agent.agentCapabilities.sessionCapabilities.list) {
                 "Agent does not support listing sessions"
@@ -121,7 +123,7 @@ internal class AcpAiEngine(
                 try {
                     AcpConnection(process, scope, ioDispatcher).also { connection = it }
                 } finally {
-                    if (connection == null) process.destroyForcibly()
+                    if (connection == null) process.terminateTree()
                 }
             }
             withinRequestTimeout { active.initialize() }
@@ -173,10 +175,10 @@ internal class AcpAiEngine(
             }
         } else {
             val sessionKey = SessionKey(key, existing.id, existing.title, directory, existing.updatedAt)
-            val loading = newSession(active, sessionKey, replay = true)
+            val loading = newSession(active, sessionKey, replay = active.agent.agentCapabilities.loadSession)
             var opened = false
             try {
-                active.load(loading, directory)
+                active.reopen(loading, directory)
                 opened = true
                 loading
             } finally {
