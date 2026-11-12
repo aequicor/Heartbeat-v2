@@ -26,8 +26,11 @@ class AiStudioComposeRenderer(
         }
 
         val avatarVisible by settings.avatarVisible.collectAsState()
+        val state by component.store.state.collectAsState()
 
         AiStudioScreen(
+            state = state,
+            onAction = component.store::dispatch,
             avatarVisible = avatarVisible,
             onOpenSettings = component::openSettings,
         )

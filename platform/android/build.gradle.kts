@@ -28,6 +28,7 @@ dependencies {
     implementation(project(":shell:presentation:decompose"))
     implementation(project(":shell:ui:compose"))
     implementation(project(":features:ai-studio:api"))
+    implementation(project(":features:ai-engine-facade:impl"))
     implementation(project(":features:ai-studio:impl"))
     implementation(project(":features:ai-studio:presentation:decompose"))
     implementation(project(":features:ai-studio:ui:compose"))
