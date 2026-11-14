@@ -14,7 +14,6 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -60,7 +59,7 @@ class DesktopDshGraphTest {
                     initialRoute = AiStudioRoutes.main(),
                     dispatcher = coroutineContext[ContinuationInterceptor] as CoroutineDispatcher,
                 )
-                val studio = assertIs<AiStudioComponent>(shell.childStack.value.active.instance).store
+                val studio = assertIs<AiStudioStore>(shell.childStack.value.active.instance)
                 withTimeout(30.seconds) { verifyStudioConnection(graph, studio, workspace) }
             } finally {
                 lifecycle.destroy()

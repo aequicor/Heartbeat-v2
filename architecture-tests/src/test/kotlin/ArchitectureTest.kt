@@ -5,8 +5,10 @@ import com.lemonappdev.konsist.api.declaration.KoBaseDeclaration
 import com.lemonappdev.konsist.api.declaration.KoClassDeclaration
 import com.lemonappdev.konsist.api.declaration.KoFileDeclaration
 import com.lemonappdev.konsist.api.declaration.KoFunctionDeclaration
+import com.lemonappdev.konsist.api.declaration.KoImportDeclaration
 import com.lemonappdev.konsist.api.declaration.KoInterfaceDeclaration
 import com.lemonappdev.konsist.api.declaration.KoObjectDeclaration
+import com.lemonappdev.konsist.api.declaration.KoPackageDeclaration
 import com.lemonappdev.konsist.api.provider.KoAnnotationProvider
 import com.lemonappdev.konsist.api.provider.KoNameProvider
 import com.lemonappdev.konsist.api.provider.modifier.KoModifierProvider
@@ -228,8 +230,12 @@ class ArchitectureTest {
         val api = Konsist.scopeFromProduction(moduleName = ":features:ai-studio:api")
         val declarations = api.files.flatMap {
             it.declarations(includeNested = false, includeLocal = false)
-        }.filter { it.kind() != DeclarationKind.OTHER }
-        Assert.assertEquals(listOf("AiStudioRoutes"), declarations.map { it.nameOrNull() })
+        }.filterNot { it is KoImportDeclaration || it is KoPackageDeclaration }
+        val routeDeclaration = declarations.singleOrNull()
+        Assert.assertTrue(
+            "Expected only the AiStudioRoutes object, found ${declarations.map { it.nameOrNull() }}",
+            routeDeclaration is KoObjectDeclaration && routeDeclaration.name == "AiStudioRoutes",
+        )
     }
 
     @Test
