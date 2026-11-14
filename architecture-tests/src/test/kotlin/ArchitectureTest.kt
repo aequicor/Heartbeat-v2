@@ -59,6 +59,9 @@ class ArchitectureTest {
 
     private val platformScope = Konsist.scopeFromProduction(moduleName = ":platform..")
 
+    /** Production sources of the AI engine modules; the area may stay empty before the first engine. */
+    private val aiScope = Konsist.scopeFromProduction(moduleName = ":ai..")
+
     /** Matches `...features.<any feature>.<role>` and its subpackages. */
     private fun rolePattern(role: String): String = "$featurePrefix..$role.."
 
@@ -120,7 +123,7 @@ class ArchitectureTest {
     fun modulePackagesMatchTheGradleModule() {
         val files = featureScope.files + designSystemScope.files + infrastructureScope.files +
             storageScope.files + diScope.files + shellScope.files + navigationScope.files +
-            platformScope.files
+            platformScope.files + aiScope.files
         val paths = files.map { it.projectPath.replace('\\', '/') }
         // The rule derives the module from the path, so a path without the `/src/` part, or a
         // path that does not start at the repository directory, would silently disable the check.

@@ -28,9 +28,11 @@ internal object ModulePackageRules {
 
     private const val STORAGE_ROOT = "$ROOT_PACKAGE.storage"
 
+    private const val AI_ROOT = "$ROOT_PACKAGE.ai"
+
     /** Repository areas that own a module tree: the first segment of the module path. */
     private val moduleAreas =
-        listOf("features", "designsystem", "core", "di", "shell", "navigation", "storage", "platform")
+        listOf("features", "designsystem", "core", "di", "shell", "navigation", "storage", "platform", "ai")
 
     /** Roles of the universal implementation module: one Gradle module holds all of them. */
     private val implRoles = listOf("domain", "data", "presentation", "di")
@@ -53,6 +55,7 @@ internal object ModulePackageRules {
             "navigation" -> navigationViolation(module, packageName)
             "storage" -> storageViolation(module, packageName)
             "platform" -> platformViolation(module, packageName)
+            "ai" -> aiViolation(module, packageName)
             else -> null
         }
     }
@@ -138,6 +141,22 @@ internal object ModulePackageRules {
             else -> "package $packageName does not belong to module ${module.joinToString("/")}: " +
                 "expected $ROOT_PACKAGE or $ROOT_PACKAGE.di"
         }
+
+    /**
+     * Engine modules mirror their Gradle path: `ai/engine/api` declares `...ai.engine.api`, and
+     * `ai/engines/deepseek-harness` declares `...ai.engines.deepseekharness`, because a package
+     * segment cannot contain a hyphen.
+     */
+    private fun aiViolation(module: List<String>, packageName: String): String? {
+        val modulePath = module.joinToString("/")
+        val rest = module.drop(1)
+        val suffix = when {
+            rest.size == 2 && rest[0] == "engine" -> rest.joinToString(".")
+            rest.size == 2 && rest[0] == "engines" -> "engines.${rest[1].replace("-", "")}"
+            else -> return "unknown ai module role: $modulePath"
+        }
+        return mismatch(modulePath, packageName, listOf("$AI_ROOT.$suffix"))
+    }
 
     /** `storage/database` declares `...storage.database`: storage owns composition, not feature roles. */
     private fun storageViolation(module: List<String>, packageName: String): String? {

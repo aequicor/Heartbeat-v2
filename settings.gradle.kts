@@ -16,6 +16,12 @@ dependencyResolutionManagement {
 rootProject.name = "Heartbeat"
 include(":platform:android", ":platform:desktop")
 include(":di:api")
+include(
+    ":ai:engine:api",
+    ":ai:engine:impl",
+    ":ai:engine:acp",
+    ":ai:engines:deepseek-harness",
+)
 include(":core:platform-api", ":core:network", ":core:database", ":core:filesystem")
 include(
     ":core:preferences:api",
