@@ -19,7 +19,7 @@ import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import java.io.File
 
 /**
- * Token rule from `docs/specs/design-system.md` ("Токены") and HB-DS-040: UI feature sources use
+ * Token rule from `design/design-system.md` ("Токены") and HB-DS-040: UI feature sources use
  * semantic roles or component APIs, so a raw `Color`, `Dp`, `TextUnit` or `dp`/`sp` literal is a
  * violation instead of a silent second design system.
  *

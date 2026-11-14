@@ -14,7 +14,7 @@ nav:
   - Окружение и запуск: setup.md
   - Архитектура: specs/architecture.md
   - Навигация: specs/navigation.md
-  - Дизайн-система: specs/design-system.md
+  - Дизайн-система: https://github.com/aequicor/Heartbeat-design/blob/master/design-system.md
   - Поддерживаемые таргеты: specs/platforms.md
   - Выпуск: specs/releases.md
   - Работа агента: specs/agent-workflow.md
