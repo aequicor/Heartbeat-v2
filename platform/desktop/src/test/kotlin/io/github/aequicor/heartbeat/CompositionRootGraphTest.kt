@@ -10,7 +10,7 @@ import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
 import io.github.aequicor.heartbeat.core.preferences.datastore.DataStorePreferencesStoreFactory
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
 import io.github.aequicor.heartbeat.features.editor.api.EditorStoreFactory
 import io.github.aequicor.heartbeat.features.editor.component.EditorComponentFactory
 import io.github.aequicor.heartbeat.features.settings.api.SettingsRegistry

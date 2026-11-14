@@ -13,7 +13,7 @@ import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 

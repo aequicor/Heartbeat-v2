@@ -22,6 +22,7 @@ import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import java.io.File
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
@@ -70,9 +71,13 @@ fun main() {
             DecoratedWindow(
                 onCloseRequest = {
                     lifecycle.destroy()
-                    graph.databaseInitializer.close()
-                    graph.appCoroutineScope.cancel()
-                    exitApplication()
+                    try {
+                        runBlocking { graph.aiEngineFacade.dispose() }
+                    } finally {
+                        graph.databaseInitializer.close()
+                        graph.appCoroutineScope.cancel()
+                        exitApplication()
+                    }
                 },
                 state = rememberWindowState(width = 1440.dp, height = 900.dp),
                 title = "Heartbeat",

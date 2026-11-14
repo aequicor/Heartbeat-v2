@@ -1,179 +1,111 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.components.HbIcon
-import io.github.aequicor.heartbeat.designsystem.components.HbIconButton
-import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
-import io.github.aequicor.heartbeat.designsystem.foundation.HbLayoutBreakpoints
-import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
-import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
+import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbButtonVariant
+import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
-/** Header of the conversation pane: identity, model and pane actions. */
 @Composable
-internal fun AiStudioHeader(modifier: Modifier = Modifier) {
+internal fun AiStudioHeader(
+    state: AiStudioScreenState,
+    onAction: (AiStudioAction) -> Unit,
+    onShowChats: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
     val colors = HbTheme.colors
-
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val compact = maxWidth < HbLayoutBreakpoints.NarrowPane.dp
-
+    Column(
+        modifier.fillMaxWidth().padding(horizontal = HbSpacing.M, vertical = HbSpacing.S),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+    ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = HbSizes.paneHeaderHeight)
-                .padding(horizontal = HbSpacing.M, vertical = HbSpacing.Xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
+            horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
         ) {
-            HbIconButton(
-                contentDescription = "Вернуться к списку чатов",
-                onClick = {},
-            ) {
-                HbIcon(
-                    glyph = HbIconGlyph.ChevronDown,
-                    modifier = Modifier.rotate(BackRotationDegrees),
-                    size = HbSizes.iconSize,
-                    tint = colors.text.secondary,
-                )
-            }
-            AiStudioHeaderTitle(modifier = Modifier.weight(1f))
-            AiStudioModelPill(compact = compact)
-            AiStudioHeaderActions(compact = compact)
-        }
-    }
-}
-
-@Composable
-private fun AiStudioHeaderTitle(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
-    ) {
-        BasicText(
-            text = "Концепция AI-студии",
-            style = HbTypography.PaneTitle,
-            color = { colors.text.primary },
-            modifier = Modifier.weight(1f, fill = false),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        HbIcon(
-            glyph = HbIconGlyph.ChevronDown,
-            size = HbSizes.controlGlyph,
-            tint = colors.text.secondary,
-        )
-    }
-}
-
-@Composable
-private fun AiStudioHeaderActions(
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
-    ) {
-        if (!compact) {
-            HbIconButton(
-                contentDescription = "Параметры ответа",
-                onClick = {},
-            ) {
-                AiStudioIcon(
-                    glyph = AiStudioGlyph.Sliders,
-                    modifier = Modifier.size(HbSizes.iconSize),
-                    tint = colors.text.secondary,
-                )
-            }
-            HbIconButton(
-                contentDescription = "Боковая панель",
-                onClick = {},
-            ) {
-                AiStudioIcon(
-                    glyph = AiStudioGlyph.Panel,
-                    modifier = Modifier.size(HbSizes.iconSize),
-                    tint = colors.text.secondary,
-                )
-            }
-        }
-        HbIconButton(
-            contentDescription = "Действия с чатом",
-            onClick = {},
-        ) {
-            HbIcon(
-                glyph = HbIconGlyph.More,
-                size = HbSizes.iconSize,
-                tint = colors.text.secondary,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AiStudioModelPill(
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier
-            .heightIn(min = HbSizes.controlHeight)
-            .clip(HbShapes.Medium)
-            .background(colors.surface.input)
-            .border(AiStudioMetrics.hairline, colors.border.control, HbShapes.Medium)
-            .padding(
-                start = HbSpacing.S,
-                end = HbSpacing.Xs,
-                top = HbSpacing.Xxs,
-                bottom = HbSpacing.Xxs,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
-    ) {
-        AiStudioIcon(
-            glyph = AiStudioGlyph.Sparkles,
-            modifier = Modifier.size(HbSizes.iconSize),
-            tint = colors.accent.brand,
-        )
-        if (!compact) {
+            AiStudioBrandMark(Modifier.width(HbSpacing.Xl).height(HbSpacing.S))
             BasicText(
-                text = "Sonnet 3.7 Craft",
-                style = HbTypography.Label,
+                "DeepSeek Harness",
+                style = HbTypography.PaneTitle,
                 color = { colors.text.primary },
-                maxLines = 1,
             )
         }
-        HbIcon(
-            glyph = HbIconGlyph.ChevronDown,
-            size = HbSizes.controlGlyph,
-            tint = colors.text.secondary,
+        BasicText(
+            text = state.connectionLabel(),
+            style = HbTypography.Caption,
+            color = { if (state.connected) colors.status.success.foreground else colors.text.secondary },
         )
+        if (state.connected) {
+            BasicText(
+                state.directory,
+                style = HbTypography.Code,
+                color = { colors.text.secondary },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs)) {
+                if (onShowChats != null) {
+                    HbButton("Чаты", onShowChats, variant = HbButtonVariant.Secondary, enabled = !state.turnActive)
+                }
+                HbButton(
+                    "Отключить",
+                    onClick = { onAction(AiStudioAction.Disconnect) },
+                    enabled = !state.busy && !state.turnActive,
+                    variant = HbButtonVariant.Ghost,
+                )
+            }
+        } else if (state.engineAvailable) {
+            AiStudioConnectionControls(state, onAction)
+        }
+        val error = state.error ?: (state.connection as? AiEngineState.Failed)?.reason
+        if (error != null) {
+            BasicText(error, style = HbTypography.Body, color = { colors.status.error.foreground })
+        }
     }
 }
 
-private const val BackRotationDegrees = 90f
+@Composable
+private fun AiStudioConnectionControls(state: AiStudioScreenState, onAction: (AiStudioAction) -> Unit) {
+    HbTextField(
+        value = state.directory,
+        onValueChange = { onAction(AiStudioAction.EditDirectory(it)) },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Рабочий каталог",
+        placeholder = "Абсолютный путь к проекту",
+        enabled = !state.busy,
+    )
+    HbButton(
+        text = if (state.connection is AiEngineState.Failed) "Повторить подключение" else "Подключить",
+        onClick = { onAction(AiStudioAction.Connect) },
+        enabled = state.directory.isNotBlank() && state.connection != AiEngineState.Connecting,
+        busy = state.busy,
+        busyLabel = "Подключение к DeepSeek Harness",
+    )
+}
+
+private fun AiStudioScreenState.connectionLabel(): String = if (!engineAvailable) {
+    "Движок недоступен"
+} else {
+    when (connection) {
+        AiEngineState.NotInitialized -> "Не подключён"
+        AiEngineState.Connecting -> "Подключение…"
+        AiEngineState.Ready -> "Подключён"
+        is AiEngineState.AuthorizationRequired -> "Войдите в DeepSeek Harness и повторите подключение"
+        is AiEngineState.Failed -> "Ошибка подключения"
+    }
+}

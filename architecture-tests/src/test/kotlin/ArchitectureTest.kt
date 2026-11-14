@@ -5,8 +5,10 @@ import com.lemonappdev.konsist.api.declaration.KoBaseDeclaration
 import com.lemonappdev.konsist.api.declaration.KoClassDeclaration
 import com.lemonappdev.konsist.api.declaration.KoFileDeclaration
 import com.lemonappdev.konsist.api.declaration.KoFunctionDeclaration
+import com.lemonappdev.konsist.api.declaration.KoImportDeclaration
 import com.lemonappdev.konsist.api.declaration.KoInterfaceDeclaration
 import com.lemonappdev.konsist.api.declaration.KoObjectDeclaration
+import com.lemonappdev.konsist.api.declaration.KoPackageDeclaration
 import com.lemonappdev.konsist.api.provider.KoAnnotationProvider
 import com.lemonappdev.konsist.api.provider.KoNameProvider
 import com.lemonappdev.konsist.api.provider.modifier.KoModifierProvider
@@ -185,7 +187,9 @@ class ArchitectureTest {
 
     @Test
     fun featureLayersFollowImportDirection() {
-        featureScope.assertArchitecture {
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        val studio = Konsist.scopeFromProduction(moduleName = ":features:ai-studio..")
+        (featureScope - adapter - studio).assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domain = Layer("Domain", rolePattern("domain"))
             val data = Layer("Data", rolePattern("data"))
@@ -200,9 +204,49 @@ class ArchitectureTest {
             presentation.dependsOn(domain, api)
             di.dependsOn(api, domain, presentation)
             component.dependsOn(api)
-            // Compose UI renders the feature's own Decompose adapter, so it may depend on the
-            // component role. The module-level allowlist still rejects another feature's adapter.
             ui.dependsOn(api, component)
+        }
+    }
+
+    @Test
+    fun aiStudioAdaptersUseImplContracts() {
+        Konsist.scopeFromProduction(moduleName = ":features:ai-studio..").assertArchitecture {
+            val api = Layer("API", rolePattern("api"))
+            val presentation = Layer("Presentation", rolePattern("presentation"))
+            val di = Layer("DI", rolePattern("di"))
+            val component = Layer("Component", rolePattern("component"))
+            val ui = Layer("UI", rolePattern("ui"))
+
+            api.dependsOnNothing()
+            presentation.dependsOn(api)
+            di.dependsOn(api, presentation)
+            component.dependsOn(api, presentation)
+            ui.dependsOn(api, component, presentation)
+        }
+    }
+
+    @Test
+    fun aiStudioApiContainsOnlyRoutes() {
+        val api = Konsist.scopeFromProduction(moduleName = ":features:ai-studio:api")
+        val declarations = api.files.flatMap {
+            it.declarations(includeNested = false, includeLocal = false)
+        }.filterNot { it is KoImportDeclaration || it is KoPackageDeclaration }
+        val routeDeclaration = declarations.singleOrNull()
+        Assert.assertTrue(
+            "Expected only the AiStudioRoutes object, found ${declarations.map { it.nameOrNull() }}",
+            routeDeclaration is KoObjectDeclaration && routeDeclaration.name == "AiStudioRoutes",
+        )
+    }
+
+    @Test
+    fun acpAdapterImplementsEngineApiInDataLayer() {
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        val engine = Konsist.scopeFromProduction(moduleName = ":features:ai-engine:api")
+        (adapter + engine).assertArchitecture {
+            val api = Layer("AI Engine API", "$featurePrefix.aiengine.api..")
+            val data = Layer("ACP adapter", "$featurePrefix.aiengineacpadapter.data..")
+            api.dependsOnNothing()
+            data.dependsOn(api)
         }
     }
 

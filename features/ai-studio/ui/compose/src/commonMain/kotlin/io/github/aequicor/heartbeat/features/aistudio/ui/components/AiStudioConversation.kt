@@ -1,330 +1,178 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.components.HbIcon
-import io.github.aequicor.heartbeat.designsystem.components.HbIconButton
+import io.github.aequicor.heartbeat.designsystem.components.HbButton
+import io.github.aequicor.heartbeat.designsystem.components.HbButtonVariant
 import io.github.aequicor.heartbeat.designsystem.components.HbScrollArea
-import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
 import io.github.aequicor.heartbeat.designsystem.theme.HbShapes
-import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
-
-/** Conversation of the studio: model introduction, one question and one answer. */
-@Composable
-internal fun AiStudioTranscript(modifier: Modifier = Modifier) {
-    HbScrollArea(modifier = modifier) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Column(
-                modifier = Modifier
-                    .widthIn(max = HbPaneGeometry.ReadingMax.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = HbSpacing.Xl, vertical = HbSpacing.L),
-                verticalArrangement = Arrangement.spacedBy(HbSpacing.L),
-            ) {
-                AiStudioHero()
-                AiStudioUserMessage()
-                AiStudioAssistantMessage()
-            }
-        }
-    }
-}
+import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolOutput
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
-private fun AiStudioHero(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
-    ) {
-        AiStudioBrandMark(
-            modifier = Modifier
-                .width(heroMarkWidth)
-                .height(HbSpacing.Xl),
-        )
-        BasicText(
-            text = "Sonnet 3.7 Craft",
-            style = HbTypography.PageTitle,
-            color = { colors.text.primary },
-        )
-        BasicText(
-            text = "Мощная модель для продуманной работы: анализ, дизайн, " +
-                "написание и сложное продуктовое мышление.",
-            style = HbTypography.Body.copy(textAlign = TextAlign.Center),
-            color = { colors.text.secondary },
-            modifier = Modifier.widthIn(max = heroTextMaxWidth),
-        )
-        AiStudioPulseDivider()
-    }
-}
-
-@Composable
-private fun AiStudioUserMessage(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-    ) {
-        AiStudioUserBadge()
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .clip(HbShapes.Large)
-                .background(colors.action.primaryBackground)
-                .padding(HbSpacing.M),
-        ) {
-            BasicText(
-                text = UserMessage,
-                style = HbTypography.Body,
-                color = { colors.action.primaryForeground },
-            )
-        }
-    }
-}
-
-@Composable
-private fun AiStudioAssistantMessage(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-    ) {
-        AiStudioAssistantBadge()
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clip(HbShapes.Large)
-                .background(colors.surface.base)
-                .border(AiStudioMetrics.hairline, colors.border.subtle, HbShapes.Large)
-                .padding(HbSpacing.M),
-            verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
-        ) {
-            BasicText(
-                text = "Концепция: AI-студия для полноценной работы с ИИ",
-                style = HbTypography.Title,
-                color = { colors.text.primary },
-            )
-            BasicText(
-                text = "Единое, продуманное рабочее пространство для работы с несколькими моделями, " +
-                    "агентами и инструментами — с фокусом на продуктивность, гибкость и реальные " +
-                    "задачи, а не на эффектность.",
-                style = HbTypography.Body,
-                color = { colors.text.secondary },
-            )
-            BasicText(
-                text = "Ключевые акценты",
-                style = HbTypography.Label.copy(fontWeight = FontWeight.SemiBold),
-                color = { colors.text.primary },
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(HbSpacing.S)) {
-                assistantAccents.forEach { accent ->
-                    AiStudioAccent(accent = accent)
-                }
-            }
-            AiStudioMessageActions()
-        }
-    }
-}
-
-@Composable
-private fun AiStudioAccent(
-    accent: AiStudioAccent,
+internal fun AiStudioTranscript(
+    state: AiStudioScreenState,
+    onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.S),
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(top = HbSpacing.S)
-                .size(HbSpacing.Xs)
-                .clip(CircleShape)
-                .background(colors.accent.brand),
-        )
-        BasicText(
-            text = accentText(accent),
-            style = HbTypography.Body,
-            color = { colors.text.primary },
-            modifier = Modifier.weight(1f),
-        )
+    val items = state.timeline
+    val pending = (state.sessionStatus as? SessionStatus.AwaitingPermission)?.requests.orEmpty()
+    val scroll = rememberScrollState()
+    var previousEnd by remember { mutableIntStateOf(0) }
+    LaunchedEffect(scroll.maxValue) {
+        val end = scroll.maxValue
+        if (end != Int.MAX_VALUE) {
+            val follows = scroll.value >= previousEnd
+            previousEnd = end
+            if (follows) scroll.scrollTo(end)
+        }
     }
-}
 
-@Composable
-private fun AiStudioMessageActions(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
-    ) {
-        HbIconButton(
-            contentDescription = "Копировать ответ",
-            onClick = {},
-        ) {
-            AiStudioIcon(
-                glyph = AiStudioGlyph.Copy,
-                modifier = Modifier.size(HbSizes.iconSize),
-                tint = colors.text.secondary,
-            )
-        }
-        HbIconButton(
-            contentDescription = "Ответ полезен",
-            onClick = {},
-        ) {
-            AiStudioIcon(
-                glyph = AiStudioGlyph.ThumbUp,
-                modifier = Modifier.size(HbSizes.iconSize),
-                tint = colors.text.secondary,
-            )
-        }
-        HbIconButton(
-            contentDescription = "Ответ не полезен",
-            onClick = {},
-        ) {
-            AiStudioIcon(
-                glyph = AiStudioGlyph.ThumbUp,
-                modifier = Modifier
-                    .size(HbSizes.iconSize)
-                    .rotate(FlipDegrees),
-                tint = colors.text.secondary,
-            )
-        }
-        HbIconButton(
-            contentDescription = "Действия с ответом",
-            onClick = {},
-        ) {
-            HbIcon(
-                glyph = HbIconGlyph.More,
-                size = HbSizes.iconSize,
-                tint = colors.text.secondary,
-            )
+    HbScrollArea(modifier, state = scroll) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier.widthIn(max = HbPaneGeometry.ReadingMax.dp).fillMaxWidth().padding(HbSpacing.M),
+                verticalArrangement = Arrangement.spacedBy(HbSpacing.S),
+            ) {
+                if (items.isEmpty() && pending.isEmpty()) {
+                    BasicText(state.emptyChatLabel(), style = HbTypography.Body, color = { colors.text.secondary })
+                }
+                items.forEach { item ->
+                    AiStudioTimelineItem(item)
+                    pending.filter { it.toolCallEntryId == item.id }.forEach { AiStudioPermission(it, onAction) }
+                }
+                pending.filter { request -> items.none { it.id == request.toolCallEntryId } }.forEach {
+                    AiStudioPermission(it, onAction)
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun AiStudioUserBadge(modifier: Modifier = Modifier) {
-    val colors = HbTheme.colors
-
-    Box(
-        modifier = modifier
-            .size(HbSizes.minimumTarget)
-            .clip(CircleShape)
-            .background(colors.surface.subtle),
-        contentAlignment = Alignment.Center,
-    ) {
-        AiStudioIcon(
-            glyph = AiStudioGlyph.User,
-            modifier = Modifier.size(HbSizes.iconSize),
-            tint = colors.text.secondary,
-        )
+private fun AiStudioTimelineItem(item: SessionTimelineItem) {
+    when (item) {
+        is SessionTimelineItem.UserMessage -> AiStudioMessage("Вы", item.content, user = true)
+        is SessionTimelineItem.AgentMessage -> AiStudioMessage("DeepSeek Harness", item.content)
+        is SessionTimelineItem.ToolCall -> AiStudioTool(item)
+        is SessionTimelineItem.ContextCompaction -> AiStudioMessage("Сжатие контекста", item.summary.orEmpty())
     }
 }
 
 @Composable
-private fun AiStudioAssistantBadge(modifier: Modifier = Modifier) {
+private fun AiStudioMessage(label: String, content: List<SessionContent>, user: Boolean = false) {
     val colors = HbTheme.colors
-
-    Box(
-        modifier = modifier
-            .size(HbSizes.minimumTarget)
-            .clip(CircleShape)
-            .background(colors.accent.container),
-        contentAlignment = Alignment.Center,
+    val surface = if (user) colors.surface.subtle else colors.surface.base
+    Column(
+        Modifier.fillMaxWidth().clip(HbShapes.Medium).background(surface).padding(HbSpacing.M),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
     ) {
-        AiStudioBrandMark(
-            modifier = Modifier
-                .width(HbSpacing.M)
-                .height(HbSpacing.S),
-        )
+        BasicText(label, style = HbTypography.Label, color = { colors.text.secondary })
+        SelectionContainer {
+            Column {
+                content.forEach {
+                    BasicText(it.displayText(), style = HbTypography.Body, color = { colors.text.primary })
+                }
+            }
+        }
     }
 }
 
-private fun accentText(accent: AiStudioAccent): AnnotatedString = buildAnnotatedString {
-    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) {
-        append(accent.lead)
+@Composable
+private fun AiStudioTool(tool: SessionTimelineItem.ToolCall) {
+    val colors = HbTheme.colors
+    Column(
+        Modifier.fillMaxWidth().clip(HbShapes.Medium).background(colors.surface.subtle).padding(HbSpacing.S),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
+    ) {
+        BasicText(tool.title, style = HbTypography.Label, color = { colors.text.primary })
+        BasicText(tool.status.label(), style = HbTypography.Caption, color = { colors.text.secondary })
+        SelectionContainer {
+            Column {
+                tool.output.forEach {
+                    BasicText(it.displayText(), style = HbTypography.Code, color = { colors.text.primary })
+                }
+            }
+        }
     }
-    append(" ")
-    append(accent.body)
 }
 
-private data class AiStudioAccent(
-    val lead: String,
-    val body: String,
-)
+@Composable
+private fun AiStudioPermission(request: PendingPermission, onAction: (AiStudioAction) -> Unit) {
+    val colors = HbTheme.colors
+    Column(
+        Modifier.fillMaxWidth().clip(HbShapes.Medium).background(colors.status.warning.container).padding(HbSpacing.S),
+        verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+    ) {
+        BasicText("Нужно разрешение", style = HbTypography.Label, color = { colors.status.warning.foreground })
+        BasicText(request.description, style = HbTypography.Body, color = { colors.text.primary })
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.Xs),
+        ) {
+            request.options.forEach { option ->
+                HbButton(
+                    text = option.label,
+                    onClick = { onAction(AiStudioAction.AnswerPermission(request.requestId, option.id)) },
+                    variant = HbButtonVariant.Secondary,
+                )
+            }
+        }
+    }
+}
 
-private const val FlipDegrees = 180f
+private fun AiStudioScreenState.emptyChatLabel(): String = when {
+    !engineAvailable -> "DeepSeek Harness доступен в настольном приложении"
+    sessionStatus != null -> "Напишите первое сообщение в этом чате"
+    connected -> "Создайте чат или выберите сессию из списка"
+    else -> "Укажите рабочий каталог, чтобы начать чат"
+}
 
-private val heroMarkWidth = HbSpacing.Xl * 2 + HbSpacing.S
+private fun SessionContent.displayText(): String = when (this) {
+    is SessionContent.Text -> text
+    is SessionContent.Resource -> title ?: uri.takeUnless { it.startsWith("data:") } ?: mimeType.orEmpty()
+}
 
-private val heroTextMaxWidth = HbPaneGeometry.ReadingMax.dp - HbSpacing.Xl * 6
+private fun ToolOutput.displayText(): String = when (this) {
+    is ToolOutput.Content -> value.displayText()
+    is ToolOutput.Diff -> path
+    is ToolOutput.Terminal -> id
+}
 
-private const val UserMessage =
-    "Помоги придумать концепцию для AI-студии — современного рабочего пространства с доступом " +
-        "к нескольким моделям, агентам и инструментам. На чём стоит сделать акцент, чтобы это " +
-        "было по-настоящему полезным и удобным?"
-
-private val assistantAccents = listOf(
-    AiStudioAccent(
-        lead = "Мульти-модельная работа.",
-        body = "Быстрый доступ к разным моделям и удобное сравнение результатов в одном " +
-            "пространстве.",
-    ),
-    AiStudioAccent(
-        lead = "Агенты под задачи.",
-        body = "Настраиваемые агенты для повторяющихся процессов: исследования, анализ, " +
-            "написание, работа с данными и продуктовые задачи.",
-    ),
-    AiStudioAccent(
-        lead = "Расширяемость.",
-        body = "Плагины и интеграции с внешними сервисами (файлы, редакторы, данные, API), " +
-            "чтобы ИИ органично входил в существующий рабочий процесс.",
-    ),
-    AiStudioAccent(
-        lead = "Чистый и спокойный опыт.",
-        body = "Минималистичный, быстрый и понятный интерфейс, который помогает " +
-            "сосредоточиться на результате.",
-    ),
-)
+private fun ToolCallStatus.label(): String = when (this) {
+    ToolCallStatus.PENDING -> "Ожидает запуска"
+    ToolCallStatus.IN_PROGRESS -> "Выполняется"
+    ToolCallStatus.COMPLETED -> "Завершён"
+    ToolCallStatus.FAILED -> "Ошибка"
+    ToolCallStatus.CANCELLED -> "Отменён"
+}

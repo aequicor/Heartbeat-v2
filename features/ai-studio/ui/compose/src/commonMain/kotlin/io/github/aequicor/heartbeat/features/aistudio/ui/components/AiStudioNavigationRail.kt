@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
@@ -51,9 +49,7 @@ internal fun AiStudioNavigationRail(
         verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
     ) {
         Spacer(Modifier.height(HbSizes.paneHeaderHeight))
-        railDestinations.forEach { destination ->
-            AiStudioRailItem(destination = destination)
-        }
+        AiStudioRailItem()
         Spacer(Modifier.weight(1f))
         HbIconButton(
             contentDescription = "Настройки",
@@ -77,55 +73,30 @@ internal fun AiStudioNavigationRail(
 
 @Composable
 private fun AiStudioRailItem(
-    destination: AiStudioDestination,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
-    val contentColor = if (destination.selected) {
-        colors.selection.foreground
-    } else {
-        colors.text.secondary
-    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(HbShapes.Medium)
-            .background(if (destination.selected) colors.selection.background else Color.Transparent)
-            .selectable(
-                selected = destination.selected,
-                role = Role.Tab,
-                onClick = {},
-            )
+            .background(colors.selection.background)
             .padding(vertical = HbSpacing.Xs),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
     ) {
         AiStudioIcon(
-            glyph = destination.glyph,
+            glyph = AiStudioGlyph.Chat,
             modifier = Modifier.size(HbSizes.iconSize),
-            tint = contentColor,
+            tint = colors.selection.foreground,
         )
         BasicText(
-            text = destination.label,
+            text = "Чат",
             style = HbTypography.Metadata,
-            color = { contentColor },
+            color = { colors.selection.foreground },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
-
-private data class AiStudioDestination(
-    val label: String,
-    val glyph: AiStudioGlyph,
-    val selected: Boolean = false,
-)
-
-private val railDestinations = listOf(
-    AiStudioDestination(label = "Chat", glyph = AiStudioGlyph.Chat, selected = true),
-    AiStudioDestination(label = "Agents", glyph = AiStudioGlyph.Agents),
-    AiStudioDestination(label = "Prompts", glyph = AiStudioGlyph.Prompts),
-    AiStudioDestination(label = "Plugins", glyph = AiStudioGlyph.Plugins),
-    AiStudioDestination(label = "Models", glyph = AiStudioGlyph.Models),
-)

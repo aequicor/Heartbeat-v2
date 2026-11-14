@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbDivider
@@ -14,25 +18,23 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbNavigationMode
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
 import io.github.aequicor.heartbeat.designsystem.foundation.HbWorkspaceLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioNavigationRail
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioSidebar
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioWorkspace
 
-/**
- * AI studio workspace: navigation rail, conversation sidebar and the focused chat.
- *
- * The screen renders the agreed layout with sample content and owns no feature logic. Navigation,
- * search and composer actions are visual placeholders; a store and a presentation adapter will
- * supply them later without changing the structure. [avatarVisible] and [onOpenSettings] come from
- * the AI studio preferences and the feature root respectively.
- */
+/** Renders the studio snapshot and forwards user actions to its store. */
 @Composable
 fun AiStudioScreen(
+    state: AiStudioScreenState,
+    onAction: (AiStudioAction) -> Unit,
     avatarVisible: Boolean,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
+    var showChats by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = modifier
@@ -57,11 +59,31 @@ fun AiStudioScreen(
             }
             if (fit.sidebar) {
                 AiStudioSidebar(
+                    state = state,
+                    onAction = onAction,
+                    onClose = null,
                     modifier = Modifier.width(HbPaneGeometry.SidebarPreferred.dp),
                 )
                 HbDivider(vertical = true)
             }
-            AiStudioWorkspace(modifier = Modifier.weight(1f))
+            if (!fit.sidebar && showChats && state.connected) {
+                AiStudioSidebar(
+                    state = state,
+                    onAction = { action ->
+                        if (action is AiStudioAction.OpenChat || action == AiStudioAction.NewChat) showChats = false
+                        onAction(action)
+                    },
+                    onClose = { showChats = false },
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                AiStudioWorkspace(
+                    state = state,
+                    onAction = onAction,
+                    onShowChats = if (fit.sidebar) null else { { showChats = true } },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

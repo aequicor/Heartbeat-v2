@@ -6,8 +6,9 @@ import androidx.compose.runtime.getValue
 import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioSettings
 import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
 
@@ -21,13 +22,16 @@ class AiStudioComposeRenderer(
 
     @Composable
     override fun Render(component: FeatureRoot) {
-        require(component is AiStudioComponent) {
+        require(component is AiStudioComponent && component is AiStudioStore) {
             "Unexpected AI studio component: ${component::class}"
         }
 
         val avatarVisible by settings.avatarVisible.collectAsState()
+        val state by component.screenState.collectAsState()
 
         AiStudioScreen(
+            state = state,
+            onAction = component::dispatch,
             avatarVisible = avatarVisible,
             onOpenSettings = component::openSettings,
         )

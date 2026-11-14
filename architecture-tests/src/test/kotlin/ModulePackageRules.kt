@@ -58,13 +58,16 @@ internal object ModulePackageRules {
     }
 
     private fun featureViolation(module: List<String>, packageName: String): String? {
-        val feature = module[1]
+        val (feature, rest) = if (module == listOf("features", "engines", "dsh")) {
+            "dsh" to listOf("impl")
+        } else {
+            module[1] to module.drop(2)
+        }
         // A Gradle directory can use a hyphen, while a Kotlin package cannot: the feature
         // `features/ai-studio` declares the package segment `aistudio`.
         val packageFeature = feature.replace("-", "")
         val root = "$FEATURE_ROOT.$packageFeature"
         val modulePath = module.joinToString("/")
-        val rest = module.drop(2)
         val allowed = when (rest) {
             listOf("api") -> listOf("$root.api")
             // Roles only: the feature root itself is not a package of the implementation module,

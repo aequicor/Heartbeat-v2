@@ -4,7 +4,6 @@ import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
 
 /** Decompose root of the AI studio workspace. Screens stay private to the feature. */
 interface AiStudioComponent : FeatureRoot {
-
     /** Opens the settings shell. */
     fun openSettings()
 }

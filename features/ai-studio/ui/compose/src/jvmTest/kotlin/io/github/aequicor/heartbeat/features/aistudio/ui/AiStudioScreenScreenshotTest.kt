@@ -8,6 +8,17 @@ import androidx.compose.ui.unit.Density
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
+import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
+import io.github.aequicor.heartbeat.features.aiengine.api.session.PermissionOption
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -26,6 +37,7 @@ class AiStudioScreenScreenshotTest {
             name = "ai-studio-workspace",
             width = WIDE_WIDTH,
             height = WIDE_HEIGHT,
+            state = permissionState(),
         )
     }
 
@@ -35,6 +47,7 @@ class AiStudioScreenScreenshotTest {
             name = "ai-studio-workspace-compact",
             width = COMPACT_WIDTH,
             height = WIDE_HEIGHT,
+            state = AiStudioScreenState(engineAvailable = true),
         )
     }
 
@@ -53,6 +66,7 @@ class AiStudioScreenScreenshotTest {
         width: Int,
         height: Int,
         density: HbDensity = HbDensity.Dense,
+        state: AiStudioScreenState = AiStudioScreenState(),
     ) {
         val scene = ImageComposeScene(
             width = width,
@@ -64,6 +78,8 @@ class AiStudioScreenScreenshotTest {
                 density = density,
             ) {
                 AiStudioScreen(
+                    state = state,
+                    onAction = {},
                     avatarVisible = true,
                     onOpenSettings = {},
                 )
@@ -82,6 +98,38 @@ class AiStudioScreenScreenshotTest {
         } finally {
             scene.close()
         }
+    }
+
+    private fun permissionState(): AiStudioScreenState {
+        val tool = SessionTimelineItem.ToolCall("tool-read", "Чтение файлов проекта", ToolCallStatus.PENDING)
+        val permission = PendingPermission(
+            "request-read",
+            tool.id,
+            "Прочитать README.md",
+            listOf(PermissionOption("allow", "Разрешить один раз", "allow_once")),
+        )
+        val transcript = listOf(
+            SessionTimelineItem.UserMessage("user", listOf(SessionContent.Text("Проверь документацию проекта"))),
+            SessionTimelineItem.AgentMessage("agent", listOf(SessionContent.Text("Начну с README.md"))),
+            tool,
+        )
+        val engine = object : AiEngineKey {
+            override val id = "dsh"
+            override val name = "DeepSeek Harness"
+            override val description = "Тестовый движок"
+            override val connection = AiEngineConnection.ACP
+        }
+        val chat = SessionKey(engine, "documentation", title = "Документация проекта")
+        return AiStudioScreenState(
+            engineAvailable = true,
+            connection = AiEngineState.Ready,
+            directory = "C:\\Projects\\Heartbeat",
+            sessions = listOf(chat),
+            selected = chat,
+            sessionStatus = SessionStatus.AwaitingPermission(listOf(permission)),
+            timeline = transcript,
+            turnActive = true,
+        )
     }
 
     private companion object {

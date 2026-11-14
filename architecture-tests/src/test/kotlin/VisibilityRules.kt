@@ -14,10 +14,9 @@
  * feature module is an implementation detail and must be `internal`.
  *
  * This rule minimises the internal API; it does not replace the module boundary. The dependency
- * graph in `architectureCheck` forbids `impl -> impl` and `presentation -> impl` edges, so a
- * public domain model inside `impl` is not reachable from another module even while it stays
- * public for DI, tests or inline API. Requiring `internal` for every domain model would conflict
- * with those uses without making the boundary stronger.
+ * graph in `architectureCheck` forbids dependencies between feature implementations. AI Studio
+ * adapters may use the listed contracts in their own `impl`. The Store's mutable state and
+ * internal state model stay within that module.
  */
 internal object VisibilityRules {
 
@@ -48,6 +47,14 @@ internal object VisibilityRules {
     /** Modifiers of a value declaration that carries domain meaning. */
     private val modelModifiers = setOf("DATA", "SEALED", "ENUM", "VALUE")
 
+    private val aiStudioAdapterContracts = setOf(
+        "AiStudioAction",
+        "AiStudioScreenState",
+        "AiStudioSettings",
+        "AiStudioStore",
+        "AiStudioStoreFactory",
+    )
+
     /**
      * Returns the violation message, or `null` when the declaration may stay public.
      */
@@ -65,6 +72,8 @@ internal object VisibilityRules {
             role == null -> null
             // The api role is the feature's public surface, checked by `apiContractsArePublic`.
             NamingRules.isApiPackage(packageName) -> null
+            packageName == "io.github.aequicor.heartbeat.features.aistudio.presentation.contract" &&
+                declarationName in aiStudioAdapterContracts -> null
             role in metroRoles && metroAnnotations.any(annotations::contains) -> null
             role == listOf("domain", "repository") ->
                 repositoryContractViolation(declarationKind, declarationName)

@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
 import io.github.aequicor.heartbeat.features.aistudio.ui.settings.AiStudioSettingsPage
 import io.github.aequicor.heartbeat.navigation.compose.ComposeSettingsPageProvider
 
