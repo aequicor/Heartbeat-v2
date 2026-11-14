@@ -35,18 +35,18 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolOutput
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
 internal fun AiStudioTranscript(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
-    val items = state.session?.messages?.items.orEmpty()
-    val pending = (state.session?.status as? SessionStatus.AwaitingPermission)?.requests.orEmpty()
+    val items = state.timeline
+    val pending = (state.sessionStatus as? SessionStatus.AwaitingPermission)?.requests.orEmpty()
     val scroll = rememberScrollState()
     var previousEnd by remember { mutableIntStateOf(0) }
     LaunchedEffect(scroll.maxValue) {
@@ -151,9 +151,9 @@ private fun AiStudioPermission(request: PendingPermission, onAction: (AiStudioAc
     }
 }
 
-private fun AiStudioState.emptyChatLabel(): String = when {
+private fun AiStudioScreenState.emptyChatLabel(): String = when {
     !engineAvailable -> "DeepSeek Harness доступен в настольном приложении"
-    session != null -> "Напишите первое сообщение в этом чате"
+    sessionStatus != null -> "Напишите первое сообщение в этом чате"
     connected -> "Создайте чат или выберите сессию из списка"
     else -> "Укажите рабочий каталог, чтобы начать чат"
 }

@@ -3,8 +3,8 @@ package io.github.aequicor.heartbeat.features.aistudio.di
 import dev.zacsweers.metro.ContributesBinding
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioStore
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
 import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
 import kotlinx.coroutines.CoroutineScope
 

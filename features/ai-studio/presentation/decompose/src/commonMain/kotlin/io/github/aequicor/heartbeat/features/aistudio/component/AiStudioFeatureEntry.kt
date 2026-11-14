@@ -4,7 +4,7 @@ import com.arkivanov.decompose.ComponentContext
 import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
 import io.github.aequicor.heartbeat.navigation.api.AppRoute
 import io.github.aequicor.heartbeat.navigation.decompose.DecomposeFeatureEntry
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost

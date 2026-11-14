@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
 import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
@@ -26,7 +26,7 @@ class AiStudioComposeRenderer(
         }
 
         val avatarVisible by settings.avatarVisible.collectAsState()
-        val state by component.store.state.collectAsState()
+        val state by component.store.screenState.collectAsState()
 
         AiStudioScreen(
             state = state,

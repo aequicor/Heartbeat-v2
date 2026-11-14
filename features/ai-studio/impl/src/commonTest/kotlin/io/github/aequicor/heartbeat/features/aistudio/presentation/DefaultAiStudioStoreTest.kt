@@ -21,7 +21,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -57,11 +57,13 @@ internal class DefaultAiStudioStoreTest {
         assertTrue(store.state.value.connected)
         assertEquals(SessionListConfig.ByProject(Workspace, workingDirectory = Workspace), agent.listing)
         assertEquals(listOf(agent.saved), store.state.value.sessions)
+        assertTrue(store.screenState.value.hasMoreSessions)
 
         store.dispatch(AiStudioAction.LoadMoreSessions)
         runCurrent()
         assertEquals("page-2", agent.listing?.cursor)
         assertEquals(listOf(agent.saved, agent.other), store.state.value.sessions)
+        assertFalse(store.screenState.value.hasMoreSessions)
 
         store.dispatch(AiStudioAction.OpenChat(agent.saved))
         runCurrent()
@@ -94,6 +96,7 @@ internal class DefaultAiStudioStoreTest {
         session.state.value = session.state.value.copy(status = SessionStatus.AwaitingPermission(listOf(permission)))
         runCurrent()
         assertIs<SessionStatus.AwaitingPermission>(store.state.value.session?.status)
+        assertEquals(SessionStatus.AwaitingPermission(listOf(permission)), store.screenState.value.sessionStatus)
         store.dispatch(AiStudioAction.AnswerPermission(permission.requestId, "allow"))
         store.dispatch(AiStudioAction.CancelTurn)
         runCurrent()
@@ -115,6 +118,7 @@ internal class DefaultAiStudioStoreTest {
         runCurrent()
         assertEquals("", store.state.value.draft)
         assertEquals(response, store.state.value.session?.messages?.items?.last())
+        assertEquals(response, store.screenState.value.timeline.last())
         assertFalse(store.state.value.busy)
     }
 

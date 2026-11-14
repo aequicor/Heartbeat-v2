@@ -16,11 +16,11 @@ configure<SqlDelightExtension> {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        implementation(project(":features:ai-studio:api"))
+        api(project(":features:ai-engine:api"))
+        api(libs.kotlinx.coroutines.core)
         implementation(project(":features:ai-engine-facade:api"))
         implementation(project(":di:api"))
         implementation(project(":core:preferences:api"))
-        implementation(libs.kotlinx.coroutines.core)
         implementation(libs.okio)
     }
     sourceSets.commonTest.dependencies {

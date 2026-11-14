@@ -186,7 +186,8 @@ class ArchitectureTest {
     @Test
     fun featureLayersFollowImportDirection() {
         val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
-        (featureScope - adapter).assertArchitecture {
+        val studio = Konsist.scopeFromProduction(moduleName = ":features:ai-studio..")
+        (featureScope - adapter - studio).assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domain = Layer("Domain", rolePattern("domain"))
             val data = Layer("Data", rolePattern("data"))
@@ -201,10 +202,34 @@ class ArchitectureTest {
             presentation.dependsOn(domain, api)
             di.dependsOn(api, domain, presentation)
             component.dependsOn(api)
-            // Compose UI renders the feature's own Decompose adapter, so it may depend on the
-            // component role. The module-level allowlist still rejects another feature's adapter.
             ui.dependsOn(api, component)
         }
+    }
+
+    @Test
+    fun aiStudioAdaptersUseImplContracts() {
+        Konsist.scopeFromProduction(moduleName = ":features:ai-studio..").assertArchitecture {
+            val api = Layer("API", rolePattern("api"))
+            val presentation = Layer("Presentation", rolePattern("presentation"))
+            val di = Layer("DI", rolePattern("di"))
+            val component = Layer("Component", rolePattern("component"))
+            val ui = Layer("UI", rolePattern("ui"))
+
+            api.dependsOnNothing()
+            presentation.dependsOn(api)
+            di.dependsOn(api, presentation)
+            component.dependsOn(api, presentation)
+            ui.dependsOn(api, component, presentation)
+        }
+    }
+
+    @Test
+    fun aiStudioApiContainsOnlyRoutes() {
+        val api = Konsist.scopeFromProduction(moduleName = ":features:ai-studio:api")
+        val declarations = api.files.flatMap {
+            it.declarations(includeNested = false, includeLocal = false)
+        }.filter { it.kind() != DeclarationKind.OTHER }
+        Assert.assertEquals(listOf("AiStudioRoutes"), declarations.map { it.nameOrNull() })
     }
 
     @Test

@@ -1,4 +1,4 @@
-package io.github.aequicor.heartbeat.features.aistudio.api
+package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 
 import kotlinx.coroutines.flow.StateFlow
 

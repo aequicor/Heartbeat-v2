@@ -18,8 +18,8 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbNavigationMode
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
 import io.github.aequicor.heartbeat.designsystem.foundation.HbWorkspaceLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioNavigationRail
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioSidebar
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioWorkspace
@@ -27,7 +27,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioWork
 /** Renders the studio snapshot and forwards user actions to its store. */
 @Composable
 fun AiStudioScreen(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     avatarVisible: Boolean,
     onOpenSettings: () -> Unit,

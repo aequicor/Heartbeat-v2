@@ -69,6 +69,16 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun aiStudioImplIsAvailableToItsOwnAdapters() {
+        val impl = ":features:ai-studio:impl"
+        assertNull(ArchitectureRules.projectDependencyViolation(":features:ai-studio:presentation:decompose", impl))
+        assertNull(ArchitectureRules.projectDependencyViolation(":features:ai-studio:ui:compose", impl))
+        assertNotNull(ArchitectureRules.projectDependencyViolation(":features:editor:ui:compose", impl))
+        assertNotNull(ArchitectureRules.projectDependencyViolation(":features:editor:presentation:decompose", impl))
+        assertNotNull(ArchitectureRules.projectDependencyViolation(":features:ai-studio:api", impl))
+    }
+
+    @Test
     fun apiMustNotDependOnImpl() {
         assertEquals(
             "api modules depend only on api contracts and core",

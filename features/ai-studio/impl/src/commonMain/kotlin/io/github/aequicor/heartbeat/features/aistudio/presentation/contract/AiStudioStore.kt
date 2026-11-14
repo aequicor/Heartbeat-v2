@@ -1,10 +1,10 @@
-package io.github.aequicor.heartbeat.features.aistudio.api
+package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 
 public interface AiStudioStore {
-    public val state: StateFlow<AiStudioState>
+    public val screenState: StateFlow<AiStudioScreenState>
 
     public fun dispatch(action: AiStudioAction)
 }

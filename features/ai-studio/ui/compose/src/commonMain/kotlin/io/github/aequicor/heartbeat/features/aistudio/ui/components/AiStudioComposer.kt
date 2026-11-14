@@ -20,11 +20,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
-internal fun AiStudioComposerBar(state: AiStudioState, onAction: (AiStudioAction) -> Unit) {
+internal fun AiStudioComposerBar(state: AiStudioScreenState, onAction: (AiStudioAction) -> Unit) {
     Box(Modifier.fillMaxWidth().padding(HbSpacing.M), contentAlignment = Alignment.Center) {
         Column(
             Modifier.widthIn(max = HbPaneGeometry.ReadingMax.dp).fillMaxWidth(),
@@ -40,7 +40,7 @@ internal fun AiStudioComposerBar(state: AiStudioState, onAction: (AiStudioAction
                 singleLine = false,
                 maxLines = ComposerMaxLines,
             )
-            val failure = state.session?.status as? SessionStatus.Failed
+            val failure = state.sessionStatus as? SessionStatus.Failed
             if (failure != null) {
                 val colors = HbTheme.colors
                 BasicText(failure.reason, style = HbTypography.Body, color = { colors.status.error.foreground })

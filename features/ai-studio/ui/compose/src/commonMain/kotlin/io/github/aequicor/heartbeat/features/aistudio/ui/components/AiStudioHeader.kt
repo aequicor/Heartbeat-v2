@@ -19,12 +19,12 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
 internal fun AiStudioHeader(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     onShowChats: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -80,7 +80,7 @@ internal fun AiStudioHeader(
 }
 
 @Composable
-private fun AiStudioConnectionControls(state: AiStudioState, onAction: (AiStudioAction) -> Unit) {
+private fun AiStudioConnectionControls(state: AiStudioScreenState, onAction: (AiStudioAction) -> Unit) {
     HbTextField(
         value = state.directory,
         onValueChange = { onAction(AiStudioAction.EditDirectory(it)) },
@@ -98,7 +98,7 @@ private fun AiStudioConnectionControls(state: AiStudioState, onAction: (AiStudio
     )
 }
 
-private fun AiStudioState.connectionLabel(): String = if (!engineAvailable) {
+private fun AiStudioScreenState.connectionLabel(): String = if (!engineAvailable) {
     "Движок недоступен"
 } else {
     when (connection) {

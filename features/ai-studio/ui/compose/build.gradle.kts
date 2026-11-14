@@ -7,6 +7,7 @@ kotlin {
     sourceSets.commonMain.dependencies {
         implementation(project(":designsystem:compose:components"))
         implementation(project(":features:ai-studio:api"))
+        implementation(project(":features:ai-studio:impl"))
         implementation(project(":features:ai-studio:presentation:decompose"))
         implementation(project(":features:settings:api"))
         implementation(project(":navigation:decompose-compose"))

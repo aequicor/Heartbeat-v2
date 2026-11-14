@@ -7,12 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.components.HbDivider
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
 internal fun AiStudioWorkspace(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     onShowChats: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -23,7 +23,7 @@ internal fun AiStudioWorkspace(
         key(state.selected) {
             AiStudioTranscript(state, onAction, Modifier.weight(1f).fillMaxWidth())
         }
-        if (state.session != null) {
+        if (state.sessionStatus != null) {
             AiStudioComposerBar(state, onAction)
         }
     }

@@ -10,12 +10,13 @@ import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.HistorySyncStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
@@ -71,7 +72,7 @@ class DesktopDshGraphTest {
         val existingProcesses = descendants().toSet()
         studio.dispatch(AiStudioAction.EditDirectory(workspace.toString()))
         studio.dispatch(AiStudioAction.Connect)
-        val connection = studio.state.first {
+        val connection = studio.screenState.first {
             !it.busy && (it.connected || it.error != null || it.connection is AiEngineState.Failed)
         }
         assertTrue(connection.connected, "Studio connection failed: ${connection.error ?: connection.connection}")
@@ -83,15 +84,15 @@ class DesktopDshGraphTest {
         val minimumCount = if (System.getProperty("os.name").startsWith("Windows")) 2 else 1
         assertTrue(processes.size >= minimumCount)
         studio.dispatch(AiStudioAction.Disconnect)
-        studio.state.first { !it.busy && it.connection == AiEngineState.NotInitialized }
+        studio.screenState.first { !it.busy && it.connection == AiEngineState.NotInitialized }
         processes.forEach { it.onExit().await() }
     }
 
     private suspend fun verifySessionResume(engine: AiEngine, studio: AiStudioStore, workspace: Path) {
         studio.dispatch(AiStudioAction.NewChat)
-        val created = checkNotNull(studio.state.first { !it.busy && it.selected != null }.selected)
+        val created = checkNotNull(studio.screenState.first { !it.busy && it.selected != null }.selected)
         engine.closeSession(created)
-        studio.state.first { it.session?.status == SessionStatus.Closed }
+        studio.screenState.first { it.sessionStatus == SessionStatus.Closed }
 
         val project = SessionListConfig.ByProject("test-project", workingDirectory = workspace.toString())
         val listed = engine.getListSessions(project).sessions.single()
@@ -101,11 +102,11 @@ class DesktopDshGraphTest {
         assertTrue(engine.getListSessions(otherProject).sessions.isEmpty())
 
         studio.dispatch(AiStudioAction.OpenChat(listed))
-        val resumed = studio.state.first { !it.busy && it.session?.status == SessionStatus.Idle }
-        val timeline = checkNotNull(resumed.session).messages
+        val resumed = studio.screenState.first { !it.busy && it.sessionStatus == SessionStatus.Idle }
         assertEquals(created, resumed.selected)
-        assertEquals(HistorySyncStatus.LOCAL_ONLY, timeline.sync)
-        assertTrue(timeline.items.isEmpty())
+        assertTrue(resumed.timeline.isEmpty())
+        val session = engine.getOrCreateSession(SessionConfig(workspace.toString()), listed)
+        assertEquals(HistorySyncStatus.LOCAL_ONLY, session.state.value.messages.sync)
     }
 
     private fun descendants(): List<ProcessHandle> =

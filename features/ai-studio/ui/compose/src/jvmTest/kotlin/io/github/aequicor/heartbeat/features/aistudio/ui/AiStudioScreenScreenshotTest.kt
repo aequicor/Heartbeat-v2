@@ -11,18 +11,14 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
-import io.github.aequicor.heartbeat.features.aiengine.api.session.HistorySyncStatus
-import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindow
-import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindowCursor
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PermissionOption
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
 import kotlin.test.Test
@@ -51,7 +47,7 @@ class AiStudioScreenScreenshotTest {
             name = "ai-studio-workspace-compact",
             width = COMPACT_WIDTH,
             height = WIDE_HEIGHT,
-            state = AiStudioState(engineAvailable = true),
+            state = AiStudioScreenState(engineAvailable = true),
         )
     }
 
@@ -70,7 +66,7 @@ class AiStudioScreenScreenshotTest {
         width: Int,
         height: Int,
         density: HbDensity = HbDensity.Dense,
-        state: AiStudioState = AiStudioState(),
+        state: AiStudioScreenState = AiStudioScreenState(),
     ) {
         val scene = ImageComposeScene(
             width = width,
@@ -104,7 +100,7 @@ class AiStudioScreenScreenshotTest {
         }
     }
 
-    private fun permissionState(): AiStudioState {
+    private fun permissionState(): AiStudioScreenState {
         val tool = SessionTimelineItem.ToolCall("tool-read", "Чтение файлов проекта", ToolCallStatus.PENDING)
         val permission = PendingPermission(
             "request-read",
@@ -124,16 +120,15 @@ class AiStudioScreenScreenshotTest {
             override val connection = AiEngineConnection.ACP
         }
         val chat = SessionKey(engine, "documentation", title = "Документация проекта")
-        return AiStudioState(
+        return AiStudioScreenState(
             engineAvailable = true,
             connection = AiEngineState.Ready,
             directory = "C:\\Projects\\Heartbeat",
             sessions = listOf(chat),
             selected = chat,
-            session = SessionState(
-                SessionStatus.AwaitingPermission(listOf(permission)),
-                MessageWindow(transcript, MessageWindowCursor(), HistorySyncStatus.LOCAL_ONLY),
-            ),
+            sessionStatus = SessionStatus.AwaitingPermission(listOf(permission)),
+            timeline = transcript,
+            turnActive = true,
         )
     }
 

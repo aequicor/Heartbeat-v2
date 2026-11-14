@@ -10,16 +10,19 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AiStudioState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -38,7 +41,10 @@ internal class DefaultAiStudioStore(
     private var session: Session? = null
     private var sessionObserver: Job? = null
 
-    override val state = mutableState.asStateFlow()
+    val state = mutableState.asStateFlow()
+    override val screenState = state
+        .map(AiStudioState::toScreenState)
+        .stateIn(scope, SharingStarted.Eagerly, state.value.toScreenState())
 
     override fun dispatch(action: AiStudioAction) {
         scope.launch {

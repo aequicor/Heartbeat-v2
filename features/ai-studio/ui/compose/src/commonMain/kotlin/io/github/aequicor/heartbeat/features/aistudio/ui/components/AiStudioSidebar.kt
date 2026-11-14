@@ -26,12 +26,12 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 
 @Composable
 internal fun AiStudioSidebar(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     onClose: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -73,7 +73,7 @@ internal fun AiStudioSidebar(
 
 @Composable
 private fun AiStudioSessionList(
-    state: AiStudioState,
+    state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -96,7 +96,7 @@ private fun AiStudioSessionList(
                 onClick = { onAction(AiStudioAction.OpenChat(chat)) },
             )
         }
-        if (state.nextCursor != null) {
+        if (state.hasMoreSessions) {
             item {
                 HbButton(
                     "Показать ещё",

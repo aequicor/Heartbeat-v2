@@ -1,4 +1,4 @@
-package io.github.aequicor.heartbeat.features.aistudio.api
+package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 
