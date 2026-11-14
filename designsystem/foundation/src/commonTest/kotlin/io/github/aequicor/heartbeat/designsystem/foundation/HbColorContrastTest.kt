@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 /**
  * Contrast checks of the named token pairs (HB-DS-005). The palette carries the WCAG formulas, so
  * the contract is validated here instead of in a renderer test; the documented ratios are the
- * values recorded in `docs/specs/design-system.md`.
+ * values recorded in `design/design-system.md`.
  */
 class HbColorContrastTest {
 

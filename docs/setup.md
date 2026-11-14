@@ -66,3 +66,25 @@ Desktop-приложение работает на JVM и использует C
    `io.github.aequicor.heartbeat`.
 
 iOS собирается из проекта Xcode, а не через Gradle.
+
+<a id="design"></a>
+
+## Работа с дизайном
+
+Репозиторий [Heartbeat-design](https://github.com/aequicor/Heartbeat-design) содержит макеты Pencil,
+правила для агентов и спецификацию дизайн-системы. Для работы с ними используй общий локальный клон.
+
+1. Выполни `git worktree list` из любого worktree Heartbeat-v2. Первая строка показывает путь к
+   основному checkout.
+2. Из корня основного checkout выполни команду один раз, если общего клона ещё нет.
+
+   ```shell
+   git clone https://github.com/aequicor/Heartbeat-design.git ../Heartbeat-design
+   ```
+
+3. Из любого worktree открывай макеты Pencil по пути к этому клону. Публикуй изменения через PR
+   в `Heartbeat-design`.
+
+Подмодуль `design/` фиксирует версию дизайна для коммита Heartbeat-v2. Для просмотра этой версии из
+корня основного checkout выполни `git submodule update --init -- design`. После слияния PR в
+`Heartbeat-design` обнови ссылку на нужный коммит подмодуля в PR Heartbeat-v2.
