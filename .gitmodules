@@ -1,3 +1,4 @@
 [submodule "design"]
 	path = design
 	url = https://github.com/aequicor/Heartbeat-design.git
+	ignore = all
