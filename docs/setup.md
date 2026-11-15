@@ -85,6 +85,8 @@ iOS собирается из проекта Xcode, а не через Gradle.
 3. Из любого worktree открывай макеты Pencil по пути к этому клону. Публикуй изменения через PR
    в `Heartbeat-design`.
 
-Подмодуль `design/` фиксирует версию дизайна для коммита Heartbeat-v2. Для просмотра этой версии из
-корня основного checkout выполни `git submodule update --init -- design`. После слияния PR в
-`Heartbeat-design` обнови ссылку на нужный коммит подмодуля в PR Heartbeat-v2.
+При первой инициализации подмодуля `design/` выполни `git submodule update --init -- design` из корня
+Heartbeat-v2. Git извлечёт закреплённый коммит. Для дальнейшей работы выбирай нужную ветку внутри
+`design/`, например `git -C design switch master`. Смена коммита подмодуля скрыта из обычного списка
+изменений Heartbeat-v2. Чтобы вручную закрепить другой коммит для новых checkout, выполни
+`git add --force -- design`.
