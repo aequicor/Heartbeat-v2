@@ -11,7 +11,7 @@ Treat complete Gradle output as a temporary, sensitive artifact. Every
 agent-initiated Gradle command runs through the compact-output wrapper; never
 stream, `tee`, paste, or reopen a full build log.
 
-Every `create`, `run`, `status`, `recover`, and `finish` invocation is the entire shell command for
+Every `create`, `run`, `status`, `observe`, `recover`, and `finish` invocation is the entire shell command for
 that tool call. Prefixes, assignments, conditionals, pipes, command chains, and
 follow-up inspection invalidate lifecycle evidence even when Gradle succeeds.
 
@@ -52,6 +52,17 @@ follow-up inspection invalidate lifecycle evidence even when Gradle succeeds.
    start time, working directory, command and question. `result` is the latest
    stored bounded terminal summary, identified by `result_sequence`; while a
    new run is active it may describe the previous run. Status never opens logs.
+   To verify a known stdout/stderr marker while a task is running or after it
+   completes, use the sequence from status and a literal specific to that run:
+
+   ```sh
+   python3 <skill-dir>/scripts/gradle_run.py observe --workflow <id> \
+     --sequence <n> --contains "Heartbeat started"
+   ```
+
+   `matched` reports whether the literal was present at the time of the query.
+   Verify task listings the same way even if warnings fill the summary. A match
+   establishes output only; use status for the exit result. Observe before finish.
    Poll status on `running`. The run's held owner lock supplies activity
    evidence unless recovery holds it. PIDs provide identity only.
    Unrelated workflow lock contention leaves an abandoned run `uncertain`.

@@ -57,8 +57,18 @@ SECRET_ASSIGNMENT = re.compile(
 URL_PASSWORD = re.compile(r"(://[^:/\s]+:)([^@\s]+)(@)")
 
 
-def default_root() -> Path:
-    return Path(tempfile.gettempdir()) / "gradle-run"
+def default_root(workflow: str | None = None) -> Path:
+    legacy = Path(tempfile.gettempdir()) / "gradle-run"
+    if not sys.platform.startswith("linux"):
+        return legacy
+    uid = os.getuid()
+    private = legacy.with_name(f"gradle-run-{uid}")
+    # A pre-upgrade run or finish tombstone stays addressable by its original ID.
+    if workflow and WORKFLOW_ID.fullmatch(workflow):
+        if not legacy.is_symlink() and legacy.is_dir() and legacy.stat().st_uid == uid:
+            if (legacy / workflow).is_dir() or finished_path(legacy, workflow).is_file():
+                return legacy
+    return private
 
 
 def normalize(text: str) -> str:
@@ -1135,6 +1145,32 @@ def status_workflow(root: Path, workflow: str) -> int:
     return 0
 
 
+def observe_output(root: Path, workflow: str, sequence: int, literal: str) -> int:
+    needle = literal.encode("utf-8")
+    if sequence < 1 or not 1 <= len(needle) <= 512 or not literal.isprintable():
+        raise ValueError("observe requires a positive sequence and a printable literal of 1 to 512 bytes")
+    log = workflow_path(root, workflow) / f"{sequence:04d}.log"
+    if log.is_symlink() or not log.is_file():
+        raise ValueError("run output is unavailable")
+    matched = False
+    with log.open("rb") as stream:
+        # Snapshot the length so a growing live log cannot keep this query running.
+        remaining = os.fstat(stream.fileno()).st_size
+        overlap = b""
+        while remaining:
+            block = stream.read(min(65536, remaining))
+            if not block:
+                break
+            remaining -= len(block)
+            window = overlap + block
+            if needle in window:
+                matched = True
+                break
+            overlap = window[max(0, len(window) - len(needle) + 1):]
+    emit_summary({"workflow": workflow, "sequence": sequence, "matched": matched})
+    return 0
+
+
 def finish_locked(root: Path, workflow: str) -> int:
     directory = workflow_path(root, workflow)
     tombstone = finished_path(root, workflow)
@@ -1156,7 +1192,7 @@ def finish_locked(root: Path, workflow: str) -> int:
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--root", type=Path, default=default_root())
+    result.add_argument("--root", type=Path)
     commands = result.add_subparsers(dest="operation", required=True)
     commands.add_parser("create")
     run = commands.add_parser("run")
@@ -1168,6 +1204,10 @@ def parser() -> argparse.ArgumentParser:
     finish.add_argument("--workflow", required=True)
     status = commands.add_parser("status")
     status.add_argument("--workflow", required=True)
+    observe = commands.add_parser("observe")
+    observe.add_argument("--workflow", required=True)
+    observe.add_argument("--sequence", type=int, required=True)
+    observe.add_argument("--contains", required=True)
     recover = commands.add_parser("recover")
     recover.add_argument("--workflow", required=True)
     recover.add_argument("--sequence", type=int, required=True)
@@ -1179,6 +1219,10 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     arguments = parser().parse_args()
     try:
+        if arguments.root is None:
+            arguments.root = default_root(getattr(arguments, "workflow", None))
+        if arguments.operation == "observe":
+            return observe_output(arguments.root, arguments.workflow, arguments.sequence, arguments.contains)
         if arguments.operation == "create":
             return create_workflow(arguments.root)
         if arguments.operation == "run":
@@ -1188,7 +1232,7 @@ def main() -> int:
         if arguments.operation == "recover":
             return recover_workflow(arguments.root, arguments)
         return finish_workflow(arguments.root, arguments.workflow)
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 2
 

@@ -126,6 +126,56 @@ class GradleRunTestCase(unittest.TestCase):
 
 
 class GradleRunProcessTest(GradleRunTestCase):
+    def test_observe_finds_a_live_marker_and_keeps_other_output_private(self) -> None:
+        workflow = self.create_workflow()
+        gate = self.root.parent / "close-window"
+        code = (
+            "import os, sys, time\n"
+            "print('x' * 65533 + 'Heartbeat started', flush=True)\n"
+            f"while not os.path.exists({str(gate)!r}): time.sleep(0.02)\n"
+            "print('warning: sample deprecation')"
+        )
+        args = [sys.executable, str(SCRIPT), "--root", str(self.root), "run",
+                "--workflow", workflow, "--scope", "targeted", "--question", "Did desktop start?",
+                "--", str(self.gradle), "--", sys.executable, "-c", code]
+        with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as process:
+            try:
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    result = self.invoke("observe", "--workflow", workflow, "--sequence", "1",
+                                         "--contains", "Heartbeat started")
+                    if result.returncode == 0 and json.loads(result.stdout)["matched"]:
+                        break
+                    time.sleep(0.02)
+                else:
+                    self.fail("startup marker was unavailable during the run")
+                self.assertIsNone(process.poll())
+                self.assertNotIn("xxx", result.stdout)
+            finally:
+                gate.touch()
+                summary, stderr = process.communicate(timeout=5)
+        self.assertEqual(process.returncode, 0, stderr)
+        self.assertIn("warning: sample deprecation", json.loads(summary)["excerpt"])
+        for marker, expected in [("Heartbeat started", True), ("unknown task", False)]:
+            result = self.invoke("observe", "--workflow", workflow, "--sequence", "1", "--contains", marker)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["matched"], expected)
+
+    @unittest.skipUnless(hasattr(os, "getuid"), "requires POSIX user IDs")
+    def test_linux_default_is_private_and_existing_run_remains_addressable(self) -> None:
+        with mock.patch.object(sys, "platform", "linux"), mock.patch.object(
+            tempfile, "gettempdir", return_value=str(self.root.parent)
+        ):
+            private = GRADLE_RUN.default_root()
+            with mock.patch.object(os, "getuid", return_value=os.getuid() + 1):
+                self.assertNotEqual(private, GRADLE_RUN.default_root())
+            legacy = self.root.parent / "gradle-run"
+            self.root = legacy
+            workflow = self.create_workflow()
+            self.assertEqual(GRADLE_RUN.default_root(workflow), legacy)
+            self.assertEqual(self.invoke("finish", "--workflow", workflow).returncode, 0)
+            self.assertEqual(GRADLE_RUN.default_root(workflow), legacy)
+
     def test_large_output_is_saved_but_stdout_is_bounded(self) -> None:
         workflow = self.create_workflow()
         payload = "x" * 200_000
