@@ -7,7 +7,9 @@ never selects a queue or expands a delegated scope.
 
 ## Procedure
 
-1. Verify scope and boundaries once. A verified handoff authorizes continuing
+1. Verify scope, plan approval, and repository PR policy. In Heartbeat follow
+   `.github/AGENTS.md`: open the empty draft PR after approval, push each verified
+   logical commit, and update its checklist. Reuse the draft through final review. A verified handoff authorizes continuing
    in-scope implementation, testing and repairs in the isolated checkout;
    require no per-file or per-stage permission packets. Reuse valid plans,
    reviews and checks. Require earlier independent review only for a concrete
@@ -39,12 +41,13 @@ never selects a queue or expands a delegated scope.
    coverage. Return findings to the implementation owner; at the repaired head,
    renew affected checks and review changed ranges and interactions. Broaden only when impact cannot
    be bounded or an explicit requirement demands it. Confirm combined coverage
-   of the final clean head before pushing. If current verification establishes
+   of the final clean head before marking the PR ready for review. If current verification establishes
    full acceptance and the final diff is empty, report `no-change` and route to
    [verified no-change closure](provider-bindings.md#verified-no-change-closure)
    before any PR operation. The delegated owner returns evidence to the
    controller. A starting empty diff alone supplies no acceptance evidence.
-   For a nonempty diff, open or update one draft change request through the
+   Update the existing draft or, where the repository defers PR creation,
+   open a draft for a nonempty diff through the
    code-host binding and verify its head is the reviewed head. Apply
    [PR review timing](pr-review-timing.md): start applicable external review
    while CI runs, using verified draft support or earlier PR readiness when
@@ -55,7 +58,7 @@ never selects a queue or expands a delegated scope.
 4. `shepherd` coordinates CI, feedback and change-request operations through
    the selected code-host binding. Keep repairs with their
    implementation owner; renew affected checks and focused review at the
-   repaired head before pushing. Routine implementation or fixture corrections preserving
+   repaired head according to the repository's publication sequence. Routine implementation or fixture corrections preserving
    requirements, coverage, architecture and authority proceed under the existing
    approval; record them briefly. Material changes require the appropriate
    decision and replan before affected work continues. Weakened qualification

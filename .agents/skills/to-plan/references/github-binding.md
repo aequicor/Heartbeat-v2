@@ -37,7 +37,9 @@ verification.
    parents, blockers and outcomes, linked/closing PRs and current open state.
    For a verified direct-issue controller handoff, apply
    [Direct issue planning readiness](#direct-issue-planning-readiness) instead of
-   the role prerequisite below. For ordinary standalone or board planning,
+   the role prerequisite below. For a standalone local draft of an explicitly
+   named open GitHub issue, check its scope and blockers. Publication and board
+   execution retain their own authority checks. For board planning,
    require the open issue to carry the human-applied
    resolved agent-work role, conventionally `ready-for-agent`, with no
    contradictory next-action roles;
@@ -96,7 +98,8 @@ retains its trusted configuration, leases and merge/closure policy.
 2. **Code-host open/update:** Resolve the exact repository and base, authenticate
    permissions, and find the existing PR for the supplied branch before create.
    Prefer the connector, falling back to `gh pr`/GraphQL. Create one draft PR
-   for the reviewed nonempty diff or update the verified existing PR; refetch
+   for the reviewed nonempty diff when the repository defers creation, or open the empty draft after plan
+   approval when required by the repository. Update the verified existing PR; refetch
    repository, URL/node ID, base, head SHA, draft state and complete body. After
    an ambiguous write, reconcile Remote reconciliation before retrying. Never
    replace an existing PR or overwrite unrelated human body edits.

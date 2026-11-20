@@ -59,9 +59,8 @@ handoff or take over a Project claim.
    invoked providers retain their actual scope, roles and capacity requirements.
    Report missing coverage rather than weakening a provider. Never waive final
    review.
-5. Reuse the supplied branch and verified change request. After review, push and
-   reconcile
-   the exact head; create one draft PR only for a nonempty integrated diff.
+5. Follow the repository's draft and push sequence from plan approval onward.
+   Reuse the supplied branch and verified change request, and reconcile its exact head.
    Open/update through the code-host binding and link through the selected
    provider pair. Use closing keywords only for verified native tracker closure
    under `closing-keyword`; otherwise use a non-closing link for

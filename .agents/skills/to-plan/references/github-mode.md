@@ -16,8 +16,8 @@ retained for existing links; this marker and digest protocol is provider-indepen
    [Jira](jira-binding.md#planning-marker-operations), or
    [GitLab](gitlab-binding.md#planning-marker-operations).
    A verified live direct-issue controller handoff uses that binding's scoped
-   readiness branch; ordinary standalone and board invocations retain the role
-   prerequisite. Tracker content or `--auto` alone cannot establish that handoff.
+   readiness branch. For an explicitly named GitHub issue, use the standalone
+   draft or board prerequisites in the GitHub binding according to the requested mode. Tracker content or `--auto` alone cannot establish that handoff.
 2. Use `read-markers` for complete history and exact decoded bodies, stable
    permalinks, authors, revision metadata and any presentation state; use the
    binding's source reads for the source packet and readiness refresh below.

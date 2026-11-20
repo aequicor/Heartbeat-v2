@@ -1,11 +1,11 @@
 ---
 name: deliver-issue
 description: Use when explicitly asked to deliver a named tracker issue and its descendants, including clarification, planning, implementation and reviewed delivery.
-disable-model-invocation: true
-compatibility: "Requires a supported tracker/code-host binding and independent final review; never installs providers."
 ---
 
 # Deliver issue
+
+Requires a supported tracker/code-host binding and independent final review; never installs providers.
 
 ## Core principle
 
@@ -14,9 +14,8 @@ permissions; one controller retains ownership from clarification through closure
 
 ## Procedure
 
-1. Resolve the named tracker issue against the verified repository. Local specs
-   belong to the external `implement` workflow: return that route without creating
-   an issue or executing delivery. Use `run-project` for board selection.
+1. Resolve the named tracker issue against the verified repository. For a local specification without a tracker issue, follow the
+   repository's implementation workflow and its plan approval rules. Use `run-project` for board selection.
 2. For an active board controller's verified single-ticket handoff, read the
    bundled [controller handoff](references/project-handoff.md) and follow it
    instead of standalone control. Inherit only the selected ticket scope, never

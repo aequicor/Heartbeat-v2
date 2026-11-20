@@ -8,8 +8,8 @@ description: "Use when asked to shepherd, babysit, monitor, or poll open pull re
 ## Core principle
 
 Keep an authorized PR or MR moving with evidence, not noise: poll, act on new
-actionable items, batch each target's local fixes into one push, then resolve
-addressed threads. Use affected local checks during repairs and required full
+actionable items, batch each target's local fixes into one push, then report
+addressed threads to the repository's designated review owner. Use affected local checks during repairs and required full
 checks on meaningful integrated candidates; use CI as confirmation. Never merge without explicit
 authority.
 
@@ -84,7 +84,7 @@ Do not start persistent polling for a one-off inspection, no open targets, or an
    CI-supplied full suite gates acceptance or merge instead. Reassess evidence
    after each head change under PR review timing; renew affected independent
    review before pushing repairs.
-   Reply after an addressed change or answer; resolve its thread only after the reply and required push succeed.
+   Reply after an addressed change or answer; follow repository rules for thread resolution. In Heartbeat the owner resolves discussions.
    Do not combine heads, push after every comment, resolve a local-only fix, or comment when nothing changed.
 7. Recheck CI after the verified repair push; return to step 6 on another
    code-related failure. Retry a suspected flaky GitLab job once without code
@@ -92,7 +92,9 @@ Do not start persistent polling for a one-off inspection, no open targets, or an
    active repair every 30–60 seconds, and after three or more unchanged cycles
    every 10+ minutes. Two unchanged cycles remain on the normal 2–5 minute
    cadence. Under host-managed monitoring, end the turn after the push instead.
-8. Merge only with explicit or standing authority, no conflicts, and passing
+8. In Heartbeat, hand the ready PR and exact SHA to the owner. GitHub performs
+   the squash merge after the owner's confirmation. For repositories that permit
+   agent merges, merge only with explicit or standing authority, no conflicts, and passing
    checks, reviews and finding dispositions for the refreshed head. Follow
    the merge routing in step 4 and require that SHA; requalify on mismatch.
    For queue or auto-merge, verify final-head enforcement. Host-managed green

@@ -10,11 +10,12 @@
 2. Treat an execution request as authority for the configured Project's
    selection, claims, planning, independent reviews, implementation, in-scope
    repairs, commits, pushes, PR operations, and ticket progress records.
-   Delegate that authority through the controller's verified handoff. Require
-   no further human approval for a plan, test seam, delivery stage, or routine
-   repair within the ticket contract. Independent review remains an automatic
+   Delegate that authority through the controller's verified handoff. Follow the repository's plan approval policy. In Heartbeat, obtain the
+   operator's approval of a new or materially revised plan before implementation.
+   Reuse recorded approval for work within that plan. Independent review remains an automatic
    quality gate, not a request for permission.
-3. Resolve merging once at startup using [the merge question](#resolve-the-merge-question).
+3. When repository policy assigns merging to GitHub, keep agent merging disabled
+   and skip the merge question. For other repositories, resolve merging once at startup using [the merge question](#resolve-the-merge-question).
    An explicit user instruction or affirmative answer grants merge authority
    for eligible PRs selected or validly adopted during this invocation, within
    any narrower scope the user specifies. Follow the verified binding's merge
@@ -62,6 +63,8 @@ the drain's existing stop rules. With the option off, retain ordinary in-scope
 execution authority and route material decisions through the normal pause.
 
 ## Resolve The Merge Question
+
+This procedure applies only where repository policy permits agent merges.
 
 1. In `next` or `drain`, honor a current explicit merge or no-merge instruction
    without asking again. Otherwise, ask once at startup: "May I merge eligible

@@ -1,11 +1,11 @@
 ---
 name: run-project
 description: Use when explicitly asked to set up, review or run a project board, select its next eligible ticket, or drain its authorized work.
-compatibility: "External skill providers are mode-specific: review and setup require none; execution, triage, and Wayfinder lanes use the providers documented in references/workflow-providers.md."
-disable-model-invocation: true
 ---
 
 # Run project
+
+External skill providers are mode-specific: review and setup require none; execution, triage, and Wayfinder lanes use the providers documented in [workflow providers](references/workflow-providers.md).
 
 ## Core principle
 
@@ -62,10 +62,9 @@ else reports the exact blocker.
 - `next`: default; at most one selected issue; after the startup merge decision settles, returns `waiting-for-human` without further waiting. A named Wayfinder child stays `next`.
 - `drain`: only on explicit drain/run-all/until-empty request; no ticket cap. Use the selected tracker’s [remote wait procedure](references/drain-scheduler.md#project-watcher) when only remote or human waits remain.
 
-Resolve merge permission once at startup under
-[run authority](references/authority-and-pauses.md): honor an explicit merge or
-no-merge instruction; otherwise ask with a 60-second default-no deadline while
-delivery continues. Without permission, deliver ready PRs and pause only merges.
+Apply [run authority](references/authority-and-pauses.md) at startup. In Heartbeat,
+obtain operator approval before implementing a new plan and hand ready PRs to the
+owner for review and GitHub squash merge. Skip the agent merge prompt.
 
 ## Read before acting
 
