@@ -1,0 +1,72 @@
+@file:Suppress("MagicNumber")
+
+package io.github.aequicor.heartbeat.features.aistudio.presentation.mock
+
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileDate
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Question
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
+
+internal object AuroraMock {
+    const val LongChat = "long"
+    const val InitialChat = "project"
+    const val HistoryTurns = 1_250
+    const val StreamFrames = 240
+
+    val inputs = listOf(
+        File("brief", "architecture.md", "Markdown", "# Архитектура\n\nГраница UI и логики.\n\n" +
+            "История хранится по диалогам. Остановка подтверждается отдельным событием.",
+            FileDate(2026, 11, 14, "14:02")),
+        File("cases", "scenarios.csv", "Таблица", "Сценарий,Ожидаемый результат\n" +
+            "Повтор,Исходная реплика\nСтоп,Частичный результат\nВозврат,Якорь чтения",
+            FileDate(2026, 10, 29, "11:20")),
+        File("example", "Example.kt", "Код", "internal data class ReadingAnchor(val id: String, val offset: Int)\n",
+            FileDate(2026, 10, 18, "16:30")),
+    )
+
+    val questions = listOf(
+        Question("scope", "Что проверить в первую очередь?", listOf("Контракты сессий", "Экран чата", "Хранилище"),
+            required = true, freeText = true),
+        Question("checks", "Какие проверки включить?", listOf("Повтор", "Остановка", "Восстановление"),
+            multiple = true, freeText = true),
+        Question("report", "Добавить краткий отчёт?", listOf("Да", "Нет"), freeText = true, required = true),
+    )
+
+    val optionalQuestion = Question("comment", "Добавить комментарий к отчёту?", freeText = true)
+
+    fun workspace() = AuroraWorkspace(
+        selectedId = InitialChat,
+        chats = mockNavigation(),
+    )
+
+    fun history(id: String): List<Message> = when (id) {
+        InitialChat -> pencilConversation()
+        LongChat -> buildList {
+            repeat(HistoryTurns) { index ->
+                val number = HistoryTurns - index
+                add(Reply("mock-reply-$number", "14:03", text = "Проверка $number завершена. " +
+                    "Повтор сохраняет исходную реплику, а Stop подтверждает остановку отдельным событием.",
+                    status = ReplyStatus.Completed))
+                add(User("mock-user-$number", "14:02", "Проверь контракты сессий и сценарий отмены ($number)"))
+            }
+        }
+        else -> listOf()
+    }
+
+    fun output(id: String, text: String, time: String) = File(
+        id = "$id-result",
+        name = "aurora-report.md",
+        kind = "Markdown",
+        content = "# Проверка рабочей области\n\nЗапрос\n$text\n\n" +
+            "## Результаты\n\n" +
+            "• Отправка и повтор используют идентификатор исходной реплики.\n" +
+            "• Остановка сохраняет полученный ответ.\n" +
+            "• Якорь чтения хранится отдельно для каждой беседы.\n\n" +
+            "## Проверка\n\nПример подготовлен по локальным демонстрационным данным.",
+        date = FileDate(2026, 11, 14, time),
+    )
+}

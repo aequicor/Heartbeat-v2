@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.arkivanov.decompose.extensions.compose.stack.Children
 import io.github.aequicor.heartbeat.designsystem.components.HbText
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.shell.ShellComponent
 
@@ -40,6 +41,7 @@ private fun MissingFeatureFallback(featureId: String) {
     HbText(
         text = "Раздел недоступен: $featureId",
         modifier = Modifier.fillMaxSize(),
+        style = HbTypography.Detail,
     )
 }
 

@@ -56,6 +56,7 @@ interface DesktopGraph {
         AppCoroutineScope(CoroutineScope(SupervisorJob() + Dispatchers.IO))
 
     @Provides
+    @SingleIn(AppScope::class)
     fun providePreferencesStoreFactory(
         dataDirectory: String,
         appCoroutineScope: AppCoroutineScope,

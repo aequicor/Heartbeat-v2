@@ -1,217 +1,590 @@
+@file:Suppress("MagicNumber")
+
 package io.github.aequicor.heartbeat.features.aistudio.presentation
 
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineEvent
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
-import io.github.aequicor.heartbeat.features.aiengine.api.session.HistorySyncStatus
-import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindow
-import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindowCursor
-import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
-import io.github.aequicor.heartbeat.features.aiengine.api.session.PermissionOption
-import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionConfig
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionPage
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
-import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
-import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
+import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileDate
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Request
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Scenario
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
-internal class DefaultAiStudioStoreTest {
+class DefaultAiStudioStoreTest {
+
     @Test
-    fun connectsAndOpensSessionsForTheSelectedDirectory() = runTest {
-        val agent = TestEngine()
-        val store = createStore(agent)
-        store.dispatch(AiStudioAction.EditDirectory("relative"))
-        store.dispatch(AiStudioAction.Connect)
+    fun projectsAndSubsessionsExpandInPlaceAndSearchShowsAncestors() = runTest {
+        val store = studio()
+        val initial = store.screenState.value.navigation
+        assertEquals("Heartbeat", initial.first().title)
+        assertEquals(1, initial.single { it.id == "contract-check" }.depth)
+        store.dispatch(AiStudioAction.ToggleNavigation(AuroraMock.InitialChat))
         runCurrent()
-        assertEquals(0, agent.connects)
-        assertTrue(store.state.value.error.orEmpty().contains("абсолютный"))
+        assertFalse(store.screenState.value.navigation.any { it.id == "contract-check" })
+        store.dispatch(AiStudioAction.SearchChats("Проверка контрактов"))
+        runCurrent()
+        assertEquals(listOf("Heartbeat", "Единая модель сессий", "Проверка контрактов"),
+            store.screenState.value.navigation.map { it.title })
+        store.dispatch(AiStudioAction.ShowChatSearch(false))
+        store.dispatch(AiStudioAction.ToggleNavigation("more:Heartbeat"))
+        runCurrent()
+        val expanded = store.screenState.value
+        val firstAdded = expanded.navigation.single { it.title == "Журнал событий" }
+        assertEquals(firstAdded.id, expanded.navigationFocusId)
+        assertEquals(AuroraMock.InitialChat, expanded.chat?.id)
 
-        store.dispatch(AiStudioAction.EditDirectory(Workspace))
-        agent.failConnection = true
-        store.dispatch(AiStudioAction.Connect)
+        store.dispatch(AiStudioAction.ToggleNavigation("more:Heartbeat"))
+        store.dispatch(AiStudioAction.NavigationFocusHandled("stale-target"))
         runCurrent()
-        assertIs<AiEngineState.Failed>(store.state.value.connection)
-
-        agent.failConnection = false
-        store.dispatch(AiStudioAction.Connect)
+        assertEquals(firstAdded.id, store.screenState.value.navigationFocusId)
+        store.dispatch(AiStudioAction.NavigationFocusHandled(firstAdded.id))
         runCurrent()
-        assertTrue(store.state.value.connected)
-        assertEquals(SessionListConfig.ByProject(Workspace, workingDirectory = Workspace), agent.listing)
-        assertEquals(listOf(agent.saved), store.state.value.sessions)
-        assertTrue(store.screenState.value.hasMoreSessions)
-
-        store.dispatch(AiStudioAction.LoadMoreSessions)
-        runCurrent()
-        assertEquals("page-2", agent.listing?.cursor)
-        assertEquals(listOf(agent.saved, agent.other), store.state.value.sessions)
-        assertFalse(store.screenState.value.hasMoreSessions)
-
-        store.dispatch(AiStudioAction.OpenChat(agent.saved))
-        runCurrent()
-        assertEquals(agent.saved, store.state.value.selected)
-        assertEquals(Workspace, agent.openedWith?.workingDirectory)
-        store.dispatch(AiStudioAction.NewChat)
-        runCurrent()
-        assertEquals(agent.created.key, store.state.value.selected)
+        assertNull(store.screenState.value.navigationFocusId)
     }
 
     @Test
-    fun streamsPermissionsAndKeepsTheDraftWhenATurnFails() = runTest {
-        val agent = TestEngine()
-        val store = createStore(agent)
-        store.dispatch(AiStudioAction.EditDirectory(Workspace))
-        store.dispatch(AiStudioAction.Connect)
-        runCurrent()
+    fun failedRestorePreservesStoredDataThroughLaterEdits() = runTest {
+        val data = TestPreferences()
+        val saved = "{unreadable workspace}"
+        data.snapshot.value = saved
+        val store = studio(data)
+        assertNotNull(store.screenState.value.storageError)
+        assertEquals(saved, data.snapshot.value)
         store.dispatch(AiStudioAction.NewChat)
         runCurrent()
-        val session = agent.created
+        store.dispatch(AiStudioAction.EditDraft(assertNotNull(store.draft.value.chatId), "Черновик"))
+        advance(200)
+        assertEquals("Черновик", store.draft.value.text)
+        assertEquals(saved, data.snapshot.value)
+    }
 
-        store.dispatch(AiStudioAction.EditDraft("Проверь README.md"))
-        store.dispatch(AiStudioAction.Send)
+    @Test
+    fun restoringAProjectChatKeepsSidebarOrder() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.NewProjectChat("Документы"))
         runCurrent()
-        assertTrue(store.state.value.turnActive)
-        assertEquals(SessionEvent.SendPrompt("Проверь README.md"), session.events.single())
+        val id = assertNotNull(store.draft.value.chatId)
+        val navigation = store.screenState.value.navigation.map { it.id }
+        val restored = studio(data)
+        assertEquals(id, restored.draft.value.chatId)
+        assertEquals(navigation, restored.screenState.value.navigation.map { it.id })
+    }
 
-        val option = PermissionOption("allow", "Да", "allow")
-        val permission = PendingPermission("request", "tool", "README.md", listOf(option))
-        session.state.value = session.state.value.copy(status = SessionStatus.AwaitingPermission(listOf(permission)))
+    @Test
+    fun missingSelectedChatKeepsTheOtherChats() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.NewChat)
         runCurrent()
-        assertIs<SessionStatus.AwaitingPermission>(store.state.value.session?.status)
-        assertEquals(SessionStatus.AwaitingPermission(listOf(permission)), store.screenState.value.sessionStatus)
-        store.dispatch(AiStudioAction.AnswerPermission(permission.requestId, "allow"))
+        val id = assertNotNull(store.draft.value.chatId)
+        val saved = Json.decodeFromString<AuroraWorkspace>(data.snapshot.value)
+        data.snapshot.value = Json.encodeToString(saved.copy(selectedId = "missing"))
+        val recovered = studio(data)
+        assertTrue(recovered.screenState.value.chats.any { it.id == id })
+        assertNotNull(recovered.screenState.value.chat)
+    }
+
+    @Test
+    fun archivesOnlyTheChosenSessionAndPreservesTheActiveDraftAfterRestart() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        val archived = AuroraMock.InitialChat
+        val initialMessages = store.screenState.value.messages
+        store.dispatch(AiStudioAction.EditDraft(archived, "Черновик перед архивированием"))
+        store.dispatch(AiStudioAction.ArchiveChat(archived))
+        store.dispatch(AiStudioAction.ArchiveChat(archived))
+        runCurrent()
+
+        val state = store.screenState.value
+        assertEquals(archived, state.chat?.id)
+        assertEquals(initialMessages, state.messages)
+        assertFalse(state.chats.any { it.id == archived })
+        assertFalse(state.navigation.any { it.id == archived })
+        assertEquals(0, state.navigation.single { it.id == "contract-check" }.depth)
+        assertEquals(0, state.navigation.single { it.id == "ui-regression" }.depth)
+
+        val restored = studio(data)
+        assertEquals(archived, restored.screenState.value.chat?.id)
+        assertEquals("Черновик перед архивированием", restored.draft.value.text)
+        assertFalse(restored.screenState.value.chats.any { it.id == archived })
+        restored.dispatch(AiStudioAction.SearchChats("Проверка контрактов"))
+        runCurrent()
+        assertEquals(listOf("contract-check"), restored.screenState.value.chats.map { it.id })
+    }
+
+    @Test
+    fun headerUsesKnownMetricsAndTheCurrentChatsSubagents() = runTest {
+        val store = studio()
+        val initial = store.screenState.value
+        assertEquals(listOf("contract-check"), initial.subagents.map { it.chatId })
+        assertEquals(61, initial.chat?.contextPercent)
+        assertEquals(78, initial.chat?.quota?.usedPercent)
+        store.dispatch(AiStudioAction.SearchChats("Только другая группа"))
+        runCurrent()
+        assertEquals(initial.subagents, store.screenState.value.subagents)
+
+        store.dispatch(AiStudioAction.OpenChat("contract-check"))
+        runCurrent()
+        assertTrue(store.screenState.value.subagents.isEmpty())
+        assertNull(store.screenState.value.chat?.contextPercent)
+        assertEquals(24, store.screenState.value.chat?.quota?.usedPercent)
+
+        store.dispatch(AiStudioAction.NewChat)
+        runCurrent()
+        assertTrue(store.screenState.value.subagents.isEmpty())
+        assertNull(store.screenState.value.chat?.contextPercent)
+        assertNull(store.screenState.value.chat?.quota)
+    }
+
+    @Test
+    fun sendsAnswersAsOneMessageAndOpensResult() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.Attach("brief"))
+        send(store)
+        advance(1_400)
+        val first = questions(store)
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Следующий вопрос"))
+        store.dispatch(AiStudioAction.MoveQuestion(first.id, 1))
+        store.dispatch(AiStudioAction.SkipQuestion(first.id))
+        store.dispatch(AiStudioAction.SubmitAnswers(first.id))
+        runCurrent()
+        assertEquals(0, questions(store).index)
+        assertNotNull(questions(store).error)
+        fillAnswers(store)
+
+        assertNull(store.screenState.value.request)
+        assertEquals("Следующий вопрос", store.draft.value.text)
+        assertEquals(1, store.screenState.value.messages.filterIsInstance<User>().count { it.answers })
+        advance(400)
+        val permission = assertIs<Request.Permission>(store.screenState.value.request)
+        val live = assertNotNull(store.screenState.value.live)
+        store.dispatch(AiStudioAction.ToggleStep(live.id, "read"))
+        store.dispatch(AiStudioAction.ToggleWorkEvent(live.id, "read", "thinking"))
+        store.dispatch(AiStudioAction.ToggleStep("sample-recovery", "check"))
+        runCurrent()
+        assertTrue("${live.id}/read" in store.screenState.value.expandedSteps)
+        assertTrue("${live.id}/read/thinking" in store.screenState.value.expandedEvents)
+        store.dispatch(AiStudioAction.AnswerPermission(permission.id, allow = true))
+        advance(950)
+
+        val result = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(ReplyStatus.Completed, result.status)
+        val report = assertNotNull(result.result)
+        assertEquals(setOf("sample-recovery/check"), store.screenState.value.expandedSteps)
+        assertTrue(store.screenState.value.expandedEvents.isEmpty())
+        store.dispatch(AiStudioAction.OpenResult(result.id))
+        runCurrent()
+        assertEquals(report, store.screenState.value.viewer)
+        assertTrue(store.screenState.value.fileGroups.flatMap { it.files }.any { it.id == "brief" })
+
+        store.dispatch(AiStudioAction.CloseViewer)
+        store.dispatch(AiStudioAction.ToggleFiles(true))
+        store.dispatch(AiStudioAction.ShowFileSearch(true))
+        store.dispatch(AiStudioAction.SearchFiles("AURORA"))
+        runCurrent()
+        assertTrue(store.screenState.value.fileSearchVisible)
+        val filtered = store.screenState.value.fileGroups.single()
+        assertEquals("Ноябрь", filtered.title)
+        assertEquals(report.id, filtered.files.single().id)
+        store.dispatch(AiStudioAction.ShowFileSearch(false))
+        store.dispatch(AiStudioAction.SearchFiles("запоздавший ввод"))
+        runCurrent()
+        assertFalse(store.screenState.value.fileSearchVisible)
+        assertEquals("", store.screenState.value.fileSearch)
+        assertTrue(store.screenState.value.fileGroups.flatMap { it.files }.any { it.id == "brief" })
+    }
+
+    @Test
+    fun fileGroupsDistinguishYearsAndKeepFilesFromOlderSnapshots() {
+        val old = Json.decodeFromString<File>(
+            """{"id":"old","name":"README","kind":"Текст","content":"да"}""",
+        )
+        val january = old.copy(id = "january", name = "run.MD", date = FileDate(2026, 1, 1, "00:10"))
+        val december = old.copy(id = "december", name = "trace.log", date = FileDate(2025, 12, 31, "23:59"))
+        val groups = prepareFileGroups(listOf(old, december, january))
+        assertEquals(listOf("Январь 2026", "Декабрь 2025", "Без даты"), groups.map { it.title })
+        assertEquals(listOf("january", "december", "old"), groups.map { it.files.single().id })
+        val current = groups.first().files.single()
+        assertEquals("md", current.extension)
+        assertEquals("1 янв, 00:10", current.date)
+        assertEquals("4 Б", current.size)
+        assertEquals("run.MD, 4 Б, 1 янв, 00:10", current.accessibilityLabel)
+        assertNull(groups.last().files.single().date)
+    }
+
+    @Test
+    fun sendAndDecisionRetriesKeepTheOriginalRows() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.SetScenario(Scenario.SendFailure))
+        send(store)
+        advance(400)
+        val failed = assertIs<User>(store.screenState.value.messages.first())
+        assertEquals(Delivery.Failed, failed.delivery)
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Другой черновик"))
+        store.dispatch(AiStudioAction.Retry(failed.id))
+        advance(1_400)
+        assertEquals(listOf(Delivery.Sent), store.screenState.value.messages.filterIsInstance<User>()
+            .filter { it.id == failed.id }.map { it.delivery })
+        assertEquals("Другой черновик", store.draft.value.text)
+
         store.dispatch(AiStudioAction.CancelTurn)
-        runCurrent()
-        val actions = listOf(SessionEvent.AnswerPermission("request", "allow"), SessionEvent.Cancel)
-        assertEquals(actions, session.events.drop(1))
-
-        session.state.value = session.state.value.copy(status = SessionStatus.Failed("Ошибка агента"))
-        runCurrent()
-        assertEquals("Проверь README.md", store.state.value.draft)
-        assertTrue(store.state.value.canSend)
-
-        store.dispatch(AiStudioAction.Send)
-        runCurrent()
-        val response = SessionTimelineItem.AgentMessage("reply", listOf(SessionContent.Text("Готово")))
-        session.state.value = SessionState(
-            SessionStatus.Idle,
-            session.state.value.messages.copy(items = session.state.value.messages.items + response),
-        )
-        runCurrent()
-        assertEquals("", store.state.value.draft)
-        assertEquals(response, store.state.value.session?.messages?.items?.last())
-        assertEquals(response, store.screenState.value.timeline.last())
-        assertFalse(store.state.value.busy)
+        advance(400)
+        store.dispatch(AiStudioAction.SetScenario(Scenario.DecisionFailure))
+        send(store)
+        advance(1_400)
+        fillAnswers(store)
+        advance(400)
+        val answer = assertIs<User>(store.screenState.value.messages.first())
+        assertTrue(answer.answers)
+        assertEquals(Delivery.Failed, answer.delivery)
+        assertNull(store.screenState.value.request)
+        store.dispatch(AiStudioAction.Retry(answer.id))
+        advance(400)
+        assertIs<Request.Permission>(store.screenState.value.request)
+        assertEquals(1, store.screenState.value.messages.count { it.id == answer.id })
     }
 
     @Test
-    fun reportsAnUnavailableEngineWithoutCreatingARuntime() = runTest {
-        val store = createStore(null)
-        store.dispatch(AiStudioAction.EditDirectory(Workspace))
-        store.dispatch(AiStudioAction.Connect)
+    fun retryingAnswersAfterRestartCompletesTheInterruptedReviewStep() = runTest {
+        val data = TestPreferences()
+        val firstSession = sessionScope()
+        val store = DefaultAiStudioStore(data, firstSession)
         runCurrent()
-        assertFalse(store.state.value.engineAvailable)
-        assertFalse(store.state.value.busy)
-        assertEquals(AiEngineState.NotInitialized, store.state.value.connection)
+        store.dispatch(AiStudioAction.SetAccess(Access.ReadOnly))
+        send(store)
+        advance(1_400)
+        fillAnswers(store)
+        val live = assertNotNull(store.screenState.value.live)
+        val answer = assertIs<User>(store.screenState.value.messages.first())
+        assertEquals(Delivery.Sending, answer.delivery)
+
+        firstSession.cancel()
+        val restarted = studio(data)
+        restarted.dispatch(AiStudioAction.Retry(answer.id))
+        advance(400)
+        val history = restarted.screenState.value.messages
+        val completed = assertIs<Reply>(history.single { it.id == live.id })
+        assertEquals(ReplyStatus.Completed, completed.status)
+        assertEquals(live.steps.map { it.id }, completed.steps.map { it.id })
+        assertTrue(completed.steps.all { it.status == StepStatus.Done })
+        assertEquals(Delivery.Sent, assertIs<User>(history.single { it.id == answer.id }).delivery)
     }
 
-    private fun TestScope.createStore(engine: TestEngine?): DefaultAiStudioStore {
-        val facade = object : AiEngineFacade {
-            override val availableEngines = MutableStateFlow(listOfNotNull(engine?.key))
-            override val engines = MutableStateFlow<Map<AiEngineKey, AiEngineState>>(mapOf())
-            override fun getEngine(key: AiEngineKey): AiEngine = checkNotNull(engine)
-            override suspend fun dispose() = Unit
-        }
-        return DefaultAiStudioStore(facade, backgroundScope)
+    @Test
+    fun executionRetryKeepsReplyAndStopInvalidatesQueuedEvents() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.SetScenario(Scenario.RunFailure))
+        send(store)
+        advance(1_400)
+        fillAnswers(store)
+        advance(400)
+        val permission = assertIs<Request.Permission>(store.screenState.value.request)
+        store.dispatch(AiStudioAction.AnswerPermission(permission.id, true))
+        advance(950)
+
+        val failed = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(ReplyStatus.Failed, failed.status)
+        assertNotNull(failed.interim)
+        store.dispatch(AiStudioAction.Retry(failed.id))
+        runCurrent()
+        assertEquals(failed.id, store.screenState.value.live?.id)
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "После остановки"))
+        store.dispatch(AiStudioAction.CancelTurn)
+        store.dispatch(AiStudioAction.Send)
+        runCurrent()
+        assertEquals(Activity.Stopping, store.screenState.value.activity)
+        advance(2_000)
+
+        val stopped = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(failed.id, stopped.id)
+        assertEquals(ReplyStatus.Stopped, stopped.status)
+        assertEquals("После остановки", store.draft.value.text)
+        assertEquals(Activity.Idle, store.screenState.value.activity)
     }
 
-    private class TestEngine : AiEngine {
-        override val key = object : AiEngineKey {
-            override val id = "dsh"
-            override val name = "DeepSeek Harness"
-            override val description = "Test runtime"
-            override val connection = AiEngineConnection.ACP
-        }
-        override val state = MutableStateFlow<AiEngineState>(AiEngineState.NotInitialized)
-        override val sessions = MutableStateFlow<Map<SessionKey, SessionStatus>>(mapOf())
-        val saved = SessionKey(key, "saved")
-        val other = SessionKey(key, "other")
-        val created = TestSession(SessionKey(key, "new"))
-        var failConnection = false
-        var connects = 0
-        var listing: SessionListConfig.ByProject? = null
-        var openedWith: SessionConfig? = null
+    @Test
+    fun finishingInAnUnselectedChatCollapsesOnlyThatTurnsWork() = runTest {
+        val store = studio()
+        send(store)
+        advance(1_400)
+        fillAnswers(store)
+        advance(400)
+        val permission = assertIs<Request.Permission>(store.screenState.value.request)
+        val replyId = assertNotNull(store.screenState.value.live).id
+        store.dispatch(AiStudioAction.ToggleStep(replyId, "read"))
+        store.dispatch(AiStudioAction.ToggleWorkEvent(replyId, "read", "thinking"))
+        store.dispatch(AiStudioAction.ToggleStep("sample-recovery", "check"))
+        store.dispatch(AiStudioAction.AnswerPermission(permission.id, allow = true))
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        runCurrent()
+        assertTrue("${replyId}/read/thinking" in store.screenState.value.expandedEvents)
+        advance(950)
 
-        override fun dispatch(event: AiEngineEvent) {
-            when (event) {
-                AiEngineEvent.Connect -> {
-                    connects++
-                    state.value = if (failConnection) {
-                        AiEngineState.Failed("Не удалось запустить DSH")
-                    } else {
-                        AiEngineState.Ready
-                    }
-                }
-                AiEngineEvent.Disconnect -> state.value = AiEngineState.NotInitialized
-                is AiEngineEvent.AuthorizationCompleted -> Unit
-            }
-        }
-
-        override suspend fun getListSessions(config: SessionListConfig): SessionPage {
-            listing = config as SessionListConfig.ByProject
-            return if (config.cursor == null) SessionPage(listOf(saved), "page-2") else SessionPage(listOf(other))
-        }
-
-        override suspend fun getOrCreateSession(config: SessionConfig, existing: SessionKey?): Session {
-            openedWith = config
-            return if (existing == null) created else TestSession(existing)
-        }
-
-        override suspend fun closeSession(key: SessionKey) = Unit
-        override suspend fun dispose() = Unit
+        assertEquals(AuroraMock.LongChat, store.screenState.value.chat?.id)
+        assertEquals(setOf("sample-recovery/check"), store.screenState.value.expandedSteps)
+        assertTrue(store.screenState.value.expandedEvents.isEmpty())
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.InitialChat))
+        runCurrent()
+        val reply = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(replyId, reply.id)
+        assertEquals(ReplyStatus.Completed, reply.status)
     }
 
-    private class TestSession(override val key: SessionKey) : Session {
-        override val state = MutableStateFlow(
-            SessionState(
-                SessionStatus.Idle,
-                MessageWindow(listOf(), MessageWindowCursor(), HistorySyncStatus.LOCAL_ONLY),
-            ),
-        )
-        val events = mutableListOf<SessionEvent>()
-
-        override fun dispatch(event: SessionEvent) {
-            events += event
-            if (event is SessionEvent.SendPrompt) {
-                val content = listOf(SessionContent.Text(event.text))
-                val entry = SessionTimelineItem.UserMessage("prompt-${events.size}", content)
-                state.value = SessionState(
-                    SessionStatus.Running,
-                    state.value.messages.copy(items = state.value.messages.items + entry),
-                )
-            }
-        }
+    @Test
+    fun freezesOptionalTimerAtItsCurrentValueAndDeclineFinishesWithoutAFile() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.SetScenario(Scenario.Optional))
+        send(store)
+        advance(2_200)
+        val panel = questions(store)
+        assertTrue(panel.remaining < 1f)
+        store.dispatch(AiStudioAction.InteractWithRequest("old-request"))
+        advance(250)
+        assertTrue(questions(store).remaining < panel.remaining)
+        val remaining = questions(store).remaining
+        store.dispatch(AiStudioAction.InteractWithRequest(panel.id))
+        advance(130_000)
+        assertEquals(remaining, questions(store).remaining)
+        assertTrue(questions(store).frozen)
+        assertTrue(questions(store).answer.text.isEmpty())
+        store.dispatch(AiStudioAction.EditAnswer(panel.id, panel.question.id, "Добавить"))
+        store.dispatch(AiStudioAction.SubmitAnswers(panel.id))
+        advance(400)
+        val permission = assertIs<Request.Permission>(store.screenState.value.request)
+        store.dispatch(AiStudioAction.AnswerPermission(permission.id, false))
+        runCurrent()
+        val reply = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(ReplyStatus.Completed, reply.status)
+        assertNull(reply.result)
     }
 
-    private companion object {
-        const val Workspace = "/work/project"
+    @Test
+    fun untouchedOptionalTextRequestExpiresWithoutGrantingPermission() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.SetScenario(Scenario.Optional))
+        send(store)
+        advance(1_260)
+        val panel = questions(store)
+        val duration = 120_000L + panel.question.title.length * 50
+        val rounded = (duration + 249) / 250 * 250
+        advance(rounded - 1)
+        assertEquals(panel.id, questions(store).id)
+        advance(1)
+        assertNull(store.screenState.value.request)
+        advance(400)
+        assertIs<Request.Permission>(store.screenState.value.request)
+        assertTrue(store.screenState.value.messages.filterIsInstance<User>().any { it.text == "Время ответа истекло" })
+    }
+
+    @Test
+    fun restoresTheDraftAnchorAndAttachmentsAcrossSelectionAndRestart() = runTest {
+        val data = TestPreferences()
+        val firstScope = sessionScope()
+        val store = DefaultAiStudioStore(data, firstScope)
+        runCurrent()
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        runCurrent()
+        val messages = store.screenState.value.messages
+        assertEquals(AuroraMock.HistoryTurns * 2, messages.size)
+        val anchor = Anchor(messages[1_450].id, 12)
+        store.dispatch(AiStudioAction.ReadAt(AuroraMock.LongChat, anchor))
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.LongChat, "Черновик длинного диалога"))
+        store.dispatch(AiStudioAction.Attach("cases"))
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.InitialChat))
+        runCurrent()
+        assertEquals("", store.draft.value.text)
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        advance(175)
+        assertEquals(1_450, store.screenState.value.restoreIndex)
+        assertEquals(anchor, store.screenState.value.restoreAnchor)
+        assertTrue(data.snapshot.value.isNotBlank())
+
+        firstScope.cancel()
+        val restarted = studio(data)
+        assertEquals("Черновик длинного диалога", restarted.draft.value.text)
+        assertEquals(anchor, restarted.screenState.value.restoreAnchor)
+        assertEquals(listOf("cases"), restarted.screenState.value.attachments.map { it.id })
+    }
+
+    @Test
+    fun typingAfterSendingKeepsTheSubmittedTextAndTheNextDraftSeparate() = runTest {
+        val store = studio()
+        send(store)
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Новый черновик до обработки отправки"))
+        runCurrent()
+        val user = assertIs<User>(store.screenState.value.messages.first())
+        assertEquals("Проверь контракты сессий", user.text)
+        assertEquals("Новый черновик до обработки отправки", store.draft.value.text)
+    }
+
+    @Test
+    fun thinkingAccumulatesFragmentsWithoutChangingDisclosureAndRetainsTextOnStop() = runTest {
+        val store = studio()
+        send(store)
+        advance(400)
+        val live = assertNotNull(store.screenState.value.live)
+        val step = live.steps.single()
+        val event = step.events.single { it.kind == WorkEventKind.Thinking }
+        val key = "${live.id}/${step.id}/${event.id}"
+        val toggle = AiStudioAction.ToggleWorkEvent(live.id, step.id, event.id)
+        assertEquals("Ожидаю текст…", event.preview)
+        assertEquals("Ожидаю текст…", event.detailText)
+
+        store.dispatch(toggle)
+        advance(300)
+        val current = assertNotNull(store.screenState.value.live)
+        val partial = current.steps.single().events.single { it.id == event.id }
+        assertTrue(key in store.screenState.value.expandedEvents)
+        assertTrue(partial.details.isNotBlank())
+        assertEquals(partial.details, partial.preview)
+
+        store.dispatch(toggle)
+        advance(300)
+        val complete = assertNotNull(store.screenState.value.live)
+        val received = complete.steps.single().events.single { it.id == event.id }
+        assertFalse(key in store.screenState.value.expandedEvents)
+        assertTrue(received.details.startsWith(partial.details))
+        assertTrue(received.details.length > partial.details.length)
+
+        store.dispatch(AiStudioAction.CancelTurn)
+        advance(600)
+        assertNull(store.screenState.value.request)
+        val stopped = assertIs<Reply>(store.screenState.value.messages.first())
+        val saved = stopped.steps.single().events.single { it.id == event.id }
+        assertEquals(StepStatus.Stopped, saved.status)
+        assertEquals("Размышления прерваны", saved.title)
+        assertEquals(received.details, saved.details)
+    }
+
+    @Test
+    fun restartingDuringThinkingKeepsTheSameEventHistoryAsStopping() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        send(store)
+        advance(850)
+        val live = assertNotNull(store.screenState.value.live)
+        val thinking = live.steps.single().events.single { it.kind == WorkEventKind.Thinking }
+        assertTrue(thinking.details.isNotBlank())
+
+        val checkpoint = TestPreferences(data.snapshot.value)
+        store.dispatch(AiStudioAction.CancelTurn)
+        advance(400)
+        val stopped = assertIs<Reply>(store.screenState.value.messages.first())
+        val recovered = assertIs<Reply>(studio(checkpoint).screenState.value.messages.first())
+        assertEquals(ReplyStatus.Stopped, recovered.status)
+        assertEquals(stopped.steps, recovered.steps)
+    }
+
+    @Test
+    fun restoresReceivedTextWhenAStreamingTurnIsInterrupted() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.SetScenario(Scenario.Stream))
+        send(store)
+        advance(2_000)
+        val received = store.liveText.value
+        assertTrue(received.text.isNotBlank())
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        runCurrent()
+
+        val restored = studio(data)
+        restored.dispatch(AiStudioAction.OpenChat(AuroraMock.InitialChat))
+        runCurrent()
+        val interrupted = assertIs<Reply>(restored.screenState.value.messages.first())
+        assertEquals(received.replyId, interrupted.id)
+        assertEquals(ReplyStatus.Stopped, interrupted.status)
+        assertEquals(received.text, interrupted.text)
+    }
+
+    @Test
+    fun streamingReusesHistoryAndFinishesPredictably() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        runCurrent()
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.LongChat, "Проверка потока"))
+        store.dispatch(AiStudioAction.Send)
+        advance(1_400)
+        val beforeStream = store.screenState.value
+        advance(400)
+        assertTrue(beforeStream === store.screenState.value)
+        assertFalse(store.liveText.value.text.isBlank())
+        advance(10_000)
+        val reply = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals("Проверено 240 этапов. Отчёт готов.", reply.text)
+    }
+
+    private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =
+        DefaultAiStudioStore(data, backgroundScope).also { runCurrent() }
+
+    private fun TestScope.sessionScope(): CoroutineScope {
+        val context = backgroundScope.coroutineContext
+        return CoroutineScope(context + SupervisorJob(context[Job]))
+    }
+
+    private fun TestScope.advance(ms: Long) {
+        advanceTimeBy(ms)
+        runCurrent()
+    }
+
+    private fun send(store: DefaultAiStudioStore) {
+        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Проверь контракты сессий"))
+        store.dispatch(AiStudioAction.Send)
+    }
+
+    private fun questions(store: DefaultAiStudioStore): Request.Questions =
+        assertIs<Request.Questions>(store.screenState.value.request)
+
+    private fun TestScope.fillAnswers(store: DefaultAiStudioStore) {
+        val panel = questions(store)
+        store.dispatch(AiStudioAction.Choose(panel.id, "scope", "Контракты сессий"))
+        store.dispatch(AiStudioAction.MoveQuestion(panel.id, 1))
+        store.dispatch(AiStudioAction.SkipQuestion(panel.id))
+        store.dispatch(AiStudioAction.Choose(panel.id, "report", "Да"))
+        store.dispatch(AiStudioAction.SubmitAnswers(panel.id))
+        runCurrent()
+    }
+
+    private class TestPreferences(initial: String = "") : PreferencesStore {
+        val snapshot = MutableStateFlow(initial)
+
+        override fun observeString(key: String, default: String) = snapshot
+        override fun observeBoolean(key: String, default: Boolean) = flowOf(default)
+        override fun observeLong(key: String, default: Long) = flowOf(default)
+        override suspend fun putString(key: String, value: String) { snapshot.value = value }
+        override suspend fun putBoolean(key: String, value: Boolean) = Unit
+        override suspend fun putLong(key: String, value: Long) = Unit
+        override suspend fun remove(key: String) { snapshot.value = "" }
     }
 }

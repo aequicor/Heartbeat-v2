@@ -12,9 +12,9 @@ public object HbColorPalettes {
     /**
      * Light appearance.
      *
-     * The neutral surfaces, text, accent and action values come from the legacy desktop palette.
-     * The secondary text, control boundary, selection and status pairings are the 2.0 refinements;
-     * each status text and container pair keeps a contrast ratio of at least 4.5:1.
+     * Readable text has primary, secondary and muted roles; disabled text stays separate.
+     * The control boundary, selection and status pairs keep their established meanings;
+     * each text and container pair keeps a contrast ratio of at least 4.5:1.
      */
     public val Light: HbColorScheme = HbColorScheme(
         surface = HbSurfaceColors(
@@ -27,6 +27,7 @@ public object HbColorPalettes {
         text = HbTextColors(
             primary = HbReferenceColors.Ink,
             secondary = HbReferenceColors.InkSoft,
+            muted = HbReferenceColors.InkQuiet,
             disabled = HbReferenceColors.InkMuted,
         ),
         border = HbBorderColors(
@@ -85,6 +86,7 @@ public object HbColorPalettes {
         text = HbTextColors(
             primary = HbReferenceColors.Snow,
             secondary = HbReferenceColors.SnowSoft,
+            muted = HbReferenceColors.SnowSoft,
             disabled = HbReferenceColors.SnowMuted,
         ),
         border = HbBorderColors(

@@ -29,7 +29,11 @@ fun HbChip(
 ) {
     val colors = HbTheme.colors
     val background = if (selected) colors.selection.background else tone.container(colors)
-    val contentColor = if (selected) colors.selection.foreground else tone.foreground(colors)
+    val contentColor = when {
+        selected -> colors.selection.foreground
+        tone == HbStatusTone.Neutral -> colors.text.muted
+        else -> tone.foreground(colors)
+    }
 
     Box(
         modifier = modifier
@@ -47,7 +51,7 @@ fun HbChip(
     ) {
         BasicText(
             text = label,
-            style = HbTypography.Caption,
+            style = HbTypography.Metadata,
             color = { contentColor },
         )
     }

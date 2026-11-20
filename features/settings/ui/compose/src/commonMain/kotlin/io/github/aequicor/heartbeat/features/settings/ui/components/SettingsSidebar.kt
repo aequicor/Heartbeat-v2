@@ -15,17 +15,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbIconButton
 import io.github.aequicor.heartbeat.designsystem.components.HbNavigationItem
 import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
 import io.github.aequicor.heartbeat.designsystem.components.HbSearchField
+import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageDescriptor
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageId
 
@@ -42,6 +46,8 @@ internal fun SettingsSidebar(
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
+    val caption = HbWindowCaption.current
+    val top = if (caption.leftInset > Dp.Hairline) caption.height else Dp.Hairline
     val filtered = remember(pages, query) {
         val terms = query.trim().split(Whitespace).filter { it.isNotEmpty() }
         if (terms.isEmpty()) {
@@ -60,7 +66,8 @@ internal fun SettingsSidebar(
         modifier = modifier
             .fillMaxHeight()
             .widthIn(min = HbPaneGeometry.SidebarMin.dp, max = HbPaneGeometry.SidebarMax.dp)
-            .background(colors.surface.subtle),
+            .background(colors.surface.subtle)
+            .padding(top = top),
     ) {
         SettingsSidebarHeader(onBack = onBack)
         HbSearchField(
@@ -80,6 +87,13 @@ internal fun SettingsSidebar(
                 .padding(HbSpacing.S),
             verticalArrangement = Arrangement.spacedBy(HbSpacing.Xxs),
         ) {
+            if (filtered.isEmpty()) {
+                HbText(
+                    text = "Настройки не найдены",
+                    style = HbTypography.Detail,
+                    modifier = Modifier.fillMaxWidth().padding(HbSpacing.Xs),
+                )
+            }
             filtered.forEach { page ->
                 HbNavigationItem(
                     label = page.title,
@@ -98,6 +112,7 @@ private fun SettingsSidebarHeader(
 ) {
     HbPaneHeader(
         title = "Настройки",
+        titleStyle = HbTypography.PageTitle,
         modifier = modifier,
         leading = {
             HbIconButton(

@@ -29,7 +29,7 @@ fun HbNavigationGroup(
     ) {
         BasicText(
             text = title,
-            style = HbTypography.Caption,
+            style = HbTypography.Label,
             color = { colors.text.secondary },
             modifier = Modifier.padding(start = HbSpacing.S, top = HbSpacing.Xs),
         )

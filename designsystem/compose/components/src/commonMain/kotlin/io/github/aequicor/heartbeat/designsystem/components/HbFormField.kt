@@ -51,7 +51,7 @@ fun HbFormField(
         if (supportText != null) {
             BasicText(
                 text = supportText,
-                style = HbTypography.Caption,
+                style = if (errorMessage == null) HbTypography.Caption else HbTypography.Detail,
                 color = {
                     if (errorMessage == null) {
                         colors.text.secondary

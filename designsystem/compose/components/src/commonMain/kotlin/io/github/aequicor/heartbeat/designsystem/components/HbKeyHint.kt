@@ -46,7 +46,7 @@ fun HbKeyHint(
                 BasicText(
                     text = key,
                     style = HbTypography.Metadata,
-                    color = { colors.text.secondary },
+                    color = { colors.text.muted },
                 )
             }
         }

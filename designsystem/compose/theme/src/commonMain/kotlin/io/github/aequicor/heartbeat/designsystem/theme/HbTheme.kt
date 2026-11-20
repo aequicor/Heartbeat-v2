@@ -5,6 +5,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.font.FontFamily
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbColorPalettes
 import io.github.aequicor.heartbeat.designsystem.foundation.HbContrastPreference
@@ -13,6 +16,15 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.foundation.HbGeometries
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScales
+
+@Suppress("CompositionLocalAllowlist")
+private val LocalPlatformTextStyle = staticCompositionLocalOf<PlatformTextStyle?> { null }
+
+/** Provides the platform text settings for themes in the host window. */
+@Composable
+fun HbProvidePlatformTextStyle(style: PlatformTextStyle?, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalPlatformTextStyle provides style, content = content)
+}
 
 /**
  * Values of the active theme, read as regular properties.
@@ -62,6 +74,7 @@ object HbTheme {
  *
  * [systemMotion] and [systemContrast] are the explicit contract for the host to pass resolved system
  * preferences. They must be concrete values; the [System] marker is never used as a resolved value.
+ * [fontFamily] resolves ordinary text; [codeFontFamily] resolves code and command text independently.
  */
 @Composable
 fun HbTheme(
@@ -72,6 +85,8 @@ fun HbTheme(
     contrast: HbContrastPreference = HbContrastPreference.System,
     systemMotion: HbMotionPreference = HbMotionPreference.Full,
     systemContrast: HbContrastPreference = HbContrastPreference.Standard,
+    fontFamily: FontFamily? = null,
+    codeFontFamily: FontFamily = FontFamily.Monospace,
     content: @Composable () -> Unit,
 ) {
     val isDark = when (appearance) {
@@ -91,8 +106,9 @@ fun HbTheme(
     val geometry = HbGeometries.forDensity(density)
     val typeScale = if (density == HbDensity.Touch) HbTypeScales.Touch else HbTypeScales.Desktop
     val resolvedTextScale = textScale.coerceIn(MinTextScale, MaxTextScale)
-    val typeStyles = remember(density, resolvedTextScale) {
-        typeScale.toStyles(resolvedTextScale)
+    val platformTextStyle = LocalPlatformTextStyle.current
+    val typeStyles = remember(density, resolvedTextScale, fontFamily, codeFontFamily, platformTextStyle) {
+        typeScale.toStyles(resolvedTextScale, fontFamily, platformTextStyle, codeFontFamily)
     }
 
     CompositionLocalProvider(

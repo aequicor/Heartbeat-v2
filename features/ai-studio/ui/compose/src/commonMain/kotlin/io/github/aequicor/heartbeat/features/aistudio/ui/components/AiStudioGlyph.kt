@@ -30,13 +30,15 @@ internal enum class AiStudioGlyph(internal val draw: DrawScope.(Color) -> Unit) 
     Prompts({ color -> drawPrompts(color) }),
     Plugins({ color -> drawPlugins(color) }),
     Models({ color -> drawModels(color) }),
-    Folder({ color -> drawFolder(color) }),
     Sun({ color -> drawSun(color) }),
     Monitor({ color -> drawMonitor(color) }),
     Cloud({ color -> drawCloud(color) }),
     Sliders({ color -> drawSliders(color) }),
     User({ color -> drawUser(color) }),
-    Panel({ color -> drawPanel(color) }),
+    Panel({ color -> drawPanel(color, top = 4f, strokeWidth = 2f) }),
+    CollapseFiles({ color -> drawPanel(color, top = 3f, strokeWidth = 3f) }),
+    Back({ color -> drawBack(color) }),
+    Menu({ color -> drawMenu(color) }),
     Copy({ color -> drawCopy(color) }),
     ThumbUp({ color -> drawThumbUp(color) }),
     Sparkles({ color -> drawSparkles(color) }),
@@ -65,6 +67,13 @@ private fun DrawScope.point(x: Float, y: Float): Offset = Offset(
 )
 
 private fun DrawScope.unit(value: Float): Float = size.minDimension * value / 24f
+
+private fun DrawScope.drawMenu(color: Color) {
+    val stroke = glyphStroke()
+    listOf(6f, 12f, 18f).forEach { y ->
+        drawLine(color, point(4f, y), point(20f, y), stroke.width, StrokeCap.Round)
+    }
+}
 
 private fun DrawScope.drawChat(color: Color) {
     val stroke = glyphStroke()
@@ -144,20 +153,6 @@ private fun DrawScope.drawModels(color: Color) {
     drawLine(color, point(12f, 12f), point(20f, 7f), stroke.width, StrokeCap.Round)
 }
 
-private fun DrawScope.drawFolder(color: Color) {
-    val stroke = glyphStroke()
-    val folder = Path().apply {
-        moveTo(unit(3f), unit(7f))
-        lineTo(unit(9f), unit(7f))
-        lineTo(unit(11f), unit(9f))
-        lineTo(unit(21f), unit(9f))
-        lineTo(unit(21f), unit(19f))
-        lineTo(unit(3f), unit(19f))
-        close()
-    }
-    drawPath(folder, color, style = stroke)
-}
-
 private fun DrawScope.drawSun(color: Color) {
     val stroke = glyphStroke()
     drawCircle(color, radius = unit(4f), center = point(12f, 12f), style = stroke)
@@ -221,16 +216,28 @@ private fun DrawScope.drawUser(color: Color) {
     drawPath(shoulders, color, style = stroke)
 }
 
-private fun DrawScope.drawPanel(color: Color) {
-    val stroke = glyphStroke()
+private fun DrawScope.drawPanel(color: Color, top: Float, strokeWidth: Float) {
+    val stroke = Stroke(width = unit(strokeWidth), cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val bottom = 24f - top
     drawRoundRect(
         color = color,
-        topLeft = point(3f, 4f),
-        size = Size(unit(18f), unit(16f)),
-        cornerRadius = CornerRadius(unit(2f)),
+        topLeft = point(3f, top),
+        size = Size(unit(18f), unit(bottom - top)),
+        cornerRadius = CornerRadius(unit(strokeWidth)),
         style = stroke,
     )
-    drawLine(color, point(9f, 4f), point(9f, 20f), stroke.width, StrokeCap.Round)
+    drawLine(color, point(9f, top), point(9f, bottom), stroke.width, StrokeCap.Round)
+}
+
+private fun DrawScope.drawBack(color: Color) {
+    val stroke = Stroke(width = unit(2.4f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val arrow = Path().apply {
+        moveTo(unit(12f), unit(5f))
+        lineTo(unit(5f), unit(12f))
+        lineTo(unit(12f), unit(19f))
+    }
+    drawPath(arrow, color, style = stroke)
+    drawLine(color, point(5f, 12f), point(19f, 12f), stroke.width, StrokeCap.Round)
 }
 
 private fun DrawScope.drawCopy(color: Color) {

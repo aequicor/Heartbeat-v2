@@ -2,15 +2,17 @@ package io.github.aequicor.heartbeat.features.settings.ui
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import io.github.aequicor.heartbeat.designsystem.components.HbDivider
-import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.features.settings.component.SettingsComponent
 import io.github.aequicor.heartbeat.features.settings.ui.components.SettingsContentHost
 import io.github.aequicor.heartbeat.features.settings.ui.components.SettingsSidebar
@@ -32,7 +34,9 @@ fun SettingsScreen(
     val query by component.query.collectAsState()
     val selectedDescriptor = component.pages.firstOrNull { it.id == selectedPageId }
 
-    Row(modifier = modifier.fillMaxSize()) {
+    val caption = HbWindowCaption.current
+    val top = if (caption.leftInset > Dp.Hairline) Dp.Hairline else caption.height
+    Row(modifier = modifier.fillMaxSize().padding(top = top)) {
         SettingsSidebar(
             pages = component.pages,
             selectedPageId = selectedPageId,
@@ -40,7 +44,7 @@ fun SettingsScreen(
             onQueryChange = component::search,
             onSelect = component::select,
             onBack = component::back,
-            modifier = Modifier.width(HbPaneGeometry.SidebarPreferred.dp),
+            modifier = Modifier.width(HbAuroraLayout.NavigationWidth),
         )
         HbDivider(vertical = true)
         SettingsContentHost(

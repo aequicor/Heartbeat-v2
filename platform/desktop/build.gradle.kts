@@ -33,7 +33,9 @@ dependencies {
     }
     implementation(libs.jewel.int.ui.standalone)
     implementation(libs.jewel.decorated.window)
+    implementation(libs.jetbrains.runtime.api)
     implementation(project(":designsystem:compose:theme"))
+    implementation(project(":designsystem:compose:components"))
     implementation(project(":navigation:api"))
     implementation(project(":navigation:decompose"))
     implementation(project(":navigation:decompose-compose"))

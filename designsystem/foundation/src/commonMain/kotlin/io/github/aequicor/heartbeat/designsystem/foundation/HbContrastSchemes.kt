@@ -3,7 +3,7 @@ package io.github.aequicor.heartbeat.designsystem.foundation
 /**
  * High-contrast mapping of the semantic palette (HB-DS-005, HB-DS-012).
  *
- * The mapping is deterministic instead of a second hand-picked palette: secondary text collapses
+ * The mapping is deterministic instead of a second hand-picked palette: secondary and muted text collapse
  * onto primary text, the subtle separator takes the required-control boundary, and that boundary
  * takes the secondary text color, which already reaches the text contrast requirement. Disabled
  * text keeps its role, because a disabled control must stay distinguishable from an enabled one.
@@ -18,7 +18,7 @@ package io.github.aequicor.heartbeat.designsystem.foundation
 public object HbContrastSchemes {
 
     public fun highContrast(base: HbColorScheme): HbColorScheme = base.copy(
-        text = base.text.copy(secondary = base.text.primary),
+        text = base.text.copy(secondary = base.text.primary, muted = base.text.primary),
         border = base.border.copy(
             subtle = base.border.control,
             control = base.text.secondary,

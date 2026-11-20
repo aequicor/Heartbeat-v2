@@ -106,7 +106,7 @@ private fun TableHeader(columns: List<String>, colors: HbColors) {
         columns.forEachIndexed { index, column ->
             BasicText(
                 text = column,
-                style = HbTypography.Metadata,
+                style = HbTypography.Label,
                 color = { colors.text.secondary },
                 modifier = Modifier
                     .width(COLUMN_WIDTH)

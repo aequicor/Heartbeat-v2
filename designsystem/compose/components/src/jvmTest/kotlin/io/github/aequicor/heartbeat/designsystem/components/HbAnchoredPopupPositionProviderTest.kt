@@ -40,6 +40,23 @@ class HbAnchoredPopupPositionProviderTest {
     }
 
     @Test
+    fun menuReplacingTheBadgeUsesItsCenterAfterFlippingAbove() {
+        var center: IntOffset? = null
+        val morph = HbAnchoredPopupPositionProvider(
+            gap = 0, alignEnd = true, overlapAnchor = true, onAnchorInPopup = { center = it },
+        )
+        val position = morph.calculatePosition(
+            anchorBounds = IntRect(left = 760, top = 550, right = 792, bottom = 582),
+            windowSize = IntSize(width = 800, height = 600),
+            layoutDirection = LayoutDirection.Ltr,
+            popupContentSize = IntSize(width = 160, height = 80),
+        )
+
+        assertEquals(IntOffset(632, 502), position)
+        assertEquals(IntOffset(144, 64), center)
+    }
+
+    @Test
     fun keepsThePopupInsideTheWindow() {
         val position = provider.calculatePosition(
             anchorBounds = IntRect(left = 700, top = 100, right = 800, bottom = 132),

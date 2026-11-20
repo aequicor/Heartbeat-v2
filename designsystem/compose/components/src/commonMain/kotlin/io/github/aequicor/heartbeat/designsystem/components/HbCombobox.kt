@@ -192,7 +192,7 @@ private fun NoResults(
     HbOptionSurface(modifier = modifier) { _ ->
         BasicText(
             text = text,
-            style = HbTypography.Caption,
+            style = HbTypography.Detail,
             color = { colors.text.secondary },
             modifier = Modifier.padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
         )

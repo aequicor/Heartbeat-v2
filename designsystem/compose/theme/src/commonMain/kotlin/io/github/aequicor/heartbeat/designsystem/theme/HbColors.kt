@@ -13,11 +13,12 @@ data class HbSurfaceColors(
     val input: Color,
 )
 
-/** Text roles from primary content to unavailable text. */
+/** Primary content, supporting text, readable metadata and unavailable text. */
 @Immutable
 data class HbTextColors(
     val primary: Color,
     val secondary: Color,
+    val muted: Color,
     val disabled: Color,
 )
 

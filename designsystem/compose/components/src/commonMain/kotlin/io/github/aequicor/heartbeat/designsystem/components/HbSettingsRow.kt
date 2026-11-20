@@ -86,7 +86,7 @@ fun HbSettingsRow(
             if (description != null) {
                 BasicText(
                     text = description,
-                    style = HbTypography.Caption,
+                    style = HbTypography.Detail,
                     color = { descriptionColor },
                 )
             }

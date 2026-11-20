@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -27,6 +28,7 @@ fun HbPaneHeader(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     leading: @Composable RowScope.() -> Unit = {},
+    titleStyle: TextStyle = HbTypography.PaneTitle,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val colors = HbTheme.colors
@@ -46,7 +48,7 @@ fun HbPaneHeader(
         ) {
             BasicText(
                 text = title,
-                style = HbTypography.PaneTitle,
+                style = titleStyle,
                 color = { colors.text.primary },
             )
             if (subtitle != null) {

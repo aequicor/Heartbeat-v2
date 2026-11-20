@@ -1,14 +1,15 @@
 package io.github.aequicor.heartbeat.features.aistudio.di
 
 import dev.zacsweers.metro.ContributesBinding
+import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
+import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
-import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
 import kotlinx.coroutines.CoroutineScope
 
 @ContributesBinding(AppScope::class)
-public class DefaultAiStudioStoreFactory(private val engines: AiEngineFacade) : AiStudioStoreFactory {
-    override fun create(scope: CoroutineScope): AiStudioStore = DefaultAiStudioStore(engines, scope)
+public class DefaultAiStudioStoreFactory(private val preferences: PreferencesStoreFactory) : AiStudioStoreFactory {
+    override fun create(scope: CoroutineScope): AiStudioStore =
+        DefaultAiStudioStore(preferences.forNamespace("aurora"), scope)
 }

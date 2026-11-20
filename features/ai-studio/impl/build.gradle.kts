@@ -3,6 +3,7 @@ import app.cash.sqldelight.gradle.SqlDelightExtension
 plugins {
     id("heartbeat-kmp-universal")
     id("heartbeat-metro")
+    alias(libs.plugins.kotlin.serialization)
     id("heartbeat-sqldelight")
 }
 
@@ -16,12 +17,10 @@ configure<SqlDelightExtension> {
 
 kotlin {
     sourceSets.commonMain.dependencies {
-        api(project(":features:ai-engine:api"))
+        implementation(libs.kotlinx.serialization.json)
         api(libs.kotlinx.coroutines.core)
-        implementation(project(":features:ai-engine-facade:api"))
         implementation(project(":di:api"))
         implementation(project(":core:preferences:api"))
-        implementation(libs.okio)
     }
     sourceSets.commonTest.dependencies {
         implementation(libs.kotlinx.coroutines.test)
