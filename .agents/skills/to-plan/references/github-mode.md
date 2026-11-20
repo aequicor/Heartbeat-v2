@@ -1,5 +1,7 @@
 # Tracker Mode
 
+<!-- Modified for the Heartbeat project. -->
+
 Read this reference after selecting a tracker binding and the
 [shared workflow](workflow.md). That workflow owns baseline, discovery, draft,
 handoff, repair, and finish contracts. The historical `github-mode.md` path is
@@ -7,9 +9,10 @@ retained for existing links; this marker and digest protocol is provider-indepen
 
 ## Use the tracker binding
 
-1. Resolve the selected item's stable identity and authenticated publisher through
-   the trusted binding, including its explicit readiness gate and resolved role
-   mappings. Select the tracker independently of the code host; another provider
+1. Resolve the selected item's stable identity through the trusted binding. Use
+   the readiness checks for the requested operation. A standalone GitHub local
+   draft needs read access to the named issue and its sources. Verify publisher
+   permissions before writing a marker and role mappings for board operations. Select the tracker independently of the code host; another provider
    needs its own trusted operation contract. Missing or unknown readiness rules
    block planning. Use the selected
    planning marker operations for [GitHub](github-binding.md#planning-marker-operations)
@@ -67,8 +70,8 @@ The full-plan markers are:
 Treat v1 as a revision-one root. For v2, parse the positive revision,
 `Supersedes` permalink or `none`, and `Replan report` permalink or `none`.
 Require one root, contiguous revisions, at most one child per revision, and one
-active leaf derived from revision/predecessor edges. Verify that the authenticated
-publisher authored every marker and can create the next revision. Verify exact
+active leaf derived from revision/predecessor edges. Verify the authorship of existing markers. Before publishing a revision, verify
+that the authenticated publisher owns the chain and can create the next revision. Verify exact
 bodies and payload digests throughout the chain, retaining verified legacy
 identities under the digest rule below.
 A fork, gap, duplicate, missing predecessor, foreign marker, digest mismatch, or
@@ -100,7 +103,8 @@ execution contract.
 Require all of the following:
 
 - The selected tracker binding confirms current planning authority and non-parked
-  state under its readiness gate and resolved role mappings. Recheck that gate
+  state under the readiness gate for this operation. Apply role mappings where
+  the selected binding requires them. Recheck that gate
   before drafting, publishing and recovery; apply its stop/preservation rules
   when authority is lost. A code-host binding supplies no tracker readiness.
 - Every blocker is complete and its required outcome exists in the baseline.

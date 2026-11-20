@@ -1,3 +1,4 @@
+# Modified for the Heartbeat project.
 """Tests for the compact-output Gradle wrapper."""
 
 from __future__ import annotations

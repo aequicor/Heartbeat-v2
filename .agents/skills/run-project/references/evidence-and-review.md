@@ -1,5 +1,7 @@
 # Evidence and review
 
+<!-- Modified for the Heartbeat project. -->
+
 Keep completed work and valid evidence, while renewing what the current
 candidate changes. Apply this procedure in standalone and Project delivery;
 the selected mode retains its approval, authority and finish gates.
@@ -61,8 +63,8 @@ the selected mode retains its approval, authority and finish gates.
    impact cannot be bounded, or an explicit repository/provider rule requires it.
    A commit, handoff or acceptance step alone does not require a full rerun.
    When the PR's required CI checks run the same full suite on the pushed
-   head, do not duplicate it locally: push after affected checks and independent
-   review, and use CI results on that exact head before delivery acceptance or
+   head, push verified logical commits on the repository's schedule. Complete
+   independent review on the integrated candidate and use its CI results before delivery acceptance or
    merge. Apply [PR review timing](pr-review-timing.md) for concurrent external
    review, verified draft support and earlier readiness, including when CI only
    starts after leaving draft. Run the full suite locally when a repository or
@@ -91,12 +93,13 @@ the selected mode retains its approval, authority and finish gates.
    an old result as a current-head run, or replace a mandatory full check with
    a collection of focused passes. Keep prior valid coverage distinct from
    outstanding checks and reviews.
-5. Before push or acceptance, bind the combined evidence to the exact final
+5. For the final review handoff, bind the combined evidence to the exact final
    clean head and recheck the selected mode's authority, native dependencies,
    qualification and CI requirements. Full-suite evidence supplied by CI binds
    at delivery acceptance or merge, not push or PR readiness for review.
-   Failed/unknown pre-push checks, unresolved actionable findings, stale authority
-   or insufficient local review coverage hold push; missing required CI or
+   Failed or unknown pre-push checks, unresolved actionable findings, or stale authority
+   hold the applicable repository checkpoint; incomplete final review coverage
+   holds the final handoff. Missing required CI or
    external review holds acceptance and merge under PR review timing. Evidence
    reuse never renews a grant or consumes fewer
    recorded repair attempts merely because the base changed.
@@ -218,7 +221,7 @@ the selected mode retains its approval, authority and finish gates.
    explicitly invoked providers' required output intact and record the delivery
    gate decision separately. After repairs, renew affected validation
    and review, then confirm combined valid coverage of the final clean head
-   before push. Passing focused checks or an old `ship` verdict cannot qualify
+   before the final review handoff. Passing focused checks or an old `ship` verdict cannot qualify
    changed code. Preserve the record's source/evidence pointers in the normal
    issue/PR handoff, including exact pending or blocked coverage.
 

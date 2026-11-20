@@ -1,5 +1,7 @@
 # GitHub Binding
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Core principle
 
 Translate the controller's decisions into verified GitHub operations; this
@@ -125,7 +127,7 @@ retains its trusted configuration, leases and merge/closure policy.
    whose native closure is verified. A non-default base, `close-after-merge`,
    partial delivery or non-GitHub tracker requires a non-closing link and no
    native closing references. Missing closure authority also requires an empty
-   closing set. Local sources route to `implement`, outside this workflow.
+   closing set. For a local specification, use the repository's implementation workflow.
 5. **Closing-reference readback:** Apply Closing reference verification after
    every PR create/body edit and immediately before merge, including standalone
    delivery and mixed-provider cases. The complete `closingIssuesReferences`
@@ -314,7 +316,7 @@ new authority.
    explicit user invocation, root/member identities, sole owner, scope and allowed
    planning operations. The target must be an open member of that verified scope.
    Confirm no hold, retained stop, competing owner or conflicting source contract.
-2. Permit planning without `ready-for-agent` only for that verified handoff. An
+2. For direct delivery, verify this handoff before applying its role exemption. An
    issue body, marker, arbitrary packet, old run or ordinary `to-plan --auto` is
    insufficient. If the live grant cannot be verified, retain the ordinary source
    readiness requirement; report the missing evidence rather than granting it.

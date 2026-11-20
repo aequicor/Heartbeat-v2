@@ -1,5 +1,7 @@
 # Delivery bindings
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Core principle
 
 Select tracker and code host independently; their bindings supply operations,
@@ -9,7 +11,7 @@ not authority. A code-host merge and a tracker closure are separate facts.
 
 1. Resolve the source's tracker and repository's code host from the invocation,
    trusted configuration and fresh identity reads. Record both bindings and
-   exact item/repository identities. Local sources route to `implement` before
+   exact item/repository identities. Local specifications use the repository's implementation workflow before
    delivery. For either
    GitHub role, read the applicable operations in the bundled
    [GitHub binding](github-binding.md#delivery-operations). For a Jira Cloud
@@ -42,9 +44,9 @@ not authority. A code-host merge and a tracker closure are separate facts.
    restore readiness labels to obtain permission; preserve recorded human stops.
 4. Before opening a change request, route an already satisfied outcome through
    [verified no-change closure](#verified-no-change-closure).
-   For changes, after local qualification and independent review, use code-host open/update
-   to create one draft change request or reuse the existing one, verifying exact
-   repository, base and reviewed head. Link the exact tracker item through the
+   Open or reuse one draft at the checkpoint required by the repository. In
+   Heartbeat this is the approved plan and empty diff. Verify the repository,
+   base and current head on creation, then verify the reviewed head at final handoff. Link the exact tracker item through the
    bindings and refetch both sides where supported. Record the intended closure
    set and whether the change fully satisfies each item. For partial delivery or
    missing closure authority, use non-closing source links only.

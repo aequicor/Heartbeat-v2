@@ -1,5 +1,7 @@
 # Bundled release helper
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Supported contract
 
 Use this helper only for libraries using `gradle-maven-publish-plugin`

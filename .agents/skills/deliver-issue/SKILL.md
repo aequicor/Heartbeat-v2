@@ -3,6 +3,8 @@ name: deliver-issue
 description: Use when explicitly asked to deliver a named tracker issue and its descendants, including clarification, planning, implementation and reviewed delivery.
 ---
 
+<!-- Modified for the Heartbeat project. -->
+
 # Deliver issue
 
 Requires a supported tracker/code-host binding and independent final review; never installs providers.

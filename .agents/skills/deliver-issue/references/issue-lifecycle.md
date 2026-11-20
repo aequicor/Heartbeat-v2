@@ -1,5 +1,7 @@
 # Issue lifecycle
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Establish scope and authority
 
 1. Resolve one named tracker issue and its repository from the trusted user
@@ -20,8 +22,9 @@
    run's grant in the existing delivery record: authenticated root identity,
    repository, verified member identities, sole controller/owner, approved scope,
    allowed operations, existing holds/stops and permission boundaries. The direct
-   request grants in-scope clarification, planning and implementation; merge and
-   closure are separate explicit grants. Neither a comment, saved record nor
+   request grants in-scope clarification and planning. Start implementation
+   after repository-required plan approval. Merge and closure follow repository
+   policy and require separate authority. Neither a comment, saved record nor
    `--auto` creates or renews these permissions. Never fabricate role labels.
 4. A readiness label absent at initial discovery does not block direct delivery.
    Explicit human holds, unresolved decisions and retained stops do. If a human
@@ -108,6 +111,10 @@
    criteria and required dependencies are satisfied.
 
 ## Merge, close and reconcile
+
+In Heartbeat, hand the ready PR and its SHA to the owner, who confirms review
+and resolves discussions. Wait for GitHub to merge and then reconcile tracker state.
+Apply the agent merge procedure only where repository policy permits it.
 
 1. Maintain separate merge and closure grants for the current run and exact
    intended issue set. A generic delivery request grants neither. An explicit

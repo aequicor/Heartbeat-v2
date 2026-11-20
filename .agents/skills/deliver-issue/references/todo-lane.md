@@ -1,5 +1,7 @@
 # Todo Lane
 
+<!-- Modified for the Heartbeat project. -->
+
 Use this lifecycle for Project items in `Todo` and for the verified handoff
 into implementation.
 
@@ -23,8 +25,9 @@ missing or stale plans, or fast-path an item without any plan chain when it
 qualifies; preserve invalid chains and foreign markers as semantic
 blockers. Never fall back to an unmarked Agent Brief.
 Record the plan identities and metadata in the authority lease and screen base
-SHA drift before implementation. The human-applied role supplies authority; a verified
-replan report determines when a replacement revision is needed.
+SHA drift before implementation. The human-applied role permits selection.
+Check repository-required operator approval before handing off a new or revised
+plan, including a fast-path plan. A verified replan report identifies stale plans.
 
 ## Fast-path a Todo item
 
@@ -390,7 +393,9 @@ keeps claim precedence and uses the ranked priority and Rank order across new
 planning and implementation candidates.
 
 In `next`, selecting a Todo item commits the invocation to that one issue:
-plan it, hand it off, implement it, merge it, and reconcile it before finishing.
+obtain the required plan approval and deliver within the repository's merge
+policy. In Heartbeat return `waiting-for-human` after handing the ready PR and
+SHA to the owner, or reconcile the result if GitHub already merged it.
 Do not select another issue.
 
 In `drain`, follow the

@@ -3,6 +3,8 @@ name: implement-with-subagents
 description: Use when implementing supplied tickets or plan tasks with solo or worker-owned implementation selected from the task graph, or when reviewing that orchestration.
 ---
 
+<!-- Modified for the Heartbeat project. -->
+
 # Implement with subagents
 
 Review mode has no external skill dependency. Implementation mode uses Matt Pocock's separately installed `tdd` for behavior changes and one fresh independent read-only reviewer for the final joined branch.

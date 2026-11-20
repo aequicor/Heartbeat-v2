@@ -1,5 +1,7 @@
 # Fast path
 
+<!-- Modified for the Heartbeat project. -->
+
 Use this for a small, well-understood change whose source already settles the
 contract. It skips `to-plan`, not validation, independent review or authority.
 
@@ -33,9 +35,9 @@ recompute it; a change is a failed condition.
 
 ## Deliver
 
-1. Treat the source as the approved contract. Do not invoke `to-plan` or wait
-   for plan publication approval. Standalone, the explicit request and the
-   tracker readiness gate approve it.
+1. Record the brief plan and obtain any approval required by repository policy.
+   In Heartbeat, reuse the operator's explicit approval of that plan or present
+   it before implementation. Ticket selection permits drafting the plan.
 2. Apply ownership preflight under the
    [implementation procedure](implementation-mode.md) and use its selected
    route. Keep affected checks, owner self-review, task acceptance when

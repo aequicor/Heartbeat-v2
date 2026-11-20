@@ -1,12 +1,15 @@
 # PR review timing
 
+<!-- Modified for the Heartbeat project. -->
+
 <!-- Canonical source: references/pr-review-timing.md. Edit it there, then run `npm run references:sync`. -->
 
 Start applicable external review of a locally qualified candidate while CI runs; accept or
 merge only with complete evidence applicable to the final head.
 
-1. Complete affected local checks, independent integrated-candidate review and
-   finding dispositions before publishing or requesting external review. Honor
+1. Use the repository's required sequence for opening a draft and pushing verified
+   checkpoints. Complete affected local checks, independent integrated-candidate
+   review and finding dispositions before requesting final review. Honor
    stricter explicit repository or invoked provider requirements, including
    local full-suite runs and any CI-before-review or CI-before-readiness rule.
    Reuse independent coverage only with verified scope and head applicability.
@@ -14,7 +17,7 @@ merge only with complete evidence applicable to the final head.
    record, obtain one fresh independent read-only integrated-candidate review
    against source requirements, repository standards and the full diff; include
    the behavioral coverage account. Return findings to the repair owner. Hold
-   publication if required review cannot run and report the missing capability.
+   final review handoff if required review cannot run and report the missing capability.
 2. Determine from trusted repository requirements and the caller which external
    PR reviews are required, optional or not applicable, separately from local
    independent review. Verify whether required CI starts on drafts or only after

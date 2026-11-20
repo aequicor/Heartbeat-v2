@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified for the Heartbeat project.
 """Prepare and verify a bounded Kotlin library release.
 
 Adapted from Haze's ``scripts/release.py`` (Apache-2.0), commit

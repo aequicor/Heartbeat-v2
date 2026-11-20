@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified for the Heartbeat project.
 """Run Gradle commands with bounded diagnostics and wrapper-owned logs."""
 
 from __future__ import annotations

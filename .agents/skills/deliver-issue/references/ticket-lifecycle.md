@@ -1,5 +1,7 @@
 # Ticket lifecycle
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Route agents by task
 
 Apply the shared
@@ -189,7 +191,9 @@ Keep this route outside push, PR, shepherd and merge operations.
 
 ## Pre-push, shepherd, and merge
 
-Before the first push, give every review contract on the frozen candidate to
+Follow the repository's draft and checkpoint policy. For Heartbeat, push each
+verified logical commit and update the draft checklist. Before marking it ready,
+give every review contract on the frozen candidate to
 one fresh independent read-only reviewer. Reuse `deliver-issue`'s review for each
 contract it explicitly covered at that head; run only missing contracts, not a
 duplicate correctness pass. Fix every actionable finding or give an evidence-based
@@ -199,8 +203,8 @@ range plus its interaction with the previously reviewed effective diff. Apply
 `deliver-issue`'s
 [evidence invalidation rule](evidence-and-review.md#implementation-and-validation)
 to each affected check and review contract, including its broadening conditions.
-Before every push, verify
-that the combined evidence covers the exact final HEAD and that no actionable
+Before handing the final head to the owner, verify
+that the combined evidence covers that HEAD and that no actionable
 finding remains; never treat unchanged prior checks as proof for changed code.
 Apply [PR review timing](pr-review-timing.md) after local qualification: start
 applicable external review while CI runs, preferring demonstrably supported draft review
@@ -227,8 +231,8 @@ invoke `shepherd` for triage and PR actions. Keep code repairs with the ticket
 owner or original delegated implementation owners, integrating delegated commits
 in the same ticket worktree. Apply owner-driven behavioral testing and repeat affected
 validation and review against the new final HEAD, reply inline where possible,
-and resolve only after reply
-and required fix. Address every comment unless explicitly
+and observe the repository's thread-resolution policy. In Heartbeat the
+owner resolves discussions after reviewing the reply and fix. Address every comment unless explicitly
 very low priority; return material maintainer direction to the controller for
 a ticket-local decision pause. Silence is not approval:
 merge only with required reviews/checks terminal-green, mergeable PR, and

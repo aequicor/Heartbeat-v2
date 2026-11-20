@@ -1,5 +1,7 @@
 # Project Controller Handoff
 
+<!-- Modified for the Heartbeat project. -->
+
 Use this mode only for an active `run-project` controller's exclusively
 claimed implementation ticket. A direct named-issue request cannot create this
 handoff or take over a Project claim.

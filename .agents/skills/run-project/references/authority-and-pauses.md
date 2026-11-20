@@ -1,5 +1,7 @@
 # Run Authority And Ticket Pauses
 
+<!-- Modified for the Heartbeat project. -->
+
 ## Establish Run Authority
 
 1. Accept `next` or `drain` as execution modes, not a shell CLI or options for

@@ -3,6 +3,8 @@ name: run-project
 description: Use when explicitly asked to set up, review or run a project board, select its next eligible ticket, or drain its authorized work.
 ---
 
+<!-- Modified for the Heartbeat project. -->
+
 # Run project
 
 External skill providers are mode-specific: review and setup require none; execution, triage, and Wayfinder lanes use the providers documented in [workflow providers](references/workflow-providers.md).

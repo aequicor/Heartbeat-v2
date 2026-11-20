@@ -3,6 +3,8 @@ name: using-chrisbanes-skills
 description: Use when routing Kotlin or Jetpack Compose work, or physical Android benchmark evidence that needs a configuration decision, especially when several Kotlin or Compose concerns overlap.
 ---
 
+<!-- Modified for the Heartbeat project. -->
+
 # Using chrisbanes skills
 
 ## Core principle

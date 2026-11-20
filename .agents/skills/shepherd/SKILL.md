@@ -3,6 +3,8 @@ name: shepherd
 description: "Use when asked to shepherd, babysit, monitor, or poll open pull requests or merge requests, including triaging review feedback, CI failures, and routine follow-up."
 ---
 
+<!-- Modified for the Heartbeat project. -->
+
 # Shepherd
 
 ## Core principle

@@ -1,5 +1,7 @@
 # Deliver an approved outcome
 
+<!-- Modified for the Heartbeat project. -->
+
 Use this internal procedure for one approved delivery outcome after the owning
 controller has resolved scope, planning, ownership and operation grants. An outcome
 may cover several issues when the approved plan groups them. This procedure
