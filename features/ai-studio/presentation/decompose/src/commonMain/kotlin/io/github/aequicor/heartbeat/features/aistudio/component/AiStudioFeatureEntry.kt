@@ -25,5 +25,5 @@ class AiStudioFeatureEntry @Inject internal constructor(
         context: ComponentContext,
         host: FeatureHost,
         dispatcher: CoroutineDispatcher,
-    ): FeatureRoot = DefaultAiStudioComponent(context, host, storeFactory, dispatcher)
+    ): FeatureRoot = DefaultAiStudioComponent(context, host, storeFactory)
 }

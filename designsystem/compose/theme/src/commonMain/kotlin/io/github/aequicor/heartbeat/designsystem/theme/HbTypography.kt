@@ -3,9 +3,13 @@ package io.github.aequicor.heartbeat.designsystem.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScale
 import io.github.aequicor.heartbeat.designsystem.foundation.HbTypeScales
@@ -19,6 +23,7 @@ data class HbTypeStyles(
     val sectionTitle: TextStyle,
     val paneTitle: TextStyle,
     val readingBody: TextStyle,
+    val detail: TextStyle,
     val uiLabel: TextStyle,
     val caption: TextStyle,
     val code: TextStyle,
@@ -58,6 +63,11 @@ object HbTypography {
         @ReadOnlyComposable
         get() = HbThemeDefaults.LocalTypography.current.uiLabel
 
+    val Detail: TextStyle
+        @Composable
+        @ReadOnlyComposable
+        get() = HbThemeDefaults.LocalTypography.current.detail
+
     val Caption: TextStyle
         @Composable
         @ReadOnlyComposable
@@ -75,21 +85,37 @@ object HbTypography {
 }
 
 /** Resolves the portable scale at the user text scale. */
-internal fun HbTypeScale.toStyles(textScale: Float): HbTypeStyles = HbTypeStyles(
-    pageTitle = pageTitle.scaled(textScale),
-    sectionTitle = sectionTitle.scaled(textScale),
-    paneTitle = paneTitle.scaled(textScale),
-    readingBody = readingBody.scaled(textScale),
-    uiLabel = uiLabel.scaled(textScale),
-    caption = caption.scaled(textScale),
-    code = code.scaled(textScale).copy(fontFamily = FontFamily.Monospace),
-    metadata = metadata.scaled(textScale).copy(fontFeatureSettings = "tnum"),
+internal fun HbTypeScale.toStyles(
+    textScale: Float,
+    fontFamily: FontFamily? = null,
+    platformStyle: PlatformTextStyle? = null,
+    codeFontFamily: FontFamily = FontFamily.Monospace,
+): HbTypeStyles = HbTypeStyles(
+    pageTitle = pageTitle.scaled(textScale, fontFamily, platformStyle),
+    sectionTitle = sectionTitle.scaled(textScale, fontFamily, platformStyle),
+    paneTitle = paneTitle.scaled(textScale, fontFamily, platformStyle),
+    readingBody = readingBody.scaled(textScale, fontFamily, platformStyle),
+    detail = detail.scaled(textScale, fontFamily, platformStyle),
+    uiLabel = uiLabel.scaled(textScale, fontFamily, platformStyle),
+    caption = caption.scaled(textScale, fontFamily, platformStyle),
+    code = code.scaled(textScale, codeFontFamily, platformStyle),
+    metadata = metadata.scaled(textScale, fontFamily, platformStyle).copy(fontFeatureSettings = "tnum"),
 )
 
-internal fun HbTypeStyle.scaled(textScale: Float): TextStyle = TextStyle(
+internal fun HbTypeStyle.scaled(
+    textScale: Float,
+    fontFamily: FontFamily?,
+    platformStyle: PlatformTextStyle?,
+): TextStyle = TextStyle(
+    fontFamily = fontFamily,
     fontSize = (size * textScale).sp,
     lineHeight = (lineHeight * textScale).sp,
     fontWeight = weight.toFontWeight(),
+    fontSynthesis = FontSynthesis.None,
+    letterSpacing = 0.sp,
+    lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
+    shadow = Shadow.None,
+    platformStyle = platformStyle,
 )
 
 internal fun Int.toFontWeight(): FontWeight = when (this) {

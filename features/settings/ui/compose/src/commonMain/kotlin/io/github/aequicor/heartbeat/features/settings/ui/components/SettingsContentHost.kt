@@ -5,12 +5,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
 import io.github.aequicor.heartbeat.designsystem.components.HbText
+import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageId
 import io.github.aequicor.heartbeat.features.settings.ui.ComposeSettingsPageRegistry
 
@@ -33,7 +36,10 @@ internal fun SettingsContentHost(
             .background(colors.surface.canvas),
     ) {
         if (title != null) {
-            HbPaneHeader(title = title)
+            HbPaneHeader(
+                title = title, titleStyle = HbTypography.Title,
+                modifier = Modifier.padding(horizontal = HbSpacing.M),
+            )
         }
         Box(
             modifier = Modifier
@@ -43,8 +49,13 @@ internal fun SettingsContentHost(
         ) {
             val provider = pageId?.let { registry.find(it.value) }
             when {
-                pageId == null -> HbText(text = "Раздел не выбран")
-                provider == null -> HbText(text = "Раздел недоступен: ${pageId.value}")
+                pageId == null -> HbText(
+                    text = "Раздел не выбран", style = HbTypography.Detail, modifier = Modifier.padding(HbSpacing.L),
+                )
+                provider == null -> HbText(
+                    text = "Раздел недоступен: ${pageId.value}", style = HbTypography.Detail,
+                    modifier = Modifier.padding(HbSpacing.L),
+                )
                 else -> provider.Content(pageId.value)
             }
         }

@@ -38,8 +38,8 @@ public class DefaultAiStudioSettings @Inject constructor(
 
     override val avatarVisible: StateFlow<Boolean> = store
         .observeBoolean(AVATAR_VISIBLE, default = true)
-        .catch { failure ->
-            mutableError.value = failure.message ?: "Не удалось прочитать настройку"
+        .catch {
+            mutableError.value = "Не удалось загрузить настройки."
             emit(true)
         }
         .stateIn(
@@ -55,8 +55,8 @@ public class DefaultAiStudioSettings @Inject constructor(
             mutableError.value = null
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (failure: Exception) {
-            mutableError.value = failure.message ?: "Не удалось сохранить настройку"
+        } catch (_: Exception) {
+            mutableError.value = "Не удалось сохранить настройку. Попробуйте ещё раз."
         }
     }
 

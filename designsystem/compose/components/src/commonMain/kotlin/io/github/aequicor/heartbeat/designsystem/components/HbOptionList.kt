@@ -86,7 +86,7 @@ internal fun <T> HbOptionList(
         if (options.isEmpty() && emptyText != null) {
             BasicText(
                 text = emptyText,
-                style = HbTypography.Caption,
+                style = HbTypography.Detail,
                 color = { colors.text.secondary },
                 modifier = Modifier.padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
             )

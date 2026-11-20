@@ -42,36 +42,28 @@ class HbColorContrastTest {
 
     @Test
     fun textRolesReachTextMinimumOnEverySurface() {
-        val surfaces = listOf(
-            HbColorPalettes.Light.surface.subtle,
-            HbColorPalettes.Light.surface.raised,
-            HbColorPalettes.Light.surface.input,
-        )
-        surfaces.forEach { surface ->
-            assertAboveContrast(
-                expected = HbContrast.TextMinimum,
-                actual = HbColorPalettes.Light.text.primary.contrastRatio(surface),
-            )
-            assertAboveContrast(
-                expected = HbContrast.TextMinimum,
-                actual = HbColorPalettes.Light.text.secondary.contrastRatio(surface),
-            )
+        listOf(HbColorPalettes.Light, HbColorPalettes.Dark).forEach { palette ->
+            val surfaces = with(palette.surface) { listOf(canvas, base, subtle, raised, input) }
+            val readableText = with(palette.text) { listOf(primary, secondary, muted) }
+            surfaces.forEach { surface ->
+                readableText.forEach { foreground ->
+                    assertAboveContrast(HbContrast.TextMinimum, foreground.contrastRatio(surface))
+                }
+            }
         }
+    }
 
-        val darkSurfaces = listOf(
-            HbColorPalettes.Dark.surface.subtle,
-            HbColorPalettes.Dark.surface.raised,
-            HbColorPalettes.Dark.surface.input,
-        )
-        darkSurfaces.forEach { surface ->
-            assertAboveContrast(
-                expected = HbContrast.TextMinimum,
-                actual = HbColorPalettes.Dark.text.primary.contrastRatio(surface),
-            )
-            assertAboveContrast(
-                expected = HbContrast.TextMinimum,
-                actual = HbColorPalettes.Dark.text.secondary.contrastRatio(surface),
-            )
+    @Test
+    fun mutedMetadataStaysReadableOnAuroraMessageAndWorkSurfaces() {
+        val text = HbColorPalettes.Light.text
+        assertEquals(HbColor.hex(0x20232A), text.primary)
+        assertEquals(HbColor.hex(0x555D68), text.secondary)
+        assertEquals(HbColor.hex(0x656D78), text.muted)
+        assertTrue(text.muted != text.disabled, "Metadata must not use the disabled text role")
+        listOf(HbColor.hex(0xFFFFFF), HbColor.hex(0xF1FEE1), HbColor.hex(0xF4F3F2)).forEach { surface ->
+            assertAboveContrast(HbContrast.TextMinimum, text.muted.contrastRatio(surface))
+            assertTrue(text.primary.contrastRatio(surface) > text.secondary.contrastRatio(surface))
+            assertTrue(text.secondary.contrastRatio(surface) > text.muted.contrastRatio(surface))
         }
     }
 

@@ -4,7 +4,9 @@ plugins {
 }
 
 kotlin {
+    android { androidResources.enable = true }
     sourceSets.commonMain.dependencies {
+        implementation(compose.components.resources)
         implementation(project(":designsystem:compose:components"))
         implementation(project(":features:ai-studio:api"))
         implementation(project(":features:ai-studio:impl"))
@@ -15,7 +17,13 @@ kotlin {
         implementation(libs.kotlinx.coroutines.core)
     }
     sourceSets.jvmTest.dependencies {
+        implementation(project(":core:preferences:api"))
         implementation(libs.compose.ui)
         implementation(compose.desktop.currentOs)
+        implementation(libs.kotlinx.coroutines.test)
     }
+}
+
+compose.resources {
+    packageOfResClass = "io.github.aequicor.heartbeat.features.aistudio.ui.resources"
 }

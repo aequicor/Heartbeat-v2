@@ -1,12 +1,17 @@
+@file:OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+
 package io.github.aequicor.heartbeat
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.arkivanov.decompose.DefaultComponentContext
@@ -14,6 +19,7 @@ import com.arkivanov.essenty.lifecycle.LifecycleRegistry
 import com.arkivanov.essenty.lifecycle.destroy
 import com.arkivanov.essenty.lifecycle.resume
 import dev.zacsweers.metro.createGraphFactory
+import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.di.DesktopGraph
@@ -53,7 +59,6 @@ fun main() {
 
     application {
         val isDark = isSystemInDarkTheme()
-        val titleBarStyle = if (isDark) TitleBarStyle.dark() else TitleBarStyle.lightWithLightHeader()
         val appearance = if (isDark) HbAppearance.Dark else HbAppearance.Light
 
         val shell = remember(graph) {
@@ -64,41 +69,61 @@ fun main() {
             )
         }
 
-        IntUiTheme(
-            theme = if (isDark) JewelTheme.darkThemeDefinition() else JewelTheme.lightThemeDefinition(),
-            styling = ComponentStyling.default().decoratedWindow(titleBarStyle = titleBarStyle),
-        ) {
-            DecoratedWindow(
-                onCloseRequest = {
-                    lifecycle.destroy()
-                    try {
-                        runBlocking { graph.aiEngineFacade.dispose() }
-                    } finally {
-                        graph.databaseInitializer.close()
-                        graph.appCoroutineScope.cancel()
-                        exitApplication()
-                    }
-                },
-                state = rememberWindowState(width = 1440.dp, height = 900.dp),
-                title = "Heartbeat",
-            ) {
-                TitleBar {
-                    Text(
-                        "Heartbeat",
-                        style = JewelTheme.defaultTextStyle.copy(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                    )
-                }
-                HbTheme(appearance = appearance) {
-                    ShellScreen(
-                        component = shell,
-                        renderers = renderers,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+        val onClose = {
+            lifecycle.destroy()
+            try {
+                runBlocking { graph.aiEngineFacade.dispose() }
+            } finally {
+                graph.databaseInitializer.close()
+                graph.appCoroutineScope.cancel()
+                exitApplication()
+            }
+        }
+        val state = rememberWindowState(width = 1440.dp, height = 900.dp)
+        val os = System.getProperty("os.name")
+        val uiFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Segoe UI") else FontFamily.Default }
+        val codeFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Consolas") else FontFamily.Monospace }
+        val content: @Composable () -> Unit = {
+            HbTheme(appearance = appearance, fontFamily = uiFont, codeFontFamily = codeFont) {
+                HbDesktopFocusIndication(Modifier.fillMaxSize()) {
+                    ShellScreen(component = shell, renderers = renderers, modifier = Modifier.fillMaxSize())
                 }
             }
+        }
+        when {
+            os.startsWith("Windows") || os.startsWith("Mac") -> EdgeToEdgeHeartbeatWindow(state, onClose, content)
+            else -> JewelHeartbeatWindow(state, isDark, onClose, content)
+        }
+    }
+}
+
+@Composable
+private fun JewelHeartbeatWindow(
+    state: WindowState,
+    isDark: Boolean,
+    onClose: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val titleBarStyle = if (isDark) TitleBarStyle.dark() else TitleBarStyle.lightWithLightHeader()
+    IntUiTheme(
+        theme = if (isDark) JewelTheme.darkThemeDefinition() else JewelTheme.lightThemeDefinition(),
+        styling = ComponentStyling.default().decoratedWindow(titleBarStyle = titleBarStyle),
+    ) {
+        DecoratedWindow(
+            onCloseRequest = onClose,
+            state = state,
+            title = "Heartbeat",
+        ) {
+            TitleBar {
+                Text(
+                    "Heartbeat",
+                    style = JewelTheme.defaultTextStyle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                )
+            }
+            content()
         }
     }
 }

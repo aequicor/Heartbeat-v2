@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -19,11 +20,12 @@ import androidx.compose.ui.graphics.drawscope.translate
  * or filled. It is drawn outside the measured bounds, over the surrounding surface, which is why the
  * focus role is checked against the canvas and action backgrounds.
  */
+@Composable
 internal fun Modifier.hbFocusRing(
     focused: Boolean,
     shape: Shape,
     color: Color,
-): Modifier = if (!focused) {
+): Modifier = if (!focused || !HbFocusIndication.keyboardNavigation) {
     this
 } else {
     drawBehind {

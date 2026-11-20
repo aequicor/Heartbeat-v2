@@ -1,89 +1,138 @@
+@file:Suppress("MagicNumber")
+
 package io.github.aequicor.heartbeat.features.aistudio.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import io.github.aequicor.heartbeat.designsystem.components.HbDivider
-import io.github.aequicor.heartbeat.designsystem.foundation.HbNavigationMode
-import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
-import io.github.aequicor.heartbeat.designsystem.foundation.HbWorkspaceLayout
-import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.unit.Dp
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
+import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioNavigationRail
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioSidebar
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.AiStudioWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraChats
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDesktopSidebar
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPanelDialog
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraViewer
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraTouchFilesFrame
+import kotlinx.coroutines.flow.StateFlow
 
-/** Renders the studio snapshot and forwards user actions to its store. */
+/** Displays the prepared Aurora workspace and forwards interactions to its Decompose component. */
 @Composable
-fun AiStudioScreen(
+internal fun AiStudioScreen(
     state: AiStudioScreenState,
+    draft: StateFlow<Draft>,
+    liveText: StateFlow<LiveText>,
+    backdrop: AuroraBackdrop?,
     onAction: (AiStudioAction) -> Unit,
-    avatarVisible: Boolean,
     onOpenSettings: () -> Unit,
+    avatarVisible: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val colors = HbTheme.colors
-    var showChats by rememberSaveable { mutableStateOf(false) }
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.surface.canvas)
-            .imePadding(),
-    ) {
-        val fit = HbWorkspaceLayout.fit(
-            availableWidth = maxWidth.value.toInt(),
-            inspector = false,
-        )
-
-        Row(modifier = Modifier.fillMaxSize()) {
-            // The overlay drawer is not implemented yet; keep the rail visible in compact mode so
-            // the workspace never loses access to navigation and settings on narrow widths.
-            if (fit.navigation == HbNavigationMode.Rail || fit.navigation == HbNavigationMode.Drawer) {
-                AiStudioNavigationRail(
-                    avatarVisible = avatarVisible,
-                    onOpenSettings = onOpenSettings,
+    val touch = HbSizes.minimumTarget >= AuroraLayout.TouchTarget
+    val caption = HbWindowCaption.current
+    val canvas = if (touch) AuroraColors.Canvas else AuroraColors.DesktopCanvas
+    val viewer = state.viewer
+    val hiddenSemantics = Modifier.clearAndSetSemantics {
+        hideFromAccessibility()
+    }
+    val backgroundSemantics = if (viewer == null) Modifier else hiddenSemantics
+    val workspaceSemantics = if (touch && state.filesVisible) hiddenSemantics else backgroundSemantics
+    BoxWithConstraints(modifier.fillMaxSize().background(canvas).imePadding()) {
+        val panes = auroraPaneLayout(maxWidth, touch, state.filesVisible, caption)
+        Row(
+            Modifier.fillMaxSize().then(workspaceSemantics).padding(
+                start = panes.leading, end = AuroraLayout.Space, top = panes.top, bottom = AuroraLayout.Space,
+            ),
+        ) {
+            if (panes.sidebar) {
+                AuroraDesktopSidebar(
+                    state, onAction, onOpenSettings,
+                    Modifier.width(AuroraLayout.SidebarWithGap).padding(top = panes.sidebarTop),
                 )
-                HbDivider(vertical = true)
             }
-            if (fit.sidebar) {
-                AiStudioSidebar(
-                    state = state,
-                    onAction = onAction,
-                    onClose = null,
-                    modifier = Modifier.width(HbPaneGeometry.SidebarPreferred.dp),
+            Box(Modifier.weight(1f).fillMaxSize()) {
+                AuroraWorkspace(
+                    state, draft, liveText, backdrop, touch, onAction, showNavigation = !panes.sidebar,
+                    modifier = Modifier.fillMaxSize(),
+                    captionOverlap = panes.captionOverlap,
+                    caption = caption,
                 )
-                HbDivider(vertical = true)
+                if (state.chatsVisible && !panes.sidebar) {
+                    AuroraPanelDialog({ onAction(AiStudioAction.ToggleChats(false)) }) {
+                        AuroraChats(state, touch, avatarVisible, onAction, onOpenSettings,
+                            Modifier.fillMaxSize().then(workspaceSemantics).padding(AuroraLayout.Space), close = true)
+                    }
+                }
+                if (state.filesVisible && !panes.filesAside) {
+                    AuroraPanelDialog({ onAction(AiStudioAction.ToggleFiles(false)) }) {
+                        val panelModifier = if (touch) backgroundSemantics.auroraTouchFilesFrame()
+                        else Modifier.fillMaxSize().then(backgroundSemantics)
+                        AuroraFiles(state, touch, onAction, panelModifier)
+                    }
+                }
             }
-            if (!fit.sidebar && showChats && state.connected) {
-                AiStudioSidebar(
-                    state = state,
-                    onAction = { action ->
-                        if (action is AiStudioAction.OpenChat || action == AiStudioAction.NewChat) showChats = false
-                        onAction(action)
-                    },
-                    onClose = { showChats = false },
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                AiStudioWorkspace(
-                    state = state,
-                    onAction = onAction,
-                    onShowChats = if (fit.sidebar) null else { { showChats = true } },
-                    modifier = Modifier.weight(1f),
+            if (panes.filesAside) {
+                AuroraFiles(
+                    state, touch, onAction,
+                    Modifier.padding(start = AuroraLayout.PaneGap, top = panes.filesTop).width(AuroraLayout.FilesPane),
                 )
             }
         }
+        viewer?.let { file -> AuroraViewer(file, touch, { onAction(AiStudioAction.CloseViewer) }) }
     }
+}
+
+private class AuroraPaneLayout(
+    val sidebar: Boolean,
+    val filesAside: Boolean,
+    val top: Dp,
+    private val captionTop: Dp,
+    val captionOverlap: Dp,
+    private val captionOnLeft: Boolean,
+) {
+    val leading get() = if (sidebar) AuroraLayout.PaneGap else AuroraLayout.Space
+    val sidebarTop get() = if (captionOnLeft) captionTop else Dp.Hairline
+    val filesTop get() = if (captionOnLeft) Dp.Hairline else captionTop
+}
+
+private fun auroraPaneLayout(
+    width: Dp,
+    touch: Boolean,
+    filesVisible: Boolean,
+    caption: HbWindowCaption,
+): AuroraPaneLayout {
+    val sidebar = !touch && width >= AuroraLayout.NavBreakpoint
+    val filesBreakpoint = if (sidebar) AuroraLayout.ThreePaneBreakpoint else AuroraLayout.TwoPaneBreakpoint
+    val filesAside = filesVisible && !touch && width >= filesBreakpoint
+    val filesSpace = if (filesAside) AuroraLayout.FilesPane + AuroraLayout.PaneGap else Dp.Hairline
+    val sideInset = maxOf(caption.leftInset, caption.rightInset)
+    val belowCaption = sideInset > Dp.Hairline && width < sideInset + AuroraLayout.NavigationWidth
+    val top = if (belowCaption) caption.height else AuroraLayout.Space
+    val captionTop = (caption.height - top).coerceAtLeast(Dp.Hairline)
+    val overlap = if (belowCaption) Dp.Hairline else auroraCaptionOverlap(caption, sidebar, filesSpace)
+    return AuroraPaneLayout(sidebar, filesAside, top, captionTop, overlap, caption.leftInset > Dp.Hairline)
+}
+
+private fun auroraCaptionOverlap(caption: HbWindowCaption, sidebar: Boolean, filesSpace: Dp): Dp = when {
+    caption.leftInset <= Dp.Hairline ->
+        (caption.rightInset - AuroraLayout.Space - filesSpace).coerceAtLeast(Dp.Hairline)
+    sidebar -> Dp.Hairline
+    else -> (caption.leftInset - AuroraLayout.Space).coerceAtLeast(Dp.Hairline)
 }

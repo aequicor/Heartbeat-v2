@@ -147,7 +147,7 @@ private fun HbButtonContent(
         BasicText(
             text = text,
             color = { contentColor },
-            style = HbTypography.Body,
+            style = HbTypography.Label,
             modifier = Modifier.padding(horizontal = HbSpacing.M, vertical = HbSpacing.S),
         )
         if (indicatorVisible) {

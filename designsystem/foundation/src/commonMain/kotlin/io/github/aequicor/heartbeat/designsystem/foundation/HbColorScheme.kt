@@ -9,10 +9,11 @@ public data class HbSurfaceColors(
     public val input: HbColor,
 )
 
-/** Text roles from primary content to unavailable text. */
+/** Primary content, supporting text, readable metadata and unavailable text. */
 public data class HbTextColors(
     public val primary: HbColor,
     public val secondary: HbColor,
+    public val muted: HbColor,
     public val disabled: HbColor,
 )
 

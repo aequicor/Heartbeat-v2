@@ -1,13 +1,19 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbSettingsRow
 import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -35,30 +41,38 @@ internal fun AiStudioSettingsPage(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(HbSpacing.M),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.L),
     ) {
-        HbSettingsRow(
-            title = "Аватар пользователя",
-            description = "Показывать аватар пользователя в навигации студии",
-            control = { controlModifier ->
-                HbSwitch(
-                    label = "",
-                    checked = avatarVisible,
-                    onCheckedChange = { visible ->
-                        appScope.launch { settings.setAvatarVisible(visible) }
-                    },
-                    modifier = controlModifier,
-                )
-            },
-        )
-        val message = error
-        if (message != null) {
-            BasicText(
-                text = message,
-                style = HbTypography.Caption,
-                color = { colors.status.error.foreground },
-                modifier = Modifier.padding(top = HbSpacing.S),
+        Column(
+            modifier = Modifier.widthIn(max = SettingsFormMaxWidth).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(HbSpacing.M),
+        ) {
+            HbSettingsRow(
+                title = "Показывать аватар",
+                description = "В боковой панели студии",
+                control = { controlModifier ->
+                    HbSwitch(
+                        label = "",
+                        checked = avatarVisible,
+                        onCheckedChange = { visible ->
+                            appScope.launch { settings.setAvatarVisible(visible) }
+                        },
+                        modifier = controlModifier,
+                    )
+                },
             )
+            val message = error
+            if (message != null) {
+                BasicText(
+                    text = message,
+                    modifier = Modifier.padding(horizontal = HbSpacing.M),
+                    style = HbTypography.Detail,
+                    color = { colors.status.error.foreground },
+                )
+            }
         }
     }
 }
+
+private val SettingsFormMaxWidth = 720.dp

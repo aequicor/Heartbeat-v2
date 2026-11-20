@@ -36,7 +36,7 @@ fun HbFormSection(
             if (description != null) {
                 BasicText(
                     text = description,
-                    style = HbTypography.Caption,
+                    style = HbTypography.Detail,
                     color = { colors.text.secondary },
                 )
             }

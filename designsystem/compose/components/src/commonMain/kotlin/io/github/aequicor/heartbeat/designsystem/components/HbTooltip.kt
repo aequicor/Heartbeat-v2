@@ -52,11 +52,13 @@ import kotlinx.coroutines.delay
  * grace period instead of on the first missing hover; that keeps the documented "moving the pointer
  * onto the tooltip does not close it" behavior. The popup is placed by the collision-aware provider:
  * it stays inside a short or narrow window instead of being clipped by the screen edge.
+ * Set [enabled] to false to hide the hint while keeping the trigger in the composition.
  */
 @Composable
 fun HbTooltip(
     text: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val triggerInteraction = remember { MutableInteractionSource() }
@@ -68,7 +70,7 @@ fun HbTooltip(
     var dismissed by remember { mutableStateOf(false) }
 
     val pointerOnPair = hovered || tooltipHovered
-    val active = (pointerOnPair || focused) && !dismissed
+    val active = enabled && (pointerOnPair || focused) && !dismissed
 
     LaunchedEffect(active) {
         if (active) {
@@ -89,7 +91,7 @@ fun HbTooltip(
             .hoverable(triggerInteraction)
             .onFocusChanged { focused = it.hasFocus }
             .tooltipKeys(
-                visible = visible,
+                visible = enabled && visible,
                 onDismiss = {
                     visible = false
                     dismissed = true
@@ -100,7 +102,7 @@ fun HbTooltip(
             },
     ) {
         content()
-        if (visible) {
+        if (enabled && visible) {
             TooltipPopup(text = text, interactionSource = tooltipInteraction)
         }
     }

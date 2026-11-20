@@ -18,6 +18,7 @@ class HbReferenceColorsTest {
             HbReferenceColors.Fog,
             HbReferenceColors.Ink,
             HbReferenceColors.InkSoft,
+            HbReferenceColors.InkQuiet,
             HbReferenceColors.InkMuted,
             HbReferenceColors.Steel,
             HbReferenceColors.Charcoal,
@@ -66,6 +67,8 @@ class HbReferenceColorsTest {
     @Test
     fun semanticRolesResolveFromTheReferenceLayer() {
         assertEquals(HbReferenceColors.Ink, HbColorPalettes.Light.text.primary)
+        assertEquals(HbReferenceColors.InkSoft, HbColorPalettes.Light.text.secondary)
+        assertEquals(HbReferenceColors.InkQuiet, HbColorPalettes.Light.text.muted)
         assertEquals(HbReferenceColors.VioletInk, HbColorPalettes.Light.focus)
         assertEquals(HbReferenceColors.Pearl, HbColorPalettes.Dark.action.primaryBackground)
         assertEquals(HbReferenceColors.LilacInk, HbColorPalettes.Dark.focus)

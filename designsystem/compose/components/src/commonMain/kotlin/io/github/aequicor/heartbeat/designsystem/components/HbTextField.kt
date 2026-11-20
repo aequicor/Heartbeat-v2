@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
  * Text input built on foundation, without a Material dependency. Single-line by default.
+ * [textStyle] applies to both the value and its placeholder; the placeholder changes only color.
  *
  * Accessibility: [label] is the accessible name of the field, independent of [placeholder], which
  * disappears after input; when the field is used inside [HbFormField] without its own label, the
@@ -74,6 +76,7 @@ fun HbTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    textStyle: TextStyle = HbTypography.Label,
     trailing: @Composable (enabled: Boolean) -> Unit = {},
 ) {
     val colors = HbTheme.colors
@@ -106,7 +109,7 @@ fun HbTextField(
                 .border(width = visuals.border.width, color = visuals.border.color, shape = HbShapes.Medium)
                 .heightIn(min = HbSizes.controlHeight)
                 .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
-            textStyle = HbTypography.Body.copy(color = visuals.content),
+            textStyle = textStyle.copy(color = visuals.content),
             cursorBrush = SolidColor(visuals.content),
             singleLine = singleLine,
             minLines = minLines,
@@ -121,6 +124,7 @@ fun HbTextField(
                     value = value,
                     placeholder = placeholder,
                     placeholderColor = visuals.placeholder,
+                    textStyle = textStyle,
                     enabled = enabled,
                     trailing = trailing,
                     innerTextField = innerTextField,
@@ -154,8 +158,8 @@ private fun fieldVisuals(enabled: Boolean, error: String?, colors: HbColors): Fi
     }
     val placeholder = when {
         error != null -> colors.status.error.foreground
-        !enabled -> colors.text.secondary.copy(alpha = HbEffects.DisabledContent)
-        else -> colors.text.secondary
+        !enabled -> colors.text.muted.copy(alpha = HbEffects.DisabledContent)
+        else -> colors.text.muted
     }
     return FieldVisuals(border = border, content = content, placeholder = placeholder)
 }
@@ -184,6 +188,7 @@ private fun HbFieldDecoration(
     value: String,
     placeholder: String,
     placeholderColor: Color,
+    textStyle: TextStyle,
     enabled: Boolean,
     trailing: @Composable (enabled: Boolean) -> Unit,
     innerTextField: @Composable () -> Unit,
@@ -198,7 +203,7 @@ private fun HbFieldDecoration(
                 BasicText(
                     text = placeholder,
                     color = { placeholderColor },
-                    style = HbTypography.Caption,
+                    style = textStyle,
                 )
             }
             innerTextField()

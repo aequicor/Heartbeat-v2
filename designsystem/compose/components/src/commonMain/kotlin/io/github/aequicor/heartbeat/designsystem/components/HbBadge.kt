@@ -36,7 +36,7 @@ fun HbBadge(
         BasicText(
             text = label,
             style = HbTypography.Metadata,
-            color = { tone.foreground(colors) },
+            color = { if (tone == HbStatusTone.Neutral) colors.text.muted else tone.foreground(colors) },
         )
     }
 }

@@ -79,7 +79,7 @@ fun HbMenuItem(
             BasicText(
                 text = hint,
                 style = HbTypography.Metadata,
-                color = { colors.text.secondary },
+                color = { colors.text.muted },
             )
         }
         if (selected == true) {

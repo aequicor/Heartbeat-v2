@@ -9,6 +9,7 @@ import io.github.aequicor.heartbeat.features.settings.api.SettingsRoutes
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
@@ -16,12 +17,14 @@ internal class DefaultAiStudioComponent(
     componentContext: ComponentContext,
     private val host: FeatureHost,
     factory: AiStudioStoreFactory,
-    dispatcher: CoroutineDispatcher,
+    worker: CoroutineDispatcher = Dispatchers.Default,
 ) : AiStudioComponent, AiStudioStore, ComponentContext by componentContext {
-    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val scope = CoroutineScope(SupervisorJob() + worker)
     private val store = factory.create(scope)
 
     override val screenState get() = store.screenState
+    override val draft get() = store.draft
+    override val liveText get() = store.liveText
 
     init {
         componentContext.lifecycle.doOnDestroy(scope::cancel)

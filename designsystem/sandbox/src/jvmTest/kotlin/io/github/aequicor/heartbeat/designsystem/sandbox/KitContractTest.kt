@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -14,9 +16,11 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -33,9 +37,14 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbAvatar
@@ -52,7 +61,9 @@ import io.github.aequicor.heartbeat.designsystem.components.HbTabs
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.designsystem.components.HbTreeItem
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
+import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -238,6 +249,69 @@ class KitContractTest {
             "A read-only field is not a disabled field",
         )
         assertEquals(0, changes)
+    }
+
+    @Test
+    fun fieldPlaceholderKeepsTheCustomInputTypographyAtBothTextScales() = runComposeUiTest {
+        var scale by mutableFloatStateOf(1f)
+        var code by mutableStateOf(false)
+        var value by mutableStateOf("")
+        var expectedStyle = TextStyle.Default
+        var placeholderColor = Color.Unspecified
+        var inputColor = Color.Unspecified
+        val sample = "Шрифт H0123\nСтрока 45"
+        setContent {
+            HbTheme(
+                appearance = HbAppearance.Light,
+                textScale = scale,
+                fontFamily = FontFamily.Serif,
+                codeFontFamily = FontFamily.Monospace,
+            ) {
+                expectedStyle = if (code) HbTypography.Code else HbTypography.Body
+                placeholderColor = HbTheme.colors.text.muted
+                inputColor = HbTheme.colors.text.primary
+                HbTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier.width(480.dp),
+                    placeholder = sample,
+                    singleLine = false,
+                    textStyle = expectedStyle,
+                )
+            }
+        }
+
+        for (useCode in listOf(false, true)) for (textScale in listOf(1f, 2f)) {
+            runOnIdle {
+                code = useCode
+                scale = textScale
+                value = ""
+            }
+            val placeholder = onNodeWithText(sample, useUnmergedTree = true)
+            val placeholderLayout = placeholder.textLayout()
+            val pixels = placeholder.captureToImage().toPixelMap()
+            assertTrue(
+                (0 until pixels.height).any { y ->
+                    (0 until pixels.width).any { x ->
+                        colorDistance(pixels[x, y], placeholderColor) < RingColorTolerance
+                    }
+                },
+                "The placeholder must paint the muted role, including for a custom input style",
+            )
+
+            val field = onNode(hasSetTextAction())
+            field.performTextInput(sample)
+            val inputLayout = field.textLayout()
+            assertFieldTextLayout(placeholderLayout, expectedStyle)
+            assertFieldTextLayout(inputLayout, expectedStyle)
+            assertEquals(inputColor, inputLayout.layoutInput.style.color)
+            assertEquals(2, placeholderLayout.lineCount)
+            assertEquals(placeholderLayout.lineCount, inputLayout.lineCount)
+            for (line in 0 until placeholderLayout.lineCount) {
+                assertEquals(placeholderLayout.getLineBaseline(line), inputLayout.getLineBaseline(line), 0.01f)
+                assertEquals(placeholderLayout.getLineRight(line), inputLayout.getLineRight(line), 0.01f)
+            }
+        }
     }
 
     @Test
@@ -590,6 +664,29 @@ class KitContractTest {
             colorDistance(pixels[x, middleY], border) < RingColorTolerance
         }
         assertTrue(marked, "The disabled select must use the subtle border role")
+    }
+
+    private fun assertFieldTextLayout(layout: TextLayoutResult, expectedStyle: TextStyle) {
+        assertEquals(
+            expectedStyle,
+            layout.layoutInput.style.copy(color = Color.Unspecified),
+            "Body and Code must pass through the field without a Caption fallback",
+        )
+        assertFalse(layout.didOverflowHeight)
+        // BasicText can keep the available paragraph width while its node uses only the
+        // occupied width. Check the actual lines, not hasVisualOverflow's paragraph width.
+        for (line in 0 until layout.lineCount) {
+            assertTrue(layout.getLineLeft(line) >= 0f)
+            assertTrue(layout.getLineRight(line) <= layout.size.width + 0.01f)
+        }
+    }
+
+    private fun SemanticsNodeInteraction.textLayout(): TextLayoutResult {
+        val layouts = mutableListOf<TextLayoutResult>()
+        performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+            assertTrue(action(layouts))
+        }
+        return layouts.single()
     }
 
     private fun colorDistance(first: Color, second: Color): Float =

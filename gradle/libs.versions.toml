@@ -13,6 +13,7 @@ kotlinx-serialization = "1.6.3"
 junit = "4.13.2"
 konsist = "1.0.0-beta.1"
 jewel = "0.42.0-263.7307.200"
+jbr-api = "1.9.0"
 sqldelight = "2.4.1"
 datastore = "1.2.1"
 okio = "3.18.2"
@@ -36,6 +37,7 @@ compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", v
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
 decompose = { module = "com.arkivanov.decompose:decompose", version.ref = "decompose" }
 decompose-extensions-compose = { module = "com.arkivanov.decompose:extensions-compose", version.ref = "decompose" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.11.0" }
 kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
 metro-gradle-plugin = { module = "dev.zacsweers.metro:gradle-plugin", version.ref = "metro" }
 metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
@@ -56,7 +58,11 @@ konsist = { module = "com.lemonappdev:konsist", version.ref = "konsist" }
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
 jewel-int-ui-standalone = { module = "org.jetbrains.jewel:jewel-int-ui-standalone", version.ref = "jewel" }
 jewel-decorated-window = { module = "org.jetbrains.jewel:jewel-decorated-window", version.ref = "jewel" }
+jetbrains-runtime-api = { module = "org.jetbrains.runtime:jbr-api", version.ref = "jbr-api" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "detekt-compose-rules" }
 kode-compose-rules = { module = "ru.kode:detekt-rules-compose-detekt2", version.ref = "kode-compose-rules" }
 faire-detekt-rules = { module = "com.faire:faire-detekt-rules", version.ref = "faire-detekt-rules" }
+
+[plugins]
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

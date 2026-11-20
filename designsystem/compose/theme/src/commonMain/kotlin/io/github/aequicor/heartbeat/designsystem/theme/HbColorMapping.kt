@@ -17,6 +17,7 @@ internal fun HbColorScheme.toHbColors(): HbColors = HbColors(
     text = HbTextColors(
         primary = text.primary.toComposeColor(),
         secondary = text.secondary.toComposeColor(),
+        muted = text.muted.toComposeColor(),
         disabled = text.disabled.toComposeColor(),
     ),
     border = HbBorderColors(

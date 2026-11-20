@@ -19,6 +19,10 @@ import kotlin.math.max
 internal class HbAnchoredPopupPositionProvider(
     private val gap: Int,
     private val preferAbove: Boolean = false,
+    private val alignEnd: Boolean = false,
+    private val pointerAnchor: IntOffset? = null,
+    private val overlapAnchor: Boolean = false,
+    private val onAnchorInPopup: (IntOffset) -> Unit = {},
 ) : PopupPositionProvider {
 
     override fun calculatePosition(
@@ -27,8 +31,11 @@ internal class HbAnchoredPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val spaceBelow = windowSize.height - anchorBounds.bottom - gap
-        val spaceAbove = anchorBounds.top - gap
+        val anchor = pointerAnchor?.let { IntRect(anchorBounds.topLeft + it, IntSize.Zero) } ?: anchorBounds
+        val below = if (overlapAnchor) anchor.top else anchor.bottom
+        val above = if (overlapAnchor) anchor.bottom else anchor.top
+        val spaceBelow = windowSize.height - below - gap
+        val spaceAbove = above - gap
         val placeBelow = if (preferAbove) {
             popupContentSize.height > spaceAbove && spaceBelow >= spaceAbove
         } else {
@@ -36,20 +43,20 @@ internal class HbAnchoredPopupPositionProvider(
         }
 
         val y = if (placeBelow) {
-            anchorBounds.bottom + gap
+            below + gap
         } else {
-            anchorBounds.top - popupContentSize.height - gap
+            above - popupContentSize.height - gap
         }
         val maxX = max(0, windowSize.width - popupContentSize.width)
         val maxY = max(0, windowSize.height - popupContentSize.height)
-        val x = when (layoutDirection) {
-            LayoutDirection.Ltr -> anchorBounds.left.coerceIn(0, maxX)
-            LayoutDirection.Rtl -> (anchorBounds.right - popupContentSize.width).coerceIn(0, maxX)
-        }
+        val useRight = (layoutDirection == LayoutDirection.Rtl) != alignEnd
+        val x = if (useRight) anchor.right - popupContentSize.width else anchor.left
 
-        return IntOffset(
-            x = x,
+        val position = IntOffset(
+            x = x.coerceIn(0, maxX),
             y = y.coerceIn(0, maxY),
         )
+        onAnchorInPopup(anchor.center - position)
+        return position
     }
 }

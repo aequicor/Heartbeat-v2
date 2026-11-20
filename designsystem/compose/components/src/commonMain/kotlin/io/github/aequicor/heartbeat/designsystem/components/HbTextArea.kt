@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.ui.Modifier
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 /**
  * Multiline field for a message, a description or another growing text (HB-DS-016). The field
@@ -40,5 +41,6 @@ fun HbTextArea(
         maxLines = Int.MAX_VALUE,
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
+        textStyle = HbTypography.Body,
     )
 }

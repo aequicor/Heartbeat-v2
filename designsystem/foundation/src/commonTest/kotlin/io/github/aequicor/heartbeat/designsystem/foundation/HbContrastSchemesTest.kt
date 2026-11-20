@@ -11,10 +11,13 @@ import kotlin.test.assertTrue
 class HbContrastSchemesTest {
 
     @Test
-    fun secondaryTextCollapsesOntoPrimary() {
-        val mapped = HbContrastSchemes.highContrast(HbColorPalettes.Light)
-
-        assertEquals(HbColorPalettes.Light.text.primary, mapped.text.secondary)
+    fun readableSupportingTextCollapsesOntoPrimary() {
+        listOf(HbColorPalettes.Light, HbColorPalettes.Dark).forEach { base ->
+            val mapped = HbContrastSchemes.highContrast(base)
+            assertEquals(base.text.primary, mapped.text.secondary)
+            assertEquals(base.text.primary, mapped.text.muted)
+            assertEquals(base.text.disabled, mapped.text.disabled)
+        }
     }
 
     @Test

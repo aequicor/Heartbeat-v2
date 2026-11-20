@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.components.HbButton
 import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.editor.api.EditorAction
 import io.github.aequicor.heartbeat.features.editor.api.EditorStore
 
@@ -39,6 +40,7 @@ fun EditorScreen(
             placeholder = "Содержимое",
             enabled = fieldsEnabled,
             singleLine = false,
+            textStyle = HbTypography.Body,
         )
         HbButton(
             text = if (state.isSaving) "Сохранение…" else "Сохранить",
@@ -46,7 +48,7 @@ fun EditorScreen(
             enabled = fieldsEnabled,
         )
         state.loadError?.let { error ->
-            HbText(text = "Не удалось загрузить: $error")
+            HbText(text = "Не удалось загрузить: $error", style = HbTypography.Detail)
             HbButton(
                 text = "Повторить",
                 onClick = { store.dispatch(EditorAction.Reload) },
@@ -54,7 +56,7 @@ fun EditorScreen(
             )
         }
         state.saveError?.let { error ->
-            HbText(text = "Не удалось сохранить: $error")
+            HbText(text = "Не удалось сохранить: $error", style = HbTypography.Detail)
         }
     }
 }

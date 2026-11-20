@@ -200,7 +200,7 @@ private fun SelectTrigger(
     }
     val contentColor = when {
         !enabled -> colors.text.disabled
-        isPlaceholder -> colors.text.secondary
+        isPlaceholder -> colors.text.muted
         else -> colors.text.primary
     }
     val chevronColor = if (enabled) colors.text.secondary else colors.text.disabled
