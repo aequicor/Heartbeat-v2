@@ -618,7 +618,7 @@ class AuroraLargeReplyTest {
         fun wheelToMessage(id: String) {
             val towardOlder = wheelAwayFromTail(4f)
             repeat(30) {
-                if (list.layoutInfo.visibleItemsInfo.any { it.key == id }) return
+                if (list.layoutInfo.visibleItemsInfo.any { item -> item.key == id }) return
                 wheel(towardOlder * 4f)
                 awaitScrollRest()
             }

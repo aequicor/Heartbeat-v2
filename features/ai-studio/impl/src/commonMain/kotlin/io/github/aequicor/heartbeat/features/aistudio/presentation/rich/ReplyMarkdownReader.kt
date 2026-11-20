@@ -185,12 +185,12 @@ private fun String.safeLink(): String? = takeIf {
 }
 
 private fun List<ReplyInline>.lines(): List<List<ReplyInline>> = buildList {
-    var current = mutableListOf<ReplyInline>()
+    val current = mutableListOf<ReplyInline>()
     for (run in this@lines) {
         run.text.split('\n').forEachIndexed { index, part ->
             if (index > 0) {
                 add(current.trim())
-                current = mutableListOf()
+                current.clear()
             }
             if (part.isNotEmpty()) current.add(run.copy(text = part))
         }

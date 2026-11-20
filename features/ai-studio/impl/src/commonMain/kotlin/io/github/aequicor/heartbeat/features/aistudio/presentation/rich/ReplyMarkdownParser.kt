@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.rich
 
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyDocument
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyBlock
 
@@ -24,32 +25,36 @@ internal class ReplyMarkdownParser(private val literalFastPath: Boolean = true) 
     private var linkDestinations = mapOf<CharSequence, CharSequence>()
     private var openFence: OpenReplyFence? = null
 
-    // The third-party parser can fail on untrusted source. Preserve text and reset.
+    fun renderLiveText(id: String, source: String): LiveText =
+        LiveText(id, source, parseContent(source, final = false))
+
+    fun parse(source: String, final: Boolean): ReplyDocument =
+        parseContent(source, final) ?: ReplyDocument.plain(source)
+
+    // Null keeps ordinary text on the native selection path. On parser failure retain the source.
     @Suppress("TooGenericExceptionCaught")
-    public fun parse(source: String, final: Boolean): ReplyDocument = try {
-        parseDocument(source, final)
+    private fun parseContent(source: String, final: Boolean): ReplyDocument? = try {
+        if (final || !source.startsWith(previousSource)) reset()
+
+        when {
+            source.isEmpty() || (literalFastPath && source.isLiteralReply()) -> null
+            final -> parseFinal(checkedSource(source))
+            else -> parseStreamingContent(source)
+        }
     } catch (failure: Exception) {
         if (failure is CancellationException) throw failure
         reset()
         ReplyDocument.plain(source)
     }
 
-    private fun parseDocument(source: String, final: Boolean): ReplyDocument {
-        if (!final && source.startsWith(previousSource)) {
-            val preview = openFence?.advance(source)
-            if (preview != null) {
-                previousSource = source
-                return preview
-            }
-            openFence = null
-        } else {
-            reset()
+    private fun parseStreamingContent(source: String): ReplyDocument {
+        val preview = openFence?.advance(source)
+        if (preview != null) {
+            previousSource = source
+            return preview
         }
-        return when {
-            source.isEmpty() || (literalFastPath && source.isLiteralReply()) -> ReplyDocument.plain(source)
-            final -> parseFinal(checkedSource(source))
-            else -> parseStream(source, checkedSource(source.removeSuffix("\r")))
-        }
+        openFence = null
+        return parseStream(source, checkedSource(source.removeSuffix("\r")))
     }
 
     private fun checkedSource(source: String): MarkdownSource = MarkdownSource(source).also { text ->
@@ -108,6 +113,19 @@ internal class ReplyMarkdownParser(private val literalFastPath: Boolean = true) 
         openFence = null
     }
 }
+
+/** Plain replies retain their original text and native selection. */
+internal fun String.isLiteralReply(): Boolean =
+    isEmpty() || (
+        !first().isWhitespace() && !first().isDigit() && !startsWith('-') && !startsWith('+') &&
+            none { it in MarkdownPunctuation } && "www." !in this && "://" !in this &&
+            !lineSequence().drop(1).any { line ->
+                line.startsWith(' ') || line.startsWith('-') || line.startsWith('+') ||
+                    line.firstOrNull()?.isDigit() == true
+            }
+        )
+
+private const val MarkdownPunctuation = "\r\t#*>|_`~[<\\&=@"
 
 private fun List<ASTNode>.checkDepth(remaining: Int = MaxTreeDepth) {
     if (isEmpty()) return

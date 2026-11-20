@@ -159,6 +159,7 @@ private fun AuroraReplyBlocks(
 }
 
 @Composable
+@Suppress("InjectDispatcher") // Parse and style the archive revision together on the worker.
 private fun completedAnswer(history: ReplyHistoryContent, text: String): AnswerFrame {
     val monospace = auroraCodeFontFamily()
     val initial = remember(history) {

@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -69,7 +70,9 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyBlock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyDiagramKind
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private class BlockView(source: Boolean = false, wrapped: Boolean = false, full: Boolean = false, scale: Float = 1f) {
     var sourceMode by mutableStateOf(source)
@@ -136,10 +139,16 @@ private fun diagramPreview(source: BlockSource, view: BlockView): Preview {
 }
 
 @Composable
+@Suppress("InjectDispatcher") // The visible source block owns this background preparation.
 private fun preparedSource(source: BlockSource, show: Boolean): AuroraPreparedCode? {
     var prepared by remember { mutableStateOf<AuroraPreparedCode?>(null) }
     LaunchedEffect(if (show) source.text else null, show) {
-        if (show) prepared = prepareAuroraCode(source.text, source.code?.lines, prepared)
+        if (show) {
+            val previous = prepared
+            prepared = withContext(Dispatchers.Default) {
+                prepareAuroraCode(source.text, source.code?.lines, previous)
+            }
+        }
     }
     return prepared
 }
@@ -174,7 +183,7 @@ internal fun AuroraSourceBlock(
             }
         }
     }
-    if (view.returningToOpener) LaunchedEffect(Unit) {
+    if (view.returningToOpener) SideEffect(view.opener) {
         view.opener.requestFocus()
         view.restoreFocus = false
     }
@@ -221,7 +230,7 @@ private fun SourceBlockLayout(
 @Composable
 private fun SourceToolbar(source: BlockSource, view: BlockView, preview: Preview, touch: Boolean) {
     val edge = if (view.expanded) remember { FocusRequester() } else view.opener
-    if (view.expanded) LaunchedEffect(Unit) { edge.requestFocus() }
+    if (view.expanded) SideEffect(edge) { edge.requestFocus() }
     val height = if (view.expanded || touch) AuroraLayout.FileViewerHeader else AuroraLayout.FilePaneHeader
     val inset = if (view.expanded) AuroraLayout.PaneGap else AuroraLayout.ContentInset
     Row(

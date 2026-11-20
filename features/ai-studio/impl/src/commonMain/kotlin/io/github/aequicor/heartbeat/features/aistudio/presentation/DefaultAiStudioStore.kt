@@ -28,7 +28,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraN
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.filterFiles
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.navigation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
-import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.StreamingReplyDocument
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
@@ -69,14 +69,14 @@ internal class DefaultAiStudioStore(
     init {
         scope.launch {
             var owner: AuroraTurn? = null
-            var document = StreamingReplyDocument()
+            var parser = ReplyMarkdownParser()
             for (first in renderRequests) {
                 // Batch complete source snapshots before preparing spans. Conflation never drops text.
                 if (first.turn === owner) delay(RenderInterval)
                 val request = renderRequests.tryReceive().getOrNull() ?: first
-                if (request.turn !== owner) document = StreamingReplyDocument()
+                if (request.turn !== owner) parser = ReplyMarkdownParser()
                 owner = request.turn
-                val snapshot = document.render(request.id, request.text)
+                val snapshot = parser.renderLiveText(request.id, request.text)
                 enqueue {
                     // Completed work can catch up during a token burst. A switched, replaced or
                     // stopped turn must never overwrite the active reply.

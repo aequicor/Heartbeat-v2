@@ -89,6 +89,7 @@ private class StreamingParagraphSource {
         private set
     private var safe = true
 
+    @Suppress("AvoidReferentialEquality") // Skip inspecting an unchanged large source instance.
     fun canReuseWraps(text: String): Boolean {
         if (text === inspected) return safe
         val append = text.startsWith(inspected)

@@ -19,6 +19,7 @@ import kotlinx.coroutines.withContext
 
 /** Uses the selection container of the surrounding detail or file viewer. */
 @Composable
+@Suppress("InjectDispatcher") // The displayed revision owns one background pass for parsing and styling.
 internal fun AuroraMarkdownContent(
     source: String,
     content: ReplyHistoryContent?,

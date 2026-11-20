@@ -9,7 +9,6 @@ private val cTokens = Regex("""//|/\*|$TokenPattern""")
 private val hashTokens = Regex("""#|$TokenPattern""")
 private val sqlTokens = Regex("""--|/\*|$TokenPattern""")
 private val jsonTokens = Regex(TokenPattern)
-private val codeNewline = Regex("\r\n|[\r\n]")
 
 private val cFamily = setOf(
     "c", "cpp", "c++", "csharp", "cs", "go", "java", "js", "javascript", "jsx", "kotlin", "kt",
@@ -31,7 +30,7 @@ private val sqlKeywords = (
 
 internal fun highlightReplyCode(source: String, language: String?): List<ReplyCodeLine> {
     if (source.isEmpty()) return listOf()
-    val lines = source.split(codeNewline).let { if (it.last().isEmpty()) it.dropLast(1) else it }
+    val lines = source.split("\r\n", "\r", "\n").let { if (it.last().isEmpty()) it.dropLast(1) else it }
     val highlighter = ReplyCodeHighlighter(language)
     return lines.map { highlighter.line(it) }
 }

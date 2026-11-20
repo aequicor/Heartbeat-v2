@@ -65,6 +65,7 @@ private object DesktopDiagramRenderer {
     }
     private var host: DesktopDiagramBrowser? = null
 
+    @Suppress("InjectDispatcher") // JCEF startup performs blocking work.
     suspend fun render(script: String): String {
         try {
             val browser = withContext(Dispatchers.IO) {

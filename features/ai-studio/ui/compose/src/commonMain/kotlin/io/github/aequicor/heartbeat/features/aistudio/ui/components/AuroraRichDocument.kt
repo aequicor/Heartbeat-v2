@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -32,32 +31,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyAlignment
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyBlock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyDocument
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyInline
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ensureActive
-
-private const val SelectionBlockAnnotation = "AuroraSelectionBlock"
 
 @Composable
 internal fun AuroraRichDocument(
@@ -94,28 +78,6 @@ internal fun AuroraRichDocument(
     }
 }
 
-internal class PreparedDocument(val monospace: FontFamily, val blocks: List<PreparedBlock>) {
-    fun throughSelection(selected: List<AnnotatedString>): PreparedDocument {
-        var lastSelectedId = Int.MIN_VALUE
-        for (fragment in selected) {
-            val id = fragment.getStringAnnotations(SelectionBlockAnnotation, 0, fragment.length)
-                .firstOrNull()?.item?.toIntOrNull() ?: return this
-            lastSelectedId = maxOf(lastSelectedId, id)
-        }
-        val prefix = blocks.takeWhile { it.source.id <= lastSelectedId }
-        return if (prefix.isEmpty()) this else PreparedDocument(monospace, prefix)
-    }
-
-    fun appendNewBlocks(latest: PreparedDocument?): PreparedDocument {
-        val lastPinnedId = blocks.lastOrNull()?.source?.id
-        // Keep the existing section under selection. Only independently addressable blocks follow it.
-        val newBlocks = if (latest != null && latest.monospace == monospace && lastPinnedId != null) {
-            latest.blocks.dropWhile { it.source.id <= lastPinnedId }
-        } else listOf()
-        return if (newBlocks.isEmpty()) this else PreparedDocument(monospace, blocks + newBlocks)
-    }
-}
-
 @Composable
 internal fun selectedPreparedDocument(latest: PreparedDocument?, selection: SelectionState): PreparedDocument? {
     val display = remember(selection) { DocumentSelectionRevision() }
@@ -135,94 +97,6 @@ private class DocumentSelectionRevision {
     var pinned: PreparedDocument? = null
     var visible: PreparedDocument? = null
 }
-
-internal class PreparedBlock(
-    val source: ReplyBlock,
-    val text: AnnotatedString = AnnotatedString(""),
-    val children: List<List<PreparedBlock>> = listOf(),
-    val table: PreparedTable? = null,
-    val code: AuroraPreparedCode? = null,
-) {
-    val hasOwnViewport: Boolean =
-        source is ReplyBlock.Code || source is ReplyBlock.Diagram || source is ReplyBlock.Table
-}
-
-internal class PreparedTable(
-    val header: List<AnnotatedString>,
-    val rows: List<List<AnnotatedString>>,
-    val alignments: List<ReplyAlignment>,
-    val columnCharacters: List<Int>,
-) {
-    fun clipboardText() = (listOf(header) + rows).joinToString("\n") { row ->
-        row.joinToString("\t") { it.text }
-    }
-
-    companion object {
-        fun prepare(scope: CoroutineScope, table: ReplyBlock.Table, monospace: FontFamily, owner: Int): PreparedTable? {
-            if (table.header.isEmpty()) return null
-            val header = table.header.map { prepareText(it, monospace, owner) }
-            val widths = header.map { it.length }.toMutableList()
-            val rows = table.rows.map { row ->
-                scope.ensureActive()
-                row.mapIndexed { index, spans ->
-                    prepareText(spans, monospace, owner).also {
-                        if (index < widths.size) widths[index] = maxOf(widths[index], it.length)
-                    }
-                }
-            }
-            return PreparedTable(header, rows, table.alignments, widths)
-        }
-    }
-}
-
-internal suspend fun CoroutineScope.prepareBlocks(
-    blocks: List<ReplyBlock>,
-    previous: List<PreparedBlock>,
-    monospace: FontFamily,
-    selectionOwner: Int? = null,
-): List<PreparedBlock> {
-    val byId by lazy(LazyThreadSafetyMode.NONE) { previous.associateBy { it.source.id } }
-    return blocks.mapIndexedNotNull { index, block ->
-        ensureActive()
-        val prior = previous.getOrNull(index)?.takeIf { it.source.id == block.id } ?: byId[block.id]
-        if (prior?.source === block) return@mapIndexedNotNull prior
-        val owner = selectionOwner ?: block.id
-        when (block) {
-            is ReplyBlock.Paragraph -> {
-                val text = buildAnnotatedString {
-                    block.lines.forEachIndexed { index, spans ->
-                        ensureActive()
-                        if (index > 0) append('\n')
-                        appendReplySpans(spans, monospace)
-                    }
-                    addStringAnnotation(SelectionBlockAnnotation, owner.toString(), 0, length)
-                }
-                if (text.isEmpty()) null else PreparedBlock(block, text = text)
-            }
-            is ReplyBlock.Heading -> PreparedBlock(block, text = prepareText(block.text, monospace, owner))
-            is ReplyBlock.Quote -> PreparedBlock(
-                block,
-                children = listOf(
-                    prepareBlocks(block.blocks, prior?.children?.firstOrNull().orEmpty(), monospace, owner),
-                ),
-            )
-            is ReplyBlock.ListBlock -> PreparedBlock(block, children = block.items.mapIndexed { index, item ->
-                prepareBlocks(item, prior?.children?.getOrNull(index).orEmpty(), monospace, owner)
-            })
-            is ReplyBlock.Table -> PreparedTable.prepare(this, block, monospace, owner)?.let {
-                PreparedBlock(block, table = it)
-            }
-            is ReplyBlock.Code -> PreparedBlock(block, code = prepareAuroraCode(block.source, block.lines, prior?.code))
-            else -> PreparedBlock(block)
-        }
-    }
-}
-
-private fun prepareText(spans: List<ReplyInline>, monospace: FontFamily, owner: Int): AnnotatedString =
-    buildAnnotatedString {
-        appendReplySpans(spans, monospace)
-        addStringAnnotation(SelectionBlockAnnotation, owner.toString(), 0, length)
-    }
 
 @Composable
 internal fun AuroraRichBlocks(
@@ -343,46 +217,4 @@ private fun AuroraRichList(
             }
         }
     }
-}
-
-private val safeLinkPrefixes = listOf("https://", "http://", "mailto:")
-
-private fun AnnotatedString.Builder.appendReplySpans(spans: List<ReplyInline>, monospace: FontFamily) {
-    for (span in spans) {
-        val emphasis = span.bold || span.italic || span.strike
-        if (!emphasis && !span.code && span.url == null) {
-            append(span.text)
-            continue
-        }
-        val url = span.url?.takeIf { candidate ->
-            !candidate.any(Char::isISOControl) && safeLinkPrefixes.any { candidate.startsWith(it, ignoreCase = true) }
-        }
-        withStyle(span.textStyle(monospace)) {
-            if (url == null) append(span.text) else withLink(linkForSpan(url, span.strike)) { append(span.text) }
-        }
-    }
-}
-
-private fun ReplyInline.textStyle(monospace: FontFamily) = SpanStyle(
-    fontWeight = if (bold) FontWeight.SemiBold else null,
-    fontStyle = if (italic) FontStyle.Italic else null,
-    fontFamily = if (code) monospace else null,
-    background = if (code) AuroraColors.WorkHover else Color.Unspecified,
-    textDecoration = if (strike) TextDecoration.LineThrough else null,
-)
-
-private fun linkForSpan(url: String, strike: Boolean): LinkAnnotation.Url {
-    val underline = if (strike) {
-        TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
-    } else {
-        TextDecoration.Underline
-    }
-    return LinkAnnotation.Url(
-        url,
-        TextLinkStyles(
-            style = SpanStyle(color = AuroraColors.DesktopPrimaryAction, textDecoration = underline),
-            focusedStyle = SpanStyle(background = AuroraColors.Lavender),
-            hoveredStyle = SpanStyle(background = AuroraColors.WorkHover),
-        ),
-    )
 }

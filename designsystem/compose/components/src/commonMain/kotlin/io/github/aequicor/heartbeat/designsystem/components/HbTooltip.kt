@@ -96,7 +96,7 @@ fun HbTooltip(
     ) {
         content()
         if (enabled && visible) {
-            TooltipPopup(text, Modifier.then(TooltipHover(tooltipHovered)))
+            TooltipPopup(text, TooltipHover(tooltipHovered))
         }
     }
 }
@@ -151,7 +151,7 @@ private fun Modifier.tooltipKeys(visible: Boolean, onDismiss: () -> Unit): Modif
     }
 
 @Composable
-private fun TooltipPopup(text: String, modifier: Modifier = Modifier) {
+private fun TooltipPopup(text: String, hover: TooltipHover) {
     val colors = HbTheme.colors
     val gap = with(LocalDensity.current) { TooltipGap.roundToPx() }
 
@@ -165,7 +165,7 @@ private fun TooltipPopup(text: String, modifier: Modifier = Modifier) {
             Box(
                 modifier = Modifier
                     .widthIn(max = width)
-                    .then(modifier)
+                    .then(hover)
                     .clip(HbShapes.Small)
                     .background(colors.surface.raised)
                     .border(TOOLTIP_BORDER, colors.border.subtle, HbShapes.Small)

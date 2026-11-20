@@ -17,6 +17,23 @@ import kotlin.test.assertTrue
 
 class ReplyMarkdownParserTest {
     @Test
+    fun liveTextDistinguishesLiteralSourceFromMarkdownAndParserFallback() {
+        val parser = ReplyMarkdownParser()
+        val plain = parser.renderLiveText("reply", "Review")
+        assertEquals("reply", plain.replyId)
+        assertEquals("Review", plain.text)
+        assertNull(plain.document)
+
+        val markdown = parser.renderLiveText("reply", "Review **complete**")
+        val paragraph = assertIs<ReplyBlock.Paragraph>(markdown.document?.blocks?.single())
+        assertTrue(paragraph.lines.single().last().bold)
+        assertNull(parser.renderLiveText("reply", "Replacement").document)
+
+        val rejected = "> ".repeat(129) + "Review"
+        assertEquals(rejected, parser.renderLiveText("reply", rejected).document?.plainText)
+    }
+
+    @Test
     fun streamingReusesStableBlocksAndReplacesTheProvisionalTail() {
         val parser = ReplyMarkdownParser()
         val partial = parser.parse("# Review\n\nText\n\n``", final = false)

@@ -33,7 +33,7 @@ internal fun OpenMessageMenuOnBadgeHover(
     onOpen: () -> Unit,
 ) {
     var handled by remember { mutableStateOf(false) }
-    if (hovered || handled) LaunchedEffect(hovered, expanded, onOpen) {
+    if (hovered || handled) SideEffect(hovered, expanded, interactive, onOpen) {
         when {
             expanded -> Unit
             !hovered -> handled = false

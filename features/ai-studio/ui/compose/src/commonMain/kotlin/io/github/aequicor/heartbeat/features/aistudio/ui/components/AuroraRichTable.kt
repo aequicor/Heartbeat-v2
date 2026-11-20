@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,7 +83,7 @@ internal fun AuroraRichTable(table: PreparedTable, touch: Boolean) {
     val viewerVertical = rememberLazyListState()
     var expanded by remember { mutableStateOf(false) }
     var returnFocus by remember { mutableStateOf(false) }
-    LaunchedEffect(expanded) {
+    SideEffect(expanded) {
         if (!expanded && returnFocus) {
             opener.requestFocus()
             returnFocus = false
@@ -102,7 +103,7 @@ internal fun AuroraRichTable(table: PreparedTable, touch: Boolean) {
         }
         AuroraPanelDialog(close) {
             val closer = remember { FocusRequester() }
-            LaunchedEffect(Unit) { closer.requestFocus() }
+            SideEffect(closer) { closer.requestFocus() }
             SelectionContainer {
                 Column(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
                     if (event.key == Key.Escape && event.type == KeyEventType.KeyDown) {
@@ -123,6 +124,7 @@ internal fun AuroraRichTable(table: PreparedTable, touch: Boolean) {
 }
 
 @Composable
+@Suppress("InjectDispatcher") // Build the clipboard text off the UI thread before writing it.
 private fun AuroraTableActions(
     table: PreparedTable,
     touch: Boolean,

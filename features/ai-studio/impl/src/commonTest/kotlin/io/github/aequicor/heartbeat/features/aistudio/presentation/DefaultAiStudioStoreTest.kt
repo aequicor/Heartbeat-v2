@@ -512,8 +512,12 @@ class DefaultAiStudioStoreTest {
         assertEquals(StepStatus.Stopped, saved.status)
         assertEquals("Размышления прерваны", saved.title)
         assertEquals(received.details, saved.details)
-        val liveText = assertIs<ReplyBlock.Paragraph>(assertNotNull(received.markdownDetails).document().blocks.single())
-        val archivedText = assertIs<ReplyBlock.Paragraph>(assertNotNull(saved.markdownDetails).document().blocks.single())
+        val liveText = assertIs<ReplyBlock.Paragraph>(
+            assertNotNull(received.markdownDetails).document().blocks.single(),
+        )
+        val archivedText = assertIs<ReplyBlock.Paragraph>(
+            assertNotNull(saved.markdownDetails).document().blocks.single(),
+        )
         assertEquals(liveText.lines, archivedText.lines)
     }
 

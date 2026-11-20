@@ -6,11 +6,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyCodeLine
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyCodeKind
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 
 internal class AuroraPreparedCode(
     val highlights: List<ReplyCodeLine>?,
@@ -23,8 +20,7 @@ internal suspend fun prepareAuroraCode(
     source: String,
     highlights: List<ReplyCodeLine>?,
     previous: AuroraPreparedCode?,
-    worker: CoroutineDispatcher = Dispatchers.Default,
-): AuroraPreparedCode = withContext(worker) {
+): AuroraPreparedCode {
     val context = currentCoroutineContext()
     var longest = 0
     val lines = if (highlights == null) {
@@ -54,7 +50,7 @@ internal suspend fun prepareAuroraCode(
             }
         }
     } else null
-    AuroraPreparedCode(highlights, lines, longest, compact)
+    return AuroraPreparedCode(highlights, lines, longest, compact)
 }
 
 @Suppress("MagicNumber")

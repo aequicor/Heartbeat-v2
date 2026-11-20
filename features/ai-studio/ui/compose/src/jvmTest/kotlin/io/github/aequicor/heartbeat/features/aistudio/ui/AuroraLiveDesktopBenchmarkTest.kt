@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
-import org.junit.Assume.assumeTrue
+import org.junit.Assume
 import org.junit.runners.model.MultipleFailureException
 
 /**
@@ -80,8 +80,8 @@ class AuroraLiveDesktopBenchmarkTest {
 }
 
 private fun requireNativeBenchmark() {
-    assumeTrue(System.getenv("HEARTBEAT_LIVE_DESKTOP_BENCH") == "1")
-    assumeTrue(System.getProperty("os.name").startsWith("Mac") && !GraphicsEnvironment.isHeadless())
+    Assume.assumeTrue(System.getenv("HEARTBEAT_LIVE_DESKTOP_BENCH") == "1")
+    Assume.assumeTrue(System.getProperty("os.name").startsWith("Mac") && !GraphicsEnvironment.isHeadless())
 }
 
 private const val WindowSettleMs = 250L

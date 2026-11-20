@@ -21,6 +21,7 @@ private const val PngResultPrefix = "ok:"
 @Composable
 internal expect fun BindAuroraDiagramContext()
 
+@Suppress("InjectDispatcher") // Direct callers also decode the preview off the UI thread.
 internal suspend fun renderAuroraDiagram(format: String, source: String): ImageBitmap {
     val language = format.lowercase()
     require(language == "mermaid" || language == "plantuml") { "Unknown diagram format" }

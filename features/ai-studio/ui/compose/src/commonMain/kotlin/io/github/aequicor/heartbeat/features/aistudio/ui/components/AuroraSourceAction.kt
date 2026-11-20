@@ -41,9 +41,9 @@ internal fun SourceAction(
 ) {
     val tint = if (enabled) Colors.MessageInk else Colors.MessageMuted.copy(alpha = .45f)
     val target = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget
-    HbTooltip(action.label, enabled = !touch && enabled) {
+    HbTooltip(action.label, modifier = modifier, enabled = !touch && enabled) {
         AuroraControl(
-            onClick, modifier.size(target).semantics {
+            onClick, Modifier.size(target).semantics {
                 if (action == AuroraSourceAction.Wrap) stateDescription = if (selected) "Включено" else "Выключено"
                 if (action == AuroraSourceAction.Copied) liveRegion = LiveRegionMode.Polite
             },
