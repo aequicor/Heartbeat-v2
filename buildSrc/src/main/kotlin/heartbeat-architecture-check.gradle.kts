@@ -52,6 +52,7 @@ subprojects.forEach { subproject ->
 
 private fun checkProject(project: Project) {
     project.configurations.forEach { configuration ->
+        if (!ArchitectureRules.isDeclaredDependencyConfiguration(configuration.name)) return@forEach
         configuration.dependencies.filterIsInstance<ProjectDependency>().forEach { dependency ->
             ArchitectureRules.projectDependencyViolation(project.path, dependency.path)?.let { rule ->
                 report(project.path, dependency.path, rule)
