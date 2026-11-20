@@ -4,6 +4,7 @@ import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.essenty.lifecycle.doOnDestroy
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
@@ -20,7 +21,7 @@ import kotlinx.coroutines.cancel
 @ContributesIntoSet(AppScope::class)
 class AiStudioFeatureEntry @Inject internal constructor(
     private val storeFactory: AiStudioStoreFactory,
-    @AiStudioWorker private val worker: CoroutineDispatcher,
+    @Named("ai-studio-worker") private val worker: CoroutineDispatcher,
 ) : DecomposeFeatureEntry {
 
     override val featureId: String = AiStudioRoutes.FEATURE_ID
