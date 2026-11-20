@@ -13,7 +13,6 @@ import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 
@@ -21,6 +20,7 @@ import kotlinx.coroutines.cancel
 @ContributesIntoSet(AppScope::class)
 class AiStudioFeatureEntry @Inject internal constructor(
     private val storeFactory: AiStudioStoreFactory,
+    @AiStudioWorker private val worker: CoroutineDispatcher,
 ) : DecomposeFeatureEntry {
 
     override val featureId: String = AiStudioRoutes.FEATURE_ID
@@ -31,7 +31,7 @@ class AiStudioFeatureEntry @Inject internal constructor(
         host: FeatureHost,
         dispatcher: CoroutineDispatcher,
     ): FeatureRoot {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val scope = CoroutineScope(SupervisorJob() + worker)
         context.lifecycle.doOnDestroy(scope::cancel)
         return DefaultAiStudioComponent(context, host, storeFactory.create(scope))
     }
