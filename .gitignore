@@ -1,6 +1,7 @@
 # Gradle and Kotlin Multiplatform
 # **/ задаёт явное совпадение на любой глубине, включая buildSrc и platform/<os>.
 **/.gradle/
+/gradle/gradle-daemon-jvm.properties
 **/.kotlin/
 **/.konan/
 **/build/
