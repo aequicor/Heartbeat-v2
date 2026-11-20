@@ -69,6 +69,40 @@ class ReleaseHelperTest(unittest.TestCase):
         self.assertEqual(self.git("tag", "--points-at", "HEAD"), "1.2.0")
         self.assertEqual(self.git("status", "--porcelain"), "")
 
+    def test_prepare_accepts_quoted_changelog_path(self):
+        path = "docs/Release Notes — версия.md"
+        (self.root / "docs").mkdir()
+        self.git("mv", "CHANGELOG.md", path)
+        self.git("commit", "-m", "Move changelog")
+        config = self.config()
+        config["changelog"]["path"] = path
+        self.release.prepare(self.root, config)
+        self.assertIn("## 1.2.0", self.read(path))
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_prepared_release_accepts_a_fresh_gradle_workflow(self):
+        first, second = "a" * 32, "b" * 32
+        check = ["python3", "gradle_run.py", "run", "--workflow", "{gradle_workflow}", "--", "./gradlew", "check"]
+        config = self.config(checks=[check])
+        seen = []
+        artifact = iter(["absent", "published"])
+
+        def execute(argv, *, cwd, env=None):
+            if argv[0] == "python3":
+                seen.append(argv[4])
+            elif argv[0] == "artifact":
+                return json.dumps({"state": next(artifact)})
+            return ""
+
+        with patch.dict(os.environ, GRADLE_RUN_WORKFLOW=first):
+            self.release.prepare(self.root, config, command_runner=execute)
+        with patch.dict(os.environ, GRADLE_RUN_WORKFLOW=second):
+            self.release.publish(self.root, config, command_runner=execute, process_env={})
+            legacy = list(check)
+            legacy[4] = first
+            self.assertEqual(self.release.command_argv(legacy, config)[4], second)
+        self.assertEqual(seen, [first, second])
+
     def test_prepare_sees_untracked_files_hidden_by_git_configuration(self):
         self.git("config", "status.showUntrackedFiles", "no")
         self.write("src/main/kotlin/Extra.kt", "class Extra")

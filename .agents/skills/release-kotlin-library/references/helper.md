@@ -87,8 +87,12 @@ and compatibility checks first. Other API dump formats are unsupported by this
 snapshot mode; use `disabled` when these Metalava files are not maintained.
 
 For Gradle commands, create the `gradle-run` workflow independently and place
-its `run` invocation in each argument array, including a concrete verification
-question. Finish that workflow separately after the requested commands finish,
+its `run` invocation in each Gradle argument array. Use `--workflow` followed by
+`{gradle_workflow}` and include a concrete verification question. Set
+`GRADLE_RUN_WORKFLOW` in the release helper's environment to the active workflow
+ID for each phase. For an existing prepared release with a literal ID, keep the
+approved configuration intact and supply the new ID through the same environment
+variable. Finish each workflow separately after the requested commands finish,
 when its status permits cleanup. Preserve uncertain runs for recovery. Do not store
 raw Gradle output in release evidence or commit a workflow identifier.
 

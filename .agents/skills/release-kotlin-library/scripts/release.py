@@ -198,12 +198,12 @@ def run_git(root: Path, args: Sequence[str], *, allow_failure: bool = False,
 
 def git_status(root: Path) -> str:
     result = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=root, text=True,
+        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=root,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
     )
     if result.returncode:
         raise ValueError("git status failed")
-    return result.stdout.rstrip("\n")
+    return os.fsdecode(result.stdout)
 
 
 def command_argv(template: Any, config: Mapping[str, Any]) -> list[str]:
@@ -213,6 +213,18 @@ def command_argv(template: Any, config: Mapping[str, Any]) -> list[str]:
     values = {"release_version": release, "tag": config.get("tag", release)}
     if any("{next_version}" in item for item in template):
         values["next_version"] = validate_versions(config)[1]
+    # Keep the workflow ID outside the prepared release configuration.
+    runtime_id = os.environ.get("GRADLE_RUN_WORKFLOW")
+    if runtime_id or "{gradle_workflow}" in template:
+        wrapper_options = template[:template.index("--")] if "--" in template else template
+        if any(Path(arg).name == "gradle_run.py" for arg in wrapper_options) and "--workflow" in wrapper_options:
+            if not re.fullmatch(r"[a-z0-9]{32}", runtime_id or ""):
+                raise ValueError("set GRADLE_RUN_WORKFLOW to the active Gradle workflow ID")
+            slot = wrapper_options.index("--workflow") + 1
+            if slot >= len(wrapper_options):
+                raise ValueError("Gradle --workflow requires a value")
+            template = list(template)
+            template[slot] = runtime_id
     try:
         return [item.format(**values) for item in template]
     except (KeyError, ValueError) as error:
@@ -387,8 +399,10 @@ def run_checks(root: Path, config: Mapping[str, Any], command_runner: CommandRun
 
 
 def expected_worktree_changes(root: Path, files: Mapping[Path, str]) -> None:
-    expected = {str(path.relative_to(root)) for path in files}
-    for entry in git_status(root).splitlines():
+    expected = {path.relative_to(root).as_posix() for path in files}
+    for entry in git_status(root).split("\0"):
+        if not entry:
+            continue
         if len(entry) < 4 or entry[3:] not in expected or entry[:2] not in {" M", "??"}:
             raise ValueError(f"release check changed or staged files outside the prepared release scope: {entry!r}")
     for path, expected_content in files.items():
@@ -451,7 +465,7 @@ def prepare(root: Path, config: Mapping[str, Any], *, command_runner: CommandRun
         staged = set(run_git(root, ["diff", "--cached", "--name-only", "-z"]).split("\0"))
         if run_git(root, ["rev-parse", "HEAD"]) == initial_sha:
             for path in written:
-                if (str(path.relative_to(root)) not in staged and not path.is_symlink() and path.is_file()
+                if (path.relative_to(root).as_posix() not in staged and not path.is_symlink() and path.is_file()
                         and path.read_bytes() == planned_files[path].encode("utf-8")):
                     if originals[path] is None:
                         path.unlink()
@@ -462,7 +476,7 @@ def prepare(root: Path, config: Mapping[str, Any], *, command_runner: CommandRun
         if isinstance(error, ValueError):
             raise ValueError(message) from None
         raise RuntimeError(message) from None
-    relative = [str(path.relative_to(root)) for path in planned_files]
+    relative = [path.relative_to(root).as_posix() for path in planned_files]
     run_git(root, ["add", "--", *relative])
     run_git(
         root,
