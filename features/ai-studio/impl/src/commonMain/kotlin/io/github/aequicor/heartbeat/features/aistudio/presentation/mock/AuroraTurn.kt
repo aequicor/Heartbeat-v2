@@ -3,7 +3,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.mock
 
 import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
-
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
@@ -19,6 +18,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.finishCurrentSteps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
@@ -47,27 +47,26 @@ internal class AuroraTurn(
     private var sendingAnswer: User? = null
     private var frame = 0
 
-    fun start(fresh: Boolean, resumeExecution: Reply?) {
-        if (resumeExecution != null) {
-            activity = Activity.Running
-            reply = resumeExecution.copy(status = ReplyStatus.Working)
-            startExecution(fail = false)
-        } else {
-            publish(structural = true)
-            after(SendDelay) {
-                if (fresh && prompt.scenario == Scenario.SendFailure) {
-                    val failed = prompt.copy(
-                        delivery = Delivery.Failed, error = "Локальная имитация потери соединения",
-                    )
-                    store.putMessage(chatId, failed)
-                    store.finish(chatId)
-                } else {
-                    store.putMessage(chatId, prompt.copy(delivery = Delivery.Sent, error = null))
-                    beginReply()
-                    receiveThinkingFragment(index = 0)
-                }
+    fun sendPrompt() {
+        store.putMessage(chatId, prompt.copy(delivery = Delivery.Sending, error = null))
+        publish(structural = true)
+        after(SendDelay) {
+            if (prompt.delivery != Delivery.Failed && prompt.scenario == Scenario.SendFailure) {
+                val failed = prompt.copy(delivery = Delivery.Failed, error = "Локальная имитация потери соединения")
+                store.putMessage(chatId, failed)
+                store.finish(chatId)
+            } else {
+                store.putMessage(chatId, prompt.copy(delivery = Delivery.Sent, error = null))
+                beginReply()
+                receiveThinkingFragment(index = 0)
             }
         }
+    }
+
+    fun resumeExecution(previous: Reply) {
+        activity = Activity.Running
+        reply = previous.copy(status = ReplyStatus.Working)
+        startExecution(fail = false)
     }
 
     private fun beginReply() {
@@ -118,7 +117,7 @@ internal class AuroraTurn(
     private fun afterReading() {
         val result = "Проверка исходных условий завершена. Повтор можно привязать к исходной реплике " +
             "и сохранить позицию пользователя во время получения ответа."
-        val current = checkNotNull(reply).setStepStatus(StepStatus.Done)
+        val current = checkNotNull(reply).finishCurrentSteps(StepStatus.Done)
         val finished = current.steps.last().copy(result = result)
         val pending = Step(
             id = "review", title = "Проверка сценариев диалога", details = "", status = StepStatus.Current,
@@ -266,7 +265,12 @@ internal class AuroraTurn(
 
     fun restoreAnswer(previous: Reply?, message: User) {
         activity = Activity.Running
-        reply = previous?.copy(status = ReplyStatus.Working)
+        reply = previous?.copy(
+            status = ReplyStatus.Working,
+            steps = previous.steps.map { step ->
+                if (step.status == StepStatus.Stopped) step.copy(status = StepStatus.Current) else step
+            },
+        )
         if (reply == null) beginReply()
         sendAnswer(message.copy(delivery = Delivery.Sending, error = null), fail = false)
     }
@@ -335,7 +339,7 @@ internal class AuroraTurn(
                         text = "Сохранилась проверка условий. Подготовку отчёта можно повторить.",
                         status = ReplyStatus.Failed,
                     )
-                    store.finish(chatId, partial.setStepStatus(StepStatus.Failed))
+                    store.finish(chatId, partial.finishCurrentSteps(StepStatus.Failed))
                 } else {
                     complete("Проверены повтор, остановка и восстановление диалога. Результаты доступны в отчёте.")
                 }
@@ -378,7 +382,7 @@ internal class AuroraTurn(
             }
             store.finish(
                 chatId,
-                current?.setStepStatus(StepStatus.Stopped)?.copy(
+                current?.finishCurrentSteps(StepStatus.Stopped)?.copy(
                     status = ReplyStatus.Stopped,
                     text = current.text.ifBlank { "Работа остановлена. Полученные данные сохранены." },
                 ),
@@ -388,7 +392,7 @@ internal class AuroraTurn(
 
     private fun complete(text: String, writeResult: Boolean = true) {
         val current = checkNotNull(reply)
-        val completed = current.setStepStatus(StepStatus.Done).copy(
+        val completed = current.finishCurrentSteps(StepStatus.Done).copy(
             status = ReplyStatus.Completed,
             text = text,
             result = if (writeResult && prompt.access != Access.ReadOnly) {
@@ -399,25 +403,6 @@ internal class AuroraTurn(
         )
         store.finish(chatId, completed)
     }
-
-    private fun Reply.setStepStatus(status: StepStatus): Reply = copy(
-        steps = steps.map { step ->
-            if (step.status != StepStatus.Current) step else step.copy(
-                status = status,
-                events = step.events.map { event ->
-                    if (event.status != StepStatus.Current) event else event.copy(
-                        status = status,
-                        title = when {
-                            event.kind != WorkEventKind.Thinking -> event.title
-                            status == StepStatus.Done -> "Размышления"
-                            else -> "Размышления прерваны"
-                        },
-                        summary = if (event.kind == WorkEventKind.Thinking) event.summary else status.label,
-                    )
-                },
-            )
-        },
-    )
 
     private fun publish(structural: Boolean = false) = store.changed(chatId, structural)
 

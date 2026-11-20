@@ -7,9 +7,10 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -44,19 +45,23 @@ internal data class AuroraChat(
                 is Reply -> message
             }
         }
-        val stopped = interrupted?.copy(
-            status = ReplyStatus.Stopped,
-            steps = interrupted.steps.map(Step::stopInterrupted),
-        )
+        val stopped = interrupted?.finishCurrentSteps(StepStatus.Stopped)?.copy(status = ReplyStatus.Stopped)
         return copy(messages = if (stopped == null) history else listOf(stopped) + history, interrupted = null)
     }
 }
 
-private fun Step.stopInterrupted(): Step = if (status != StepStatus.Current) this else copy(
-    status = StepStatus.Stopped,
-    events = events.map { event ->
-        if (event.status == StepStatus.Current) {
-            event.copy(status = StepStatus.Stopped, summary = "Остановлено")
-        } else event
+internal fun Reply.finishCurrentSteps(status: StepStatus): Reply = copy(
+    steps = steps.map { step ->
+        if (step.status != StepStatus.Current) step
+        else step.copy(status = status, events = step.events.map { it.finish(status) })
     },
 )
+
+private fun WorkEvent.finish(finalStatus: StepStatus): WorkEvent = when {
+    status != StepStatus.Current -> this
+    kind == WorkEventKind.Thinking -> copy(
+        status = finalStatus,
+        title = if (finalStatus == StepStatus.Done) "Размышления" else "Размышления прерваны",
+    )
+    else -> copy(status = finalStatus, summary = finalStatus.label)
+}

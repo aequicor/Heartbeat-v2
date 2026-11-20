@@ -5,6 +5,7 @@ package io.github.aequicor.heartbeat.features.aistudio.presentation
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
@@ -276,6 +277,32 @@ class DefaultAiStudioStoreTest {
     }
 
     @Test
+    fun retryingAnswersAfterRestartCompletesTheInterruptedReviewStep() = runTest {
+        val data = TestPreferences()
+        val firstSession = sessionScope()
+        val store = DefaultAiStudioStore(data, firstSession)
+        runCurrent()
+        store.dispatch(AiStudioAction.SetAccess(Access.ReadOnly))
+        send(store)
+        advance(1_400)
+        fillAnswers(store)
+        val live = assertNotNull(store.screenState.value.live)
+        val answer = assertIs<User>(store.screenState.value.messages.first())
+        assertEquals(Delivery.Sending, answer.delivery)
+
+        firstSession.cancel()
+        val restarted = studio(data)
+        restarted.dispatch(AiStudioAction.Retry(answer.id))
+        advance(400)
+        val history = restarted.screenState.value.messages
+        val completed = assertIs<Reply>(history.single { it.id == live.id })
+        assertEquals(ReplyStatus.Completed, completed.status)
+        assertEquals(live.steps.map { it.id }, completed.steps.map { it.id })
+        assertTrue(completed.steps.all { it.status == StepStatus.Done })
+        assertEquals(Delivery.Sent, assertIs<User>(history.single { it.id == answer.id }).delivery)
+    }
+
+    @Test
     fun executionRetryKeepsReplyAndStopInvalidatesQueuedEvents() = runTest {
         val store = studio()
         store.dispatch(AiStudioAction.SetScenario(Scenario.RunFailure))
@@ -384,8 +411,7 @@ class DefaultAiStudioStoreTest {
     @Test
     fun restoresTheDraftAnchorAndAttachmentsAcrossSelectionAndRestart() = runTest {
         val data = TestPreferences()
-        val context = backgroundScope.coroutineContext
-        val firstScope = CoroutineScope(context + SupervisorJob(context[Job]))
+        val firstScope = sessionScope()
         val store = DefaultAiStudioStore(data, firstScope)
         runCurrent()
         store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
@@ -463,6 +489,25 @@ class DefaultAiStudioStoreTest {
     }
 
     @Test
+    fun restartingDuringThinkingKeepsTheSameEventHistoryAsStopping() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        send(store)
+        advance(850)
+        val live = assertNotNull(store.screenState.value.live)
+        val thinking = live.steps.single().events.single { it.kind == WorkEventKind.Thinking }
+        assertTrue(thinking.details.isNotBlank())
+
+        val checkpoint = TestPreferences(data.snapshot.value)
+        store.dispatch(AiStudioAction.CancelTurn)
+        advance(400)
+        val stopped = assertIs<Reply>(store.screenState.value.messages.first())
+        val recovered = assertIs<Reply>(studio(checkpoint).screenState.value.messages.first())
+        assertEquals(ReplyStatus.Stopped, recovered.status)
+        assertEquals(stopped.steps, recovered.steps)
+    }
+
+    @Test
     fun restoresReceivedTextWhenAStreamingTurnIsInterrupted() = runTest {
         val data = TestPreferences()
         val store = studio(data)
@@ -503,6 +548,11 @@ class DefaultAiStudioStoreTest {
     private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =
         DefaultAiStudioStore(data, backgroundScope).also { runCurrent() }
 
+    private fun TestScope.sessionScope(): CoroutineScope {
+        val context = backgroundScope.coroutineContext
+        return CoroutineScope(context + SupervisorJob(context[Job]))
+    }
+
     private fun TestScope.advance(ms: Long) {
         advanceTimeBy(ms)
         runCurrent()
@@ -526,8 +576,8 @@ class DefaultAiStudioStoreTest {
         runCurrent()
     }
 
-    private class TestPreferences : PreferencesStore {
-        val snapshot = MutableStateFlow("")
+    private class TestPreferences(initial: String = "") : PreferencesStore {
+        val snapshot = MutableStateFlow(initial)
 
         override fun observeString(key: String, default: String) = snapshot
         override fun observeBoolean(key: String, default: Boolean) = flowOf(default)

@@ -297,20 +297,17 @@ internal class DefaultAiStudioStore(
             nextId(), MockTime, text, chat.attachments, Delivery.Sending,
             scenario = chat.summary.scenario, access = chat.summary.access,
         )
-        startTurn(user, fresh = true)
+        newTurn(user).sendPrompt()
     }
 
-    private fun startTurn(prompt: User, fresh: Boolean, reply: Reply? = null) {
+    private fun newTurn(prompt: User, previous: Reply? = null): AuroraTurn {
         val id = workspace.selectedId
-        val turn = AuroraTurn(prompt, this, scope, id, reply?.id ?: nextId())
-        turns[id] = turn
-        if (reply != null) updateChat(id) { it.copy(messages = it.messages.filterNot { item -> item.id == reply.id }) }
-        if (fresh) {
-            putMessage(id, prompt)
-        } else if (reply == null) {
-            putMessage(id, prompt.copy(delivery = Delivery.Sending, error = null))
+        if (previous != null) {
+            updateChat(id) { chat -> chat.copy(messages = chat.messages.filterNot { it.id == previous.id }) }
         }
-        turn.start(fresh, resumeExecution = reply)
+        val turn = AuroraTurn(prompt, this, scope, id, previous?.id ?: nextId())
+        turns[id] = turn
+        return turn
     }
 
     private fun retry(id: String) {
@@ -324,25 +321,19 @@ internal class DefaultAiStudioStore(
             message is User && message.delivery == Delivery.Failed -> retryUser(message)
             message is Reply && message.status == ReplyStatus.Failed -> {
                 val prompt = findMessage(message.promptId) as? User ?: return
-                startTurn(prompt, false, message)
+                newTurn(prompt, message).resumeExecution(message)
             }
         }
     }
 
     private fun retryUser(message: User) {
         if (!message.answers) {
-            startTurn(message, false)
+            newTurn(message).sendPrompt()
             return
         }
         val prompt = findMessage(message.promptId) as? User ?: return
-        val id = workspace.selectedId
         val previous = selected.messages.filterIsInstance<Reply>().firstOrNull { it.promptId == prompt.id }
-        if (previous != null) {
-            updateChat(id) { it.copy(messages = it.messages.filterNot { item -> item.id == previous.id }) }
-        }
-        val turn = AuroraTurn(prompt, this, scope, id, previous?.id ?: nextId())
-        turns[id] = turn
-        turn.restoreAnswer(previous, message)
+        newTurn(prompt, previous).restoreAnswer(previous, message)
     }
 
     private fun editMessage(id: String) {
