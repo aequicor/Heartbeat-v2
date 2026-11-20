@@ -2,8 +2,6 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +33,7 @@ internal fun OpenMessageMenuOnBadgeHover(
     onOpen: () -> Unit,
 ) {
     var handled by remember { mutableStateOf(false) }
-    SideEffect(hovered, expanded, onOpen) {
+    if (hovered || handled) LaunchedEffect(hovered, expanded, onOpen) {
         when {
             expanded -> Unit
             !hovered -> handled = false
@@ -68,20 +66,24 @@ internal fun rememberMessageActionBadge(
     val available = pinned || hovered && admitted
     val visible = available && (!expanded || touch)
     val animated = !touch && !pinned && HbTheme.motion != HbMotionPreference.Reduced
-    val opacity = animateFloatAsState(
-        if (visible) 1f else 0f,
-        if (animated) tween(HbMotions.Default.ordinaryTransitionMs, easing = FastOutSlowInEasing) else snap(),
-        label = "Message action badge",
-    )
+    val opacity = remember { Animatable(if (visible) 1f else 0f) }
     val fading by remember(opacity) { derivedStateOf { opacity.value > 0f } }
-    return AuroraMessageReveal(available || expanded, visible || fading, opacity)
+    if (visible || fading) LaunchedEffect(visible, animated) {
+        val target = if (visible) 1f else 0f
+        if (animated) {
+            opacity.animateTo(target, tween(HbMotions.Default.ordinaryTransitionMs, easing = FastOutSlowInEasing))
+        } else {
+            opacity.snapTo(target)
+        }
+    }
+    return AuroraMessageReveal(available || expanded, visible || fading, opacity.asState())
 }
 
 @Composable
 private fun rememberBadgeAdmission(hovered: Boolean, overBubble: Boolean, expanded: Boolean): State<Boolean> {
     val admission = remember { mutableStateOf(false) }
     var admitted by admission
-    LaunchedEffect(hovered, overBubble, expanded) {
+    if (hovered || admitted) LaunchedEffect(hovered, overBubble, expanded) {
         when {
             expanded -> Unit
             !hovered -> admitted = false

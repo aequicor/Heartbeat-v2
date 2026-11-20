@@ -38,7 +38,7 @@ internal fun AuroraMessageTimestamp(
     val text = remember { MessageTextGeometry() }
     Layout(
         contents = listOf(
-            { Box { content { text.layout = it } } },
+            { Box { content(text::update) } },
             status,
             { if (time.isNotBlank()) AuroraTimestampText(time) },
         ),
@@ -48,7 +48,7 @@ internal fun AuroraMessageTimestamp(
         val body = contentSlot.single().measure(loose)
         val delivery = statusSlot.singleOrNull()?.measure(loose)
         val textLayout = text.layout
-        val bodyWidth = if (textSetsWidth && textLayout != null) textLayout.occupiedWidth() else body.width
+        val bodyWidth = if (textSetsWidth && textLayout != null) text.occupiedWidth() else body.width
         val width = constraints.constrainWidth(maxOf(bodyWidth, delivery?.width ?: 0))
         val stamp = timeSlot.singleOrNull()?.measure(loose)
         val fittingStamp = stamp?.takeIf { it.width <= width }
@@ -111,6 +111,16 @@ internal fun AuroraTimestampText(time: String, modifier: Modifier = Modifier) {
 private class MessageTextGeometry {
     // Read during the parent's measure pass, after BasicText reports its layout.
     var layout: TextLayoutResult? = null
+        private set
+    private var occupied: Int? = null
+
+    fun update(result: TextLayoutResult) {
+        if (layout === result) return
+        layout = result
+        occupied = null
+    }
+
+    fun occupiedWidth(): Int = occupied ?: checkNotNull(layout).occupiedWidth().also { occupied = it }
 }
 
 private fun TextLayoutResult.occupiedWidth(): Int = ceil((0 until lineCount).maxOfOrNull(::getLineRight) ?: 0f).toInt()

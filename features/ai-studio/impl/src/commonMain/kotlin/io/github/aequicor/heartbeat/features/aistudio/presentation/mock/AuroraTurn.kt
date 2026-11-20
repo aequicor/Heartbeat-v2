@@ -8,6 +8,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Answer
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Question
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
@@ -18,6 +19,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.WorkMarkdownStream
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.finishCurrentSteps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -46,6 +48,14 @@ internal class AuroraTurn(
     private var failedAnswerId: String? = null
     private var sendingAnswer: User? = null
     private var frame = 0
+    private val thinkingMarkdown by lazy { WorkMarkdownStream() }
+    private val demonstration = chatId == LargeMessageDemo.ChatId && prompt.scenario == Scenario.Stream
+    private val answerSample by lazy {
+        if (demonstration) LargeMessageDemo.answer(prompt.text) else AuroraMock.richSample
+    }
+    private val thinkingFragments = if (demonstration && prompt.text.trim().equals("рассуждение", ignoreCase = true)) {
+        LargeMessageDemo.reasoning
+    } else ThinkingFragments
 
     fun sendPrompt() {
         store.putMessage(chatId, prompt.copy(delivery = Delivery.Sending, error = null))
@@ -85,17 +95,21 @@ internal class AuroraTurn(
             activeTitle = "Проверяю исходные условия",
             events = listOf(
                 WorkEvent("read-notes", "Читаю рабочие заметки", "Готово · ${source.name}", source.content,
-                    WorkEventKind.File, StepStatus.Done, "Файл: ${source.name}"),
+                    WorkEventKind.File, StepStatus.Done, "Файл: ${source.name}",
+                    if (source.isMarkdown) DetailFormat.Markdown else DetailFormat.Plain),
                 WorkEvent("scan", "Ищу обработчик остановки", "Готово", "Обработчик остановки найден",
                     WorkEventKind.Search, StepStatus.Done),
-                WorkEvent("thinking", "Думает...", "", "", WorkEventKind.Thinking, StepStatus.Current),
+                WorkEvent(
+                    "thinking", "Думает...", "", "", WorkEventKind.Thinking, StepStatus.Current,
+                    detailsFormat = if (demonstration) DetailFormat.Plain else DetailFormat.Markdown,
+                ),
             ),
         )
     }
 
     private fun receiveThinkingFragment(index: Int) {
         after(ThinkingFragmentDelay) {
-            val fragment = ThinkingFragments.getOrNull(index)
+            val fragment = thinkingFragments.getOrNull(index)
             if (fragment == null) {
                 afterReading()
             } else {
@@ -103,8 +117,13 @@ internal class AuroraTurn(
                 val step = current.steps.last()
                 val events = step.events.map { event ->
                     if (event.kind != WorkEventKind.Thinking) event else {
-                        val text = event.details + fragment
-                        event.copy(summary = text, details = text)
+                        val stream = if (event.detailsFormat == DetailFormat.Markdown) thinkingMarkdown else null
+                        val detail = if (stream != null && index == 0) {
+                            "Выделяю условия **повтора**, "
+                        } else {
+                            fragment
+                        }
+                        event.appendDetails(detail, fragment, stream)
                     }
                 }
                 reply = current.copy(steps = current.steps.dropLast(1) + step.copy(events = events))
@@ -352,11 +371,22 @@ internal class AuroraTurn(
             frame++
             val current = checkNotNull(reply)
             if (frame == AuroraMock.StreamFrames) {
-                complete("Проверено $frame этапов. Отчёт готов.")
+                if (demonstration) complete(answerSample, writeResult = false)
+                else complete("Проверено $frame этапов. Отчёт готов.")
                 return@after
             }
             if (frame % StreamBatch == 0) {
-                val text = current.text + "Проверки ${frame - StreamBatch + 1}–$frame завершены. "
+                val batch = frame / StreamBatch
+                val text = if (demonstration) {
+                    val end = answerSample.length * batch / (AuroraMock.StreamFrames / StreamBatch)
+                    answerSample.substring(0, end)
+                } else {
+                    val start = (batch - 1) * StreamFragment
+                    val fragment = if (start < answerSample.length) {
+                        answerSample.substring(start, minOf(start + StreamFragment, answerSample.length))
+                    } else "\n\nПроверки ${frame - StreamBatch + 1}–$frame завершены."
+                    current.text + fragment
+                }
                 val next = current.copy(text = text)
                 reply = next
                 store.streamText(chatId, next)
@@ -428,6 +458,7 @@ internal class AuroraTurn(
         val ThinkingFragments = listOf("Выделяю условия повтора, ", "остановки и восстановления.")
         const val StreamDelay = 40L
         const val StreamBatch = 3
+        const val StreamFragment = 24
         const val TimerTick = 250L
         const val ChoiceResponseTime = 60_000L
         const val TextResponseTime = 120_000L

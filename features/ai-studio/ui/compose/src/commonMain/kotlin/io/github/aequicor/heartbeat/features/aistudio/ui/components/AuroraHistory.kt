@@ -3,6 +3,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -64,12 +67,18 @@ internal fun AuroraHistory(
     padding: PaddingValues,
     modifier: Modifier = Modifier,
     readingWidth: Dp = Dp.Infinity,
+    viewportHeight: Dp = Dp.Hairline,
 ) {
     val live = state.live
     val history = state.messages
     val prepend = if (live == null) 0 else 1
     fun messageAt(index: Int): Message = if (index == 0 && live != null) live else history[index - prepend]
-    val reflow = remember(list, live?.id ?: history.firstOrNull()?.id) { AuroraHistoryReflow(list) }
+    val usableHeight = (viewportHeight - padding.calculateTopPadding() - padding.calculateBottomPadding())
+        .coerceAtLeast(Dp.Hairline)
+    val currentHeight = rememberUpdatedState(usableHeight)
+    val reflow = remember(list, live?.id ?: history.firstOrNull()?.id) {
+        AuroraHistoryReflow(list) { currentHeight.value }
+    }
     val adjustment = reflow.ready(state.expandedWork)
     val density = LocalDensity.current
     val insets = remember(padding, reflow, adjustment, density) {
@@ -121,17 +130,42 @@ private fun AuroraMessageRow(
     var workAccessVisible by remember(message.id) { mutableStateOf(false) }
     val selection = rememberSelectionState()
     AuroraMessageMenu(
-        message, touch, onAction, readingWidth, selection, modifier.zIndex(if (workAccessVisible) 1f else 0f),
+        message, touch, onAction, readingWidth, selection, modifier.zIndex(if (workAccessVisible) 1f else 0f), liveText,
     ) { hoverOverMenu ->
         when (message) {
             is User -> AuroraUserBubble(message, touch, onAction, selection)
-            is Reply -> AuroraAgentMessage(
+            is Reply -> if (message.showArchivedAnswer(liveText)) {
+                AuroraArchivedAnswer(message, touch, onAction, selection, reflow)
+                if (workAccessVisible) SideEffect { workAccessVisible = false }
+            } else AuroraAgentMessage(
                 message, message.id in expandedWork, expandedSteps, expandedEvents, touch, onAction,
                 liveText = liveText, selection = selection, hoverOverMenu = hoverOverMenu,
                 reflow = reflow,
                 onWorkAccessVisibility = { workAccessVisible = it },
             )
         }
+    }
+}
+
+@Composable
+private fun Reply.showArchivedAnswer(liveText: StateFlow<LiveText>?): Boolean {
+    val answerOnly = status == ReplyStatus.Completed && steps.isEmpty() && liveText == null
+    // Replies that started live retain their existing selection and resize animation at completion.
+    return remember(id) { answerOnly } && answerOnly
+}
+
+@Composable
+private fun AuroraArchivedAnswer(
+    reply: Reply, touch: Boolean, onAction: (AiStudioAction) -> Unit, selection: SelectionState,
+    reflow: AuroraHistoryReflow,
+) {
+    val outline = HbAuroraOutline(AuroraColors.AgentMessage, AuroraColors.MessageOutline, AuroraLayout.MessageRadius)
+    val reveal = if (supportsAuroraStagedRichLayout() && reply.historyContent?.plain == false) {
+        remember(reply.id) { ArchiveReveal() }
+    } else null
+    Box(Modifier.widthIn(max = AuroraLayout.AgentBubble).focusGroup().then(outline)
+        .trackReplyHeight(reply, reflow, selection, reply.historyContent?.plain == false)) {
+        AuroraReplyAnswer(reply, touch, onAction, null, selection, false, {}, reflow.viewportHeight, reveal)
     }
 }
 
@@ -210,7 +244,6 @@ internal fun AuroraAgentMessage(
     val hasWork = reply.steps.isNotEmpty()
     val focus = remember(reply.id) { AuroraWorkAccess(liveText != null) }
     val desktopHistory = hasWork && completed && !touch
-    val hovered by focus.hover.collectIsHoveredAsState()
     val animated = HbTheme.motion != HbMotionPreference.Reduced
     val clearance = if (desktopHistory && reflow != null) {
         rememberAuroraWorkHeaderClearance(focus.headerHeight, expanded)
@@ -223,13 +256,15 @@ internal fun AuroraAgentMessage(
 
     var accessFocused by remember { mutableStateOf(false) }
     val visibleFocus = accessFocused && HbFocusIndication.keyboardNavigation
-    val reveal = rememberAuroraWorkReveal(
-        desktopHistory, hovered, hoverOverMenu, expanded || visibleFocus, selection.selectedTexts.isNotEmpty(),
-    )
-    val accessVisible = desktopHistory && reveal.drawn
+    val reveal = if (desktopHistory) {
+        val hovered by focus.hover.collectIsHoveredAsState()
+        rememberAuroraWorkReveal(hovered, hoverOverMenu, expanded || visibleFocus, selection.selectedTexts.isNotEmpty())
+            .takeIf { it.drawn }
+    } else null
+    val accessVisible = reveal != null
     val surface = focus.replySurface(
         expandedHistory = desktopHistory && expanded,
-        headerOpacity = if (accessVisible) { { reveal.opacity.value } } else null,
+        headerOpacity = reveal?.let { header -> { header.opacity.value } },
     )
     val hoverTarget = if (desktopHistory) Modifier.hoverable(focus.hover) else Modifier
     val roomAbove = if (clearance != null) Modifier.auroraWorkHeaderClearance(clearance) else Modifier
@@ -251,7 +286,7 @@ internal fun AuroraAgentMessage(
                 reflow?.beforeToggle(reply.id, expanded, focus.displayedHistoryHeight, animated, clearance = null)
             })
         }
-        if (accessVisible) {
+        if (reveal != null) {
             Box(Modifier.matchParentSize()) {
                 AuroraDesktopWorkHeader(
                     auroraWorkTitle(reply.steps.size), expanded, visibleFocus, focus.hover, reveal, onToggle,
@@ -277,25 +312,37 @@ private fun AuroraAgentMessageBody(
     work: @Composable () -> Unit,
 ) {
     val finalResize = reply.status == ReplyStatus.Completed && focus.continuedFromStream
-    var replyHeight by remember(reply.id) { mutableIntStateOf(0) }
-    val surface = modifier.onSizeChanged { size ->
-        val previous = replyHeight
-        replyHeight = size.height
-        if (previous > 0 && (liveText != null || finalResize)) {
-            reflow?.streamingReplyResized(reply.id, size.height - previous)
-        }
-    }
+    val tracksHeight = liveText != null || finalResize || reply.historyContent?.plain == false
+    val surface = modifier.trackReplyHeight(reply, reflow, selection, tracksHeight)
     val onResizeEnd = { if (finalResize) focus.finishStreamResize() }
     AuroraReplyLayout(
         history = {
             AuroraReplyWork(reply, expanded, touch, onToggle, focus, reflow, finalResize, onResizeEnd, work)
         },
         answer = {
-            AuroraReplyAnswer(reply, touch, onAction, liveText, selection, finalResize, onResizeEnd)
+            AuroraReplyAnswer(
+                reply, touch, onAction, liveText, selection, finalResize, onResizeEnd,
+                viewportHeight = reflow?.viewportHeight ?: Dp.Hairline,
+            )
         },
         modifier = surface,
         expandToFitHistory = expanded && reply.status == ReplyStatus.Completed && reply.steps.isNotEmpty(),
     )
+}
+
+@Composable
+private fun Modifier.trackReplyHeight(
+    reply: Reply, reflow: AuroraHistoryReflow?, selection: SelectionState, tracksHeight: Boolean,
+): Modifier {
+    val scope = rememberCoroutineScope()
+    var height by remember(reply.id) { mutableIntStateOf(0) }
+    return onSizeChanged { size ->
+        val previous = height
+        height = size.height
+        if (previous > 0 && tracksHeight) {
+            reflow?.streamingReplyResized(reply.id, size.height - previous, scope, selection.selectedTexts.isNotEmpty())
+        }
+    }
 }
 
 @Composable

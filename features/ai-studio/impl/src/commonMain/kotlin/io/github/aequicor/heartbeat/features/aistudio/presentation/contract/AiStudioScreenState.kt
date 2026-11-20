@@ -1,6 +1,13 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.WorkMarkdownStream
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.isLiteralReply
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /** Prepared state of the Aurora workspace. History is ordered from newest to oldest. */
 public data class AiStudioScreenState(
@@ -32,7 +39,101 @@ public data class AiStudioScreenState(
     val navigationFocusId: String? = null,
 ) {
     public data class Draft(val chatId: String? = null, val text: String = "")
-    public data class LiveText(val replyId: String? = null, val text: String = "")
+    public data class LiveText(
+        val replyId: String? = null, val text: String = "", val document: ReplyDocument? = null,
+    ) {
+        public fun textFor(id: String): String? = text.takeIf { replyId == id && it.isNotEmpty() }
+    }
+
+    public data class ReplyDocument(val blocks: List<ReplyBlock>, val plainText: String? = null) {
+        public companion object {
+            public fun plain(source: String): ReplyDocument = ReplyDocument(
+                if (source.isEmpty()) listOf() else listOf(
+                    ReplyBlock.Paragraph(0, source.lines().map { line -> listOf(ReplyInline(line)) }),
+                ),
+                plainText = source,
+            )
+        }
+    }
+
+    public sealed interface ReplyBlock {
+        /** The start offset in the original message, measured in UTF-16 code units. */
+        public val id: Int
+
+        public data class Paragraph(override val id: Int, val lines: List<List<ReplyInline>>) : ReplyBlock
+        public data class Heading(override val id: Int, val level: Int, val text: List<ReplyInline>) : ReplyBlock
+        public data class Quote(override val id: Int, val blocks: List<ReplyBlock>) : ReplyBlock
+        public data class ListBlock(
+            override val id: Int,
+            val ordered: Boolean,
+            val start: Int,
+            val items: List<List<ReplyBlock>>,
+            val checked: List<Boolean?> = listOf(),
+        ) : ReplyBlock
+
+        public data class Table(
+            override val id: Int,
+            val header: List<List<ReplyInline>>,
+            val rows: List<List<List<ReplyInline>>>,
+            val alignments: List<ReplyAlignment>,
+        ) : ReplyBlock
+
+        public data class Code(
+            override val id: Int,
+            val language: String?,
+            val source: String,
+            val lines: List<ReplyCodeLine>,
+            val closed: Boolean,
+        ) : ReplyBlock
+
+        public data class Diagram(
+            override val id: Int,
+            val kind: ReplyDiagramKind,
+            val source: String,
+            val closed: Boolean,
+        ) : ReplyBlock
+
+        public data class Rule(override val id: Int) : ReplyBlock
+    }
+
+    public data class ReplyInline(
+        val text: String,
+        val bold: Boolean = false,
+        val italic: Boolean = false,
+        val strike: Boolean = false,
+        val code: Boolean = false,
+        val url: String? = null,
+    )
+
+    public enum class ReplyAlignment { Left, Center, Right }
+    public enum class ReplyDiagramKind { Mermaid, PlantUml }
+
+    public data class ReplyCodeLine(val text: String, val highlights: List<ReplyCodeHighlight>)
+
+    public data class ReplyCodeHighlight(val start: Int, val end: Int, val kind: ReplyCodeKind)
+
+    public enum class ReplyCodeKind { Keyword, String, Comment, Number, DiffAdd, DiffDelete }
+
+    /** Completed replies are parsed on demand as they enter the viewport. */
+    public class ReplyHistoryContent internal constructor(
+        private val source: String,
+        markdown: Boolean = false,
+        final: Boolean = true,
+        stream: WorkMarkdownStream? = null,
+    ) {
+        public val plain: Boolean = !markdown && source.isLiteralReply()
+
+        // A reply can be shown in several windows. Keep one immutable result with its owning message.
+        private val parsed = lazy { ReplyMarkdownParser(literalFastPath = !markdown).parse(source, final) }
+        private val streaming = stream?.snapshot(source)
+
+        internal var lastStreamDocument: ReplyDocument? = null
+
+        public val available: ReplyDocument? get() = if (parsed.isInitialized()) parsed.value else lastStreamDocument
+
+        public suspend fun document(worker: CoroutineDispatcher = Dispatchers.Default): ReplyDocument =
+            withContext(worker) { streaming?.document() ?: parsed.value }
+    }
 
     @Serializable
     public data class Anchor(val messageId: String? = null, val offset: Int = 0)
@@ -127,7 +228,11 @@ public data class AiStudioScreenState(
         val status: ReplyStatus = ReplyStatus.Working,
         val result: File? = null,
         val promptId: String? = null,
-    ) : Message
+    ) : Message {
+        @Transient
+        public val historyContent: ReplyHistoryContent? =
+            if (status == ReplyStatus.Working) null else ReplyHistoryContent(text)
+    }
 
     @Serializable
     public enum class ReplyStatus { Working, Completed, Stopped, Failed }
@@ -152,7 +257,25 @@ public data class AiStudioScreenState(
         val kind: WorkEventKind,
         val status: StepStatus,
         val detailLabel: String? = null,
+        val detailsFormat: DetailFormat = restoredDetailsFormat(id, kind, detailLabel),
     ) {
+        @Transient
+        public var markdownDetails: ReplyHistoryContent? = when {
+            detailsFormat != DetailFormat.Markdown || details.isBlank() -> null
+            else -> ReplyHistoryContent(details, markdown = true, final = status != StepStatus.Current)
+        }
+            private set
+
+        internal fun appendDetails(fragment: String, summaryFragment: String, stream: WorkMarkdownStream?): WorkEvent {
+            val text = details + fragment
+            if (stream == null) return copy(summary = text, details = text)
+            return copy(summary = summary + summaryFragment, details = text).also { next ->
+                if (next.markdownDetails != null) {
+                    next.markdownDetails = ReplyHistoryContent(text, markdown = true, final = false, stream = stream)
+                }
+            }
+        }
+
         public val preview: String
             get() = if (kind == WorkEventKind.Thinking) summary.ifBlank { emptyThinking } else summary
 
@@ -162,10 +285,23 @@ public data class AiStudioScreenState(
 
         private val emptyThinking: String
             get() = if (status == StepStatus.Current) "Ожидаю текст…" else "Текст не получен."
+
+        private companion object {
+            // Workspace snapshots before detailsFormat were saved by this specific file tool.
+            fun restoredDetailsFormat(id: String, kind: WorkEventKind, label: String?): DetailFormat =
+                if (id == "read-notes" && kind == WorkEventKind.File && label == "Файл: architecture.md") {
+                    DetailFormat.Markdown
+                } else {
+                    DetailFormat.Plain
+                }
+        }
     }
 
     @Serializable
     public enum class WorkEventKind { File, Search, Thinking, Check }
+
+    @Serializable
+    public enum class DetailFormat { Plain, Markdown }
 
     @Serializable
     public enum class StepStatus(public val label: String) {
@@ -182,7 +318,19 @@ public data class AiStudioScreenState(
         val kind: String,
         val content: String,
         val date: FileDate? = null,
-    )
+    ) {
+        public val isMarkdown: Boolean
+            get() = kind.equals("Markdown", ignoreCase = true) ||
+                name.substringAfterLast('.', "").lowercase() in MarkdownExtensions
+
+        @Transient
+        public val markdownContent: ReplyHistoryContent? =
+            if (isMarkdown) ReplyHistoryContent(content, markdown = true) else null
+
+        private companion object {
+            val MarkdownExtensions = setOf("md", "markdown")
+        }
+    }
 
     @Serializable
     public data class FileDate(val year: Int, val month: Int, val day: Int, val time: String)

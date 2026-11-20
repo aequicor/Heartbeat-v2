@@ -17,6 +17,29 @@ internal object AuroraMock {
     const val HistoryTurns = 1_250
     const val StreamFrames = 240
 
+    // The long-history scenario exercises the same fenced sources that arrive from an engine.
+    val richSample = """
+        ## Остановка запроса
+
+        Сначала запросите **остановку**. Повтор доступен после подтверждения.
+
+        ```kotlin
+        val canRetry = status == Status.Stopped
+        ```
+
+        ```mermaid
+        flowchart LR
+          A[Запущен] --> B[Останавливается] --> C[Остановлен]
+        ```
+
+        ```plantuml
+        @startuml
+        Клиент -> Агент: Остановить
+        Агент --> Клиент: Остановлен
+        @enduml
+        ```
+    """.trimIndent()
+
     val inputs = listOf(
         File("brief", "architecture.md", "Markdown", "# Архитектура\n\nГраница UI и логики.\n\n" +
             "История хранится по диалогам. Остановка подтверждается отдельным событием.",
@@ -45,12 +68,13 @@ internal object AuroraMock {
 
     fun history(id: String): List<Message> = when (id) {
         InitialChat -> pencilConversation()
+        LargeMessageDemo.ChatId -> LargeMessageDemo.history()
         LongChat -> buildList {
             repeat(HistoryTurns) { index ->
                 val number = HistoryTurns - index
-                add(Reply("mock-reply-$number", "14:03", text = "Проверка $number завершена. " +
-                    "Повтор сохраняет исходную реплику, а Stop подтверждает остановку отдельным событием.",
-                    status = ReplyStatus.Completed))
+                val text = if (index == 0) richSample else "Проверка $number завершена. " +
+                    "Повтор сохраняет исходную реплику, а Stop подтверждает остановку отдельным событием."
+                add(Reply("mock-reply-$number", "14:03", text = text, status = ReplyStatus.Completed))
                 add(User("mock-user-$number", "14:02", "Проверь контракты сессий и сценарий отмены ($number)"))
             }
         }

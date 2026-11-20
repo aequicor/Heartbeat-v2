@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -80,9 +85,10 @@ internal fun AuroraMessageMenu(
     readingWidth: Dp,
     selection: SelectionState,
     modifier: Modifier = Modifier,
+    liveText: StateFlow<LiveText>? = null,
     content: @Composable (hoverOverMenu: Boolean) -> Unit,
 ) {
-    val actions = auroraMessageActions(message, onAction)
+    val actions = auroraMessageActions(message, onAction, liveText)
     val user = message is User
     val hitArea = remember { MessageMenuHitArea() }
     val menu = remember { MessageMenuState() }
@@ -419,16 +425,24 @@ private suspend fun AwaitPointerEventScope.awaitMenuLongPressRelease(id: Pointer
 
 @Suppress("DEPRECATION")
 @Composable
-private fun auroraMessageActions(message: Message, onAction: (AiStudioAction) -> Unit): List<HbMenuAction> {
+private fun auroraMessageActions(
+    message: Message, onAction: (AiStudioAction) -> Unit, liveText: StateFlow<LiveText>?,
+): List<HbMenuAction> {
     val clipboard = LocalClipboardManager.current
-    return remember(message, onAction, clipboard) {
+    val hasStream = liveText != null && remember(liveText, message.id) {
+        liveText.map { it.textFor(message.id) != null }.distinctUntilChanged()
+    }.collectAsState(liveText.value.textFor(message.id) != null).value
+    return remember(message, onAction, clipboard, hasStream, liveText) {
         buildList {
             val text = when (message) {
                 is User -> message.text
                 is Reply -> message.text.ifBlank { message.interim.orEmpty() }
             }
-            if (text.isNotEmpty()) {
-                add(HbMenuAction("Копировать", { clipboard.setText(AnnotatedString(text)) }, glyph = HbIconGlyph.Copy))
+            if (text.isNotEmpty() || hasStream) {
+                add(HbMenuAction("Копировать", {
+                    val current = liveText?.value?.textFor(message.id)
+                    clipboard.setText(AnnotatedString(current ?: text))
+                }, glyph = HbIconGlyph.Copy))
             }
             if (message is User && !message.answers) {
                 add(HbMenuAction("Редактировать", { onAction(AiStudioAction.EditMessage(message.id)) },

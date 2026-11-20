@@ -32,6 +32,7 @@ internal fun mockNavigation(): List<AuroraChat> = buildList {
         "Инструменты", listOf("Работа с файлами", "Поиск по проекту", "Журнал выполнения"), NavigationStatus.Attention,
     )
     addProject("Интеграции", listOf("Подключение агента", "Поток ответов", "Проверка соединения"))
+    add(Chat(LargeMessageDemo.ChatId, "Большие сообщения", "Проверки", Scenario.Stream))
     addProject("Проверки", listOf("Отмена запроса", "Восстановление связи", "Очередь сообщений"))
     add(Chat(AuroraMock.LongChat, "Длинная история", "Проверки", Scenario.Stream, contextPercent = 71))
     add(Chat("research", "Отчёт по контрактам", "Проверки", Scenario.RunFailure))

@@ -5,8 +5,6 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -24,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -77,8 +76,7 @@ internal fun AuroraControl(
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(if (round) AuroraLayout.ControlRadius else AuroraLayout.SmallRadius)
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
+    var focused by remember { mutableStateOf(false) }
     val focusVisible = focused && HbFocusIndication.keyboardNavigation
     val surface = if (clipContent) {
         Modifier.clip(shape).background(background)
@@ -89,8 +87,9 @@ internal fun AuroraControl(
             .then(surface)
             .then(if (focusVisible) Modifier.border(AuroraLayout.FrameStroke, focus, shape) else Modifier)
             .then(if (label == null) Modifier else Modifier.semantics { contentDescription = label })
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = interaction, indication = null,
+                interactionSource = null, indication = null,
                 enabled = enabled, role = Role.Button, onClick = onClick,
             )
             .padding(horizontal = horizontalPadding),

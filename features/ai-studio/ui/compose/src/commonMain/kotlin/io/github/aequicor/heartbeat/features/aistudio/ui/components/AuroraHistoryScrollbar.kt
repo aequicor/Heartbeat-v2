@@ -19,6 +19,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
@@ -37,6 +38,7 @@ internal fun AuroraHistoryScrollbar(
     modifier: Modifier = Modifier,
     reverse: Boolean = true,
     touch: Boolean = false,
+    lineStepPx: Float? = null,
 ) {
     val scrollable by remember(list) { derivedStateOf { list.canScrollBackward || list.canScrollForward } }
     if (!scrollable) return
@@ -48,7 +50,15 @@ internal fun AuroraHistoryScrollbar(
     val keyboard = if (touch) Modifier else Modifier
         .semantics { contentDescription = label }
         .onFocusChanged { focused = it.isFocused }
-        .onKeyEvent { event -> event.type == KeyEventType.KeyDown && scrollbar.onKey(event.key) }
+        .onKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+            val pixelStep = when (event.key) {
+                Key.DirectionUp -> lineStepPx?.unaryMinus()
+                Key.DirectionDown -> lineStepPx
+                else -> null
+            }
+            if (pixelStep == null) scrollbar.onKey(event.key) else list.dispatchRawDelta(pixelStep) != 0f
+        }
         .focusable()
 
     Canvas(modifier.fillMaxHeight().width(AuroraLayout.NavigationTrack).then(keyboard)

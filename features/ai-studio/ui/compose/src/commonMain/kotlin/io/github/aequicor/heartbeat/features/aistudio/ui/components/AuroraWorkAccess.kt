@@ -105,6 +105,8 @@ internal fun AuroraReplyWork(
 ) {
     val completed = reply.status == ReplyStatus.Completed
     val hasWork = reply.steps.isNotEmpty()
+    val settled = !finalResize && focus.displayedHistoryHeight == 0
+    if (completed && !hasWork && settled) return
     val resize = auroraWorkHeightMotion(focus, finalResize, onResizeEnd) { height, target ->
         reflow?.workResized(reply.id, expanded, height, target)
     }
@@ -138,18 +140,17 @@ private const val WorkHoverExitDelayMillis = 500L
 
 @Composable
 internal fun rememberAuroraWorkReveal(
-    allowed: Boolean,
     hovered: Boolean,
     hoverOverMenu: Boolean,
     focusVisible: Boolean,
     selectingText: Boolean,
 ): AuroraMessageReveal {
-    val pinned = allowed && focusVisible
+    val pinned = focusVisible
     val reveal = rememberAuroraMessageReveal(
-        hovered = allowed && (hovered || hoverOverMenu),
+        hovered = hovered || hoverOverMenu,
         pinned = pinned,
-        dwellOnTarget = allowed && hovered,
-        exitDelayMillis = if (allowed) WorkHoverExitDelayMillis else 0L,
+        dwellOnTarget = hovered,
+        exitDelayMillis = WorkHoverExitDelayMillis,
         holdHover = selectingText,
     )
     val pinnedOpacity = rememberUpdatedState(1f)
@@ -173,20 +174,21 @@ internal fun AuroraReplyLayout(
     expandToFitHistory: Boolean = false,
 ) {
     Layout(contents = listOf(history, answer), modifier = modifier) { (historySlot, answerSlot), constraints ->
-        val workContent = historySlot.single()
+        val workContent = historySlot.singleOrNull()
         val withoutMinimumHeight = constraints.copy(minHeight = 0)
-        val minimumWidth = if (expandToFitHistory) {
+        val minimumWidth = if (expandToFitHistory && workContent != null) {
             constraints.constrainWidth(workContent.maxIntrinsicWidth(Constraints.Infinity))
         } else {
             constraints.minWidth
         }
         val reply = answerSlot.single().measure(withoutMinimumHeight.copy(minWidth = minimumWidth))
-        val work = workContent.measure(
+        val work = workContent?.measure(
             withoutMinimumHeight.copy(minWidth = reply.width, maxWidth = reply.width),
         )
-        layout(reply.width, work.height + reply.height) {
-            work.placeRelative(0, 0)
-            reply.placeRelative(0, work.height)
+        val workHeight = work?.height ?: 0
+        layout(reply.width, workHeight + reply.height) {
+            work?.placeRelative(0, 0)
+            reply.placeRelative(0, workHeight)
         }
     }
 }

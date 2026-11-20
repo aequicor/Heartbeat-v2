@@ -2,9 +2,11 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JvmVendorSpec
 import java.io.File
+import java.util.Properties
 import org.gradle.api.GradleException
 
 plugins {
+    id("heartbeat-desktop-wheel")
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -16,6 +18,60 @@ plugins {
 
 val desktopVersion = "1.0.0"
 val isWindows = System.getProperty("os.name").lowercase().startsWith("windows")
+val isMacos = System.getProperty("os.name").startsWith("Mac")
+val desktopToolchain = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(25)
+    vendor = JvmVendorSpec.JETBRAINS
+}
+
+fun sdkHome(directory: File): File =
+    directory.resolve("Contents/Home").takeIf { it.isDirectory } ?: directory
+
+fun architecture(name: String): String = when (name.lowercase()) {
+    "x86_64", "amd64" -> "x64"
+    "aarch64", "arm64" -> "arm64"
+    else -> name
+}
+
+fun hasCompatibleJcef(home: File): Boolean {
+    if (!home.resolve("jmods/jcef.jmod").isFile) return false
+    val release = home.resolve("release")
+    if (!release.isFile) return false
+    val sdk = Properties()
+    release.inputStream().use(sdk::load)
+    val version = sdk.getProperty("JAVA_VERSION").orEmpty().trim('"').takeWhile(Char::isDigit)
+    return version == "25" &&
+        sdk.getProperty("IMPLEMENTOR").orEmpty().contains("JetBrains") &&
+        architecture(sdk.getProperty("OS_ARCH").orEmpty().trim('"')) == architecture(System.getProperty("os.arch"))
+}
+
+val explicitJcefHome = providers.environmentVariable("JBR_JCEF_HOME").orNull?.let { sdkHome(file(it)) }
+if (explicitJcefHome != null) {
+    check(hasCompatibleJcef(explicitJcefHome)) { "JBR_JCEF_HOME must name a JetBrains JDK 25 with JCEF for this host" }
+}
+val userDirectory = file(System.getProperty("user.home"))
+val standardSdkDirectories = when {
+    isMacos -> listOf(file("/Library/Java/JavaVirtualMachines"), userDirectory.resolve("Library/Java/JavaVirtualMachines"))
+    isWindows -> listOfNotNull(providers.environmentVariable("ProgramFiles").orNull?.let { file(it).resolve("Java") })
+    else -> listOf(file("/usr/lib/jvm"))
+}
+val jcefCandidates = sequence {
+    providers.environmentVariable("JAVA_HOME").orNull?.let { yield(file(it)) }
+    yield(file(System.getProperty("java.home")))
+    providers.gradleProperty("org.gradle.java.installations.paths").orNull.orEmpty().split(',')
+        .filter(String::isNotBlank).forEach { yield(file(it.trim())) }
+    val sdkCache = gradle.gradleUserHomeDir.resolve("jdks")
+    for (root in standardSdkDirectories + userDirectory.resolve(".jdks") + sdkCache) {
+        for (entry in root.listFiles(File::isDirectory).orEmpty().sortedBy(File::getName)) {
+            yield(entry)
+            if (root == sdkCache) yieldAll(entry.listFiles(File::isDirectory).orEmpty().asSequence())
+        }
+    }
+}
+val installedJcefHome = explicitJcefHome ?: jcefCandidates.map(::sdkHome).firstOrNull(::hasCompatibleJcef)
+val toolchainHome = desktopToolchain.get().metadata.installationPath.asFile
+val packagedJavaHome = installedJcefHome ?: toolchainHome
+val hasDiagramBrowser = hasCompatibleJcef(packagedJavaHome)
 
 kotlin {
     // Jewel 0.42.0 is built for the IntelliJ Platform 2026.3 runtime and ships
@@ -86,21 +142,68 @@ compose.desktop {
 
         // DecoratedWindow needs the JetBrains Runtime, including the runtime image
         // that jpackage builds for the distributable.
-        javaHome = javaToolchains.launcherFor {
-            languageVersion = JavaLanguageVersion.of(25)
-            vendor = JvmVendorSpec.JETBRAINS
-        }.get().metadata.installationPath.asFile.absolutePath
+        javaHome = packagedJavaHome.absolutePath
+        if (hasDiagramBrowser) jvmArgs += "--enable-native-access=jcef"
 
         nativeDistributions {
             // SQLite JDBC loads java.sql; DataStore's protobuf adapter uses sun.misc.Unsafe from
             // jdk.unsupported. jpackage includes neither automatically.
             modules("java.sql")
             modules("jdk.unsupported")
+            if (hasDiagramBrowser) modules("jcef")
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the
             // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Heartbeat"
             packageVersion = desktopVersion
+        }
+    }
+}
+
+if (hasDiagramBrowser) {
+    val frameworks = packagedJavaHome.parentFile.resolve("Frameworks").takeIf { isMacos }
+    tasks.matching { it.name == "createDistributable" }.configureEach {
+        if (frameworks != null) inputs.dir(frameworks)
+        doLast {
+            val images = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
+            if (frameworks != null) {
+                val app = images.resolve("Heartbeat.app")
+                val runtime = app.resolve("Contents/runtime")
+                // jpackage copies the linked Java image but omits its sibling Frameworks.
+                providers.exec {
+                    commandLine("/usr/bin/ditto", frameworks, runtime.resolve("Contents/Frameworks"))
+                }.result.get()
+                providers.exec {
+                    commandLine("/usr/bin/codesign", "--force", "--sign", "-", runtime)
+                }.result.get()
+                providers.exec {
+                    commandLine("/usr/bin/codesign", "--force", "--sign", "-", app)
+                }.result.get()
+            } else {
+                val runtime = images.resolve(if (isWindows) "Heartbeat/runtime" else "Heartbeat/lib/runtime")
+                val nativeDirectory = runtime.resolve(if (isWindows) "bin" else "lib")
+                val requiredFiles = if (isWindows) {
+                    listOf("jcef.dll", "libcef.dll", "jcef_helper.exe", "cef_server.exe", "icudtl.dat", "resources.pak")
+                } else {
+                    listOf("libjcef.so", "libcef.so", "jcef_helper", "cef_server", "icudtl.dat", "resources.pak")
+                }
+                val missing = requiredFiles.filterNot { nativeDirectory.resolve(it).isFile }
+                check(missing.isEmpty()) { "Desktop runtime is missing JCEF files: ${missing.joinToString()}" }
+                if (!isWindows) {
+                    // jmod stores the executable bytes without Unix mode bits.
+                    for (helper in listOf("jcef_helper", "cef_server")) {
+                        check(nativeDirectory.resolve(helper).setExecutable(true, false)) {
+                            "Cannot make the JCEF helper executable: $helper"
+                        }
+                    }
+                }
+            }
+        }
+    }
+} else {
+    tasks.matching { it.name == "createDistributable" }.configureEach {
+        doFirst {
+            error("Packaging Heartbeat requires JetBrains JDK 25 with JCEF. Set JAVA_HOME or JBR_JCEF_HOME to that SDK.")
         }
     }
 }

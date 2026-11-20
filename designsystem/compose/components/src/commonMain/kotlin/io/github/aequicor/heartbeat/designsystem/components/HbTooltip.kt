@@ -4,9 +4,6 @@ package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.padding
@@ -14,12 +11,20 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.PointerInputModifierNode
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -61,34 +66,22 @@ fun HbTooltip(
     enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val triggerInteraction = remember { MutableInteractionSource() }
-    val tooltipInteraction = remember { MutableInteractionSource() }
-    val hovered by triggerInteraction.collectIsHoveredAsState()
-    val tooltipHovered by tooltipInteraction.collectIsHoveredAsState()
+    val triggerHovered = remember { mutableStateOf(false) }
+    val tooltipHovered = remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
 
-    val pointerOnPair = hovered || tooltipHovered
+    val pointerOnPair = triggerHovered.value || tooltipHovered.value
     val active = enabled && (pointerOnPair || focused) && !dismissed
 
-    LaunchedEffect(active) {
-        if (active) {
-            if (!visible) delay(HbMotions.Default.tooltipHoverDelayMs.toLong())
-            visible = true
-        } else if (visible) {
-            delay(TooltipHideDelayMs)
-            visible = false
-        }
-    }
+    TooltipVisibility(active, visible) { visible = it }
 
-    SideEffect {
-        if (!pointerOnPair && !focused) dismissed = false
-    }
+    if (dismissed && !pointerOnPair && !focused) SideEffect { dismissed = false }
 
     Box(
         modifier = modifier
-            .hoverable(triggerInteraction)
+            .then(TooltipHover(triggerHovered))
             .onFocusChanged { focused = it.hasFocus }
             .tooltipKeys(
                 visible = enabled && visible,
@@ -103,9 +96,48 @@ fun HbTooltip(
     ) {
         content()
         if (enabled && visible) {
-            TooltipPopup(text = text, interactionSource = tooltipInteraction)
+            TooltipPopup(text, Modifier.then(TooltipHover(tooltipHovered)))
         }
     }
+}
+
+@Composable
+private fun TooltipVisibility(active: Boolean, visible: Boolean, onVisible: (Boolean) -> Unit) {
+    val setVisible by rememberUpdatedState(onVisible)
+    if (active || visible) LaunchedEffect(active) {
+        if (active) {
+            if (!visible) delay(HbMotions.Default.tooltipHoverDelayMs.toLong())
+            setVisible(true)
+        } else if (visible) {
+            delay(TooltipHideDelayMs)
+            setVisible(false)
+        }
+    }
+}
+
+/** Observe the pointer directly so unopened hints need no interaction collector. */
+private data class TooltipHover(val hovered: MutableState<Boolean>) : ModifierNodeElement<TooltipHoverNode>() {
+    override fun create() = TooltipHoverNode(hovered)
+
+    override fun update(node: TooltipHoverNode) {
+        if (hovered !== node.hovered) {
+            node.hovered.value = false
+            node.hovered = hovered
+        }
+    }
+}
+
+private class TooltipHoverNode(var hovered: MutableState<Boolean>) : Modifier.Node(), PointerInputModifierNode {
+    override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
+        if (pass != PointerEventPass.Main) return
+        when (pointerEvent.type) {
+            PointerEventType.Enter -> hovered.value = true
+            PointerEventType.Exit -> hovered.value = false
+        }
+    }
+
+    override fun onCancelPointerInput() { hovered.value = false }
+    override fun onDetach() { hovered.value = false }
 }
 
 private fun Modifier.tooltipKeys(visible: Boolean, onDismiss: () -> Unit): Modifier =
@@ -119,7 +151,7 @@ private fun Modifier.tooltipKeys(visible: Boolean, onDismiss: () -> Unit): Modif
     }
 
 @Composable
-private fun TooltipPopup(text: String, interactionSource: MutableInteractionSource) {
+private fun TooltipPopup(text: String, modifier: Modifier = Modifier) {
     val colors = HbTheme.colors
     val gap = with(LocalDensity.current) { TooltipGap.roundToPx() }
 
@@ -133,7 +165,7 @@ private fun TooltipPopup(text: String, interactionSource: MutableInteractionSour
             Box(
                 modifier = Modifier
                     .widthIn(max = width)
-                    .hoverable(interactionSource)
+                    .then(modifier)
                     .clip(HbShapes.Small)
                     .background(colors.surface.raised)
                     .border(TOOLTIP_BORDER, colors.border.subtle, HbShapes.Small)
