@@ -9,14 +9,17 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileDate
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyBlock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Request
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Scenario
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
@@ -38,6 +41,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -450,6 +454,26 @@ class DefaultAiStudioStoreTest {
     }
 
     @Test
+    fun legacyReadNotesRestoresMarkdownAndOtherFileToolOutputRemainsPlain() = runTest {
+        val record = """
+            {
+              "id": "read-notes", "title": "Читаю рабочие заметки", "summary": "Готово",
+              "details": "# Архитектура", "kind": "File", "status": "Done",
+              "detailLabel": "Файл: architecture.md"
+            }
+        """.trimIndent()
+        val notes = Json.decodeFromString<WorkEvent>(record)
+        assertEquals(DetailFormat.Markdown, notes.detailsFormat)
+        val content = assertNotNull(notes.markdownDetails)
+        val firstRead = content.document()
+        assertIs<ReplyBlock.Heading>(firstRead.blocks.single())
+        assertSame(firstRead, content.document())
+        val log = Json.decodeFromString<WorkEvent>(record.replace("read-notes", "read-log"))
+        assertEquals(DetailFormat.Plain, log.detailsFormat)
+        assertNull(log.markdownDetails)
+    }
+
+    @Test
     fun thinkingAccumulatesFragmentsWithoutChangingDisclosureAndRetainsTextOnStop() = runTest {
         val store = studio()
         send(store)
@@ -468,7 +492,9 @@ class DefaultAiStudioStoreTest {
         val partial = current.steps.single().events.single { it.id == event.id }
         assertTrue(key in store.screenState.value.expandedEvents)
         assertTrue(partial.details.isNotBlank())
-        assertEquals(partial.details, partial.preview)
+        assertEquals("Выделяю условия **повтора**, ", partial.details)
+        assertEquals("Выделяю условия повтора, ", partial.preview)
+        assertNotNull(partial.markdownDetails)
 
         store.dispatch(toggle)
         advance(300)
@@ -486,6 +512,13 @@ class DefaultAiStudioStoreTest {
         assertEquals(StepStatus.Stopped, saved.status)
         assertEquals("Размышления прерваны", saved.title)
         assertEquals(received.details, saved.details)
+        val liveText = assertIs<ReplyBlock.Paragraph>(
+            assertNotNull(received.markdownDetails).document().blocks.single(),
+        )
+        val archivedText = assertIs<ReplyBlock.Paragraph>(
+            assertNotNull(saved.markdownDetails).document().blocks.single(),
+        )
+        assertEquals(liveText.lines, archivedText.lines)
     }
 
     @Test
@@ -540,9 +573,60 @@ class DefaultAiStudioStoreTest {
         advance(400)
         assertTrue(beforeStream === store.screenState.value)
         assertFalse(store.liveText.value.text.isBlank())
+        assertNotNull(store.liveText.value.document)
         advance(10_000)
         val reply = assertIs<Reply>(store.screenState.value.messages.first())
         assertEquals("Проверено 240 этапов. Отчёт готов.", reply.text)
+    }
+
+    @Test
+    fun largeMessageDemonstrationStreamsTheSelectedExampleAndKeepsItsFullText() = runTest {
+        val store = studio()
+        val chat = store.screenState.value.chats.single { it.title == "Большие сообщения" }
+        store.dispatch(AiStudioAction.OpenChat(chat.id))
+        runCurrent()
+        val examples = store.screenState.value.messages.filterIsInstance<Reply>()
+        val reasoning = examples.first().steps.single().events.single().details
+        assertTrue(reasoning.length > 8_000)
+        val plain = examples.single { it.id == "large-text" }.text
+        val report = examples.single { it.id == "large-report" }.text
+        assertTrue(plain.length > 30_000)
+        assertEquals(10, report.lineSequence().count { it == "```kotlin" })
+        assertTrue(report.contains("```mermaid") && report.contains("```plantuml"))
+        for ((command, expected) in listOf("текст" to plain, "отчёт" to report)) {
+            store.dispatch(AiStudioAction.EditDraft(chat.id, command))
+            store.dispatch(AiStudioAction.Send)
+            advance(3_000)
+            val partial = store.liveText.value.text
+            assertTrue(partial.isNotEmpty() && partial.length < expected.length && expected.startsWith(partial))
+            advance(12_000)
+            assertEquals(expected, assertIs<Reply>(store.screenState.value.messages.first()).text)
+        }
+        store.dispatch(AiStudioAction.EditDraft(chat.id, "рассуждение"))
+        store.dispatch(AiStudioAction.Send)
+        advance(3_000)
+        val active = assertNotNull(store.screenState.value.live).steps.single().events.last().details
+        assertTrue(active.isNotBlank() && active.length < reasoning.length && reasoning.startsWith(active))
+        advance(20_000)
+        val completed = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(reasoning, completed.steps.first().events.last().details.trimEnd())
+    }
+
+    @Test
+    fun codeDemoSendsOneLongCopyableSourceBlock() = runTest {
+        val store = studio()
+        val chat = store.screenState.value.chats.single { it.title == "Большие сообщения" }
+        store.dispatch(AiStudioAction.OpenChat(chat.id))
+        runCurrent()
+        store.dispatch(AiStudioAction.EditDraft(chat.id, "код"))
+        store.dispatch(AiStudioAction.Send)
+        advance(20_000)
+        val reply = assertIs<Reply>(store.screenState.value.messages.first())
+        val source = reply.text.substringAfter("```kotlin\n").substringBefore("\n```")
+        assertEquals(2_050, source.lines().size)
+        assertTrue(source.startsWith("val events = listOf(\n    \"Событие 1."))
+        assertTrue(source.lineSequence().last { it.startsWith("    ") }.startsWith("    \"Событие 2048."))
+        assertTrue(source.endsWith("\n)"))
     }
 
     private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =

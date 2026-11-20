@@ -1,6 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,18 +37,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.IntrinsicMeasurable
-import androidx.compose.ui.layout.IntrinsicMeasureScope
-import androidx.compose.ui.layout.LayoutModifier
-import androidx.compose.ui.layout.Measurable
-import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
@@ -69,6 +67,7 @@ internal fun AuroraWorkEvent(
     val density = LocalDensity.current
     val thinking = event.kind == WorkEventKind.Thinking
     val transition = rememberThinkingHeaderTransition(thinking, expanded)
+    val motion = transition?.takeIf { it.isActive(expanded) }
     val titledPreview = !expanded && thinking && !event.title.isNullOrBlank()
     val target = if (touch || titledPreview) {
         AuroraLayout.WorkEventTarget
@@ -78,14 +77,14 @@ internal fun AuroraWorkEvent(
     var headerHeight by remember(target) { mutableStateOf(target) }
     val axis = if (current) Modifier else Modifier.timelineMarker(
         event.status, headerHeight / 2, before = true, after = connectedBelow, event = true,
-        offsetY = { transition?.heightOffset(expanded)?.div(2) ?: 0f },
+        offsetY = { motion?.heightOffset(expanded)?.div(2) ?: 0f },
     ).padding(start = AuroraLayout.DesktopTarget)
     Column(
         axis.fillMaxWidth().clip(RoundedCornerShape(AuroraLayout.SmallRadius))
-            .workEventBackground(current, expanded, transition?.progress),
+            .workEventBackground(current, expanded, motion?.progress),
     ) {
         AuroraWorkEventHeader(
-            event, expanded, current, touch, transition, onClick,
+            event, expanded, current, touch, motion, onClick,
             Modifier.zIndex(1f).heightIn(min = target).onSizeChanged {
                 headerHeight = with(density) { it.height.toDp() }
                 transition?.recordHeight(expanded, it.height)
@@ -93,9 +92,9 @@ internal fun AuroraWorkEvent(
         )
         if (expanded) {
             // The work timeline already animates height and keeps the active row anchored during reflow.
-            val fade = if (transition == null) Modifier else Modifier.graphicsLayer {
-                alpha = transition.detailsOpacity()
-                translationY = transition.heightOffset(expanded = true)
+            val fade = if (motion == null) Modifier else Modifier.graphicsLayer {
+                alpha = motion.detailsOpacity()
+                translationY = motion.heightOffset(expanded = true)
             }
             AuroraWorkDetailsBody(event, touch, fade)
         }
@@ -105,13 +104,27 @@ internal fun AuroraWorkEvent(
 @Composable
 private fun rememberThinkingHeaderTransition(thinking: Boolean, expanded: Boolean): ThinkingHeaderTransition? {
     if (!thinking || HbTheme.motion == HbMotionPreference.Reduced) return null
-    val progress = animateFloatAsState(
-        if (expanded) 1f else 0f, tween(HbMotions.Default.ordinaryTransitionMs), label = "Thinking details",
-    )
-    return remember(progress) { ThinkingHeaderTransition { progress.value } }
+    val target = if (expanded) 1f else 0f
+    // Already settled rows need no animation coroutine or layers until the user toggles disclosure.
+    val transition = remember { ThinkingHeaderTransition(target) }
+    if (transition.isActive(expanded)) {
+        val animation = remember { Animatable(transition.initialProgress) }
+        SideEffect { transition.begin(animation.asState()) }
+        LaunchedEffect(target) { animation.animateTo(target, tween(HbMotions.Default.ordinaryTransitionMs)) }
+    }
+    return transition
 }
 
-private class ThinkingHeaderTransition(val progress: () -> Float) {
+private class ThinkingHeaderTransition(val initialProgress: Float) {
+    private var animation by mutableStateOf<State<Float>?>(null)
+    val progress: () -> Float = { animation?.value ?: initialProgress }
+
+    fun isActive(expanded: Boolean): Boolean = animation != null || expanded != (initialProgress == 1f)
+
+    fun begin(progress: State<Float>) {
+        animation = progress
+    }
+
     private var collapsedHeight by mutableIntStateOf(0)
     private var expandedHeight by mutableIntStateOf(0)
     var previewHeight by mutableIntStateOf(0)
@@ -267,8 +280,10 @@ private fun AuroraToolLabels(title: String, status: StepStatus, expanded: Boolea
 @Composable
 private fun AuroraWorkDetailsBody(event: WorkEvent, touch: Boolean, modifier: Modifier = Modifier) {
     val verticalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.Space
+    val selection = rememberSelectionState()
     SelectionContainer(
-        modifier.fillMaxWidth().drawBehind {
+        state = selection,
+        modifier = modifier.fillMaxWidth().drawBehind {
             val stroke = AuroraLayout.Stroke.toPx()
             val y = stroke / 2
             drawLine(AuroraColors.WorkDivider, Offset(0f, y), Offset(size.width, y), stroke)
@@ -286,23 +301,9 @@ private fun AuroraWorkDetailsBody(event: WorkEvent, touch: Boolean, modifier: Mo
                     color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopInk,
                 )
             }
-            AuroraWorkText(
-                event.detailText, AuroraWorkRole.Detail, WorkDetailWidth,
-                color = if (touch) AuroraColors.WorkInk else AuroraColors.DesktopInk,
-            )
+            AuroraWorkDetailContent(event, touch, selection)
         }
     }
-}
-
-// A paragraph wraps within the reply; its unwrapped length must not set the card width.
-private object WorkDetailWidth : LayoutModifier {
-    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int =
-        measurable.minIntrinsicWidth(height)
-
-    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints) =
-        measurable.measure(constraints).let { detail ->
-            layout(detail.width, detail.height) { detail.placeRelative(0, 0) }
-        }
 }
 
 private fun WorkEventKind.glyph() = when (this) {

@@ -17,6 +17,7 @@ configure<SqlDelightExtension> {
 
 kotlin {
     sourceSets.commonMain.dependencies {
+        implementation(libs.jetbrains.markdown)
         implementation(libs.kotlinx.serialization.json)
         api(libs.kotlinx.coroutines.core)
         implementation(project(":di:api"))

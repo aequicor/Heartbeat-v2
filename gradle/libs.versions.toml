@@ -9,6 +9,7 @@ decompose = "3.6.0-beta02"
 metro = "1.5.2"
 kotlinx-atomicfu = "0.33.0"
 kotlinx-coroutines = "1.11.0"
+jetbrains-markdown = "0.7.9"
 kotlinx-serialization = "1.6.3"
 junit = "4.13.2"
 konsist = "1.0.0-beta.1"
@@ -44,6 +45,7 @@ metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" 
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "kotlinx-atomicfu" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "jetbrains-markdown" }
 sqldelight-gradle-plugin = { module = "app.cash.sqldelight:gradle-plugin", version.ref = "sqldelight" }
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
 sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
@@ -59,6 +61,7 @@ kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-em
 jewel-int-ui-standalone = { module = "org.jetbrains.jewel:jewel-int-ui-standalone", version.ref = "jewel" }
 jewel-decorated-window = { module = "org.jetbrains.jewel:jewel-decorated-window", version.ref = "jewel" }
 jetbrains-runtime-api = { module = "org.jetbrains.runtime:jbr-api", version.ref = "jbr-api" }
+jcef-api = { module = "me.friwi:jcef-api", version = "jcef-17e805a+cef-152.0.6+g708dc14+chromium-152.0.7977.83" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "detekt-compose-rules" }
 kode-compose-rules = { module = "ru.kode:detekt-rules-compose-detekt2", version.ref = "kode-compose-rules" }

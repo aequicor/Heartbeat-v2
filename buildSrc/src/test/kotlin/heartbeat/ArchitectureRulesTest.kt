@@ -412,6 +412,14 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun declaredDependenciesExcludeOnlyTheSwiftPmLockfileAggregationScope() {
+        val lockfileScope = "swiftPMDependenciesForLockFilesMetadataClasspathDependencies"
+        assertFalse(ArchitectureRules.isDeclaredDependencyConfiguration(lockfileScope))
+        assertTrue(ArchitectureRules.isDeclaredDependencyConfiguration("commonMainImplementation"))
+        assertTrue(ArchitectureRules.isDeclaredDependencyConfiguration("macosArm64MainImplementation"))
+    }
+
+    @Test
     fun classpathConfigurationSelectionCoversJvmAndroidAndNative() {
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmRuntimeClasspath", true))
         assertTrue(ArchitectureRules.isRelevantClasspathConfiguration("jvmCompileClasspath", true))

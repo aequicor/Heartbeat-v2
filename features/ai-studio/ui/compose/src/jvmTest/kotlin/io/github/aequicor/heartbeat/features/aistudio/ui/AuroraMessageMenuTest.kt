@@ -6,6 +6,7 @@ package io.github.aequicor.heartbeat.features.aistudio.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.rememberSelectionState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +38,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAgentMessage
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraMessageMenu
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraUserBubble
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.OpenMessageMenuOnBadgeHover
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraBackdrop
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.loadAuroraBackdrop
 import org.jetbrains.skia.EncodedImageFormat
@@ -62,6 +64,39 @@ class AuroraMessageMenuTest {
             "Иначе оба запроса могут выполняться одновременно.\n\n" +
             "Дождитесь статуса «Остановлено», затем отправьте запрос снова.",
     )
+
+    @Test
+    fun badgeOpensOnceWhenItBecomesInteractiveDuringHover() {
+        val interactive = mutableStateOf(false)
+        val hovered = mutableStateOf(true)
+        var opens = 0
+        val open: () -> Unit = { opens++ }
+        val scene = ImageComposeScene(100, 100, coroutineContext = clock.context) {
+            OpenMessageMenuOnBadgeHover(hovered.value, expanded = false, interactive.value, open)
+        }
+        try {
+            scene.frame()
+            assertEquals(0, opens)
+
+            interactive.value = true
+            scene.frame()
+            assertEquals(1, opens)
+
+            interactive.value = false
+            scene.frame()
+            interactive.value = true
+            scene.frame()
+            assertEquals(1, opens)
+
+            hovered.value = false
+            scene.frame()
+            hovered.value = true
+            scene.frame()
+            assertEquals(2, opens)
+        } finally {
+            scene.close()
+        }
+    }
 
     @Test
     fun userMenuStaysAtTheInwardCornerAndRestoresFocusAfterEscape() {

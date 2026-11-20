@@ -339,6 +339,10 @@ object ArchitectureRules {
         else -> "UI or presentation frameworks"
     }
 
+    // Kotlin gathers metadata from other projects here to coordinate SwiftPM lockfiles on macOS.
+    fun isDeclaredDependencyConfiguration(name: String): Boolean =
+        name != "swiftPMDependenciesForLockFilesMetadataClasspathDependencies"
+
     /** Runtime and compile graphs of JVM, Android and Kotlin/Native targets. */
     fun isRelevantClasspathConfiguration(name: String, canBeResolved: Boolean): Boolean =
         canBeResolved && (

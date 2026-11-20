@@ -4,6 +4,12 @@ import androidx.compose.ui.unit.dp
 
 /** Shared geometry for Aurora chat, requests and file panes. */
 object HbAuroraLayout {
+    val DocumentHeadingGap = 20.dp
+    val DocumentListIndent = 24.dp
+    val CodeViewportHeight = 280.dp
+    val DiagramViewportHeight = 320.dp
+    val TableColumnMin = 112.dp
+    val TableColumnMax = 240.dp
     val Stroke = 1.dp
     val FrameStroke = 2.dp
     val TimerThickness = 3.dp

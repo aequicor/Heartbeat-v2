@@ -8,6 +8,14 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbColorPalettes
 /** Light Aurora roles from the Aurora catalog, including its trusted request surface. */
 object HbAuroraColors {
     private val text = HbColorPalettes.Light.toHbColors().text
+    val SyntaxKeyword = Color(0xFF643B83)
+    val SyntaxString = Color(0xFF315E39)
+    val SyntaxComment = Color(0xFF62665F)
+    val SyntaxNumber = Color(0xFF884A17)
+    val DiffAddedInk = Color(0xFF255D2D)
+    val DiffAddedSurface = Color(0xFFEAF4E9)
+    val DiffDeletedInk = Color(0xFF91362C)
+    val DiffDeletedSurface = Color(0xFFFBEEEC)
     val Canvas = Color(0xFFF7F8FA)
     val DesktopCanvas = Color.White
 

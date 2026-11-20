@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -24,6 +26,9 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDiagramPreviews
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.BindAuroraDiagramContext
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.LocalDiagramPreviews
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraChats
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDesktopSidebar
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
@@ -45,6 +50,8 @@ internal fun AiStudioScreen(
     avatarVisible: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    BindAuroraDiagramContext()
+    val previews = remember(state.chat?.id) { AuroraDiagramPreviews() }
     val touch = HbSizes.minimumTarget >= AuroraLayout.TouchTarget
     val caption = HbWindowCaption.current
     val canvas = if (touch) AuroraColors.Canvas else AuroraColors.DesktopCanvas
@@ -68,12 +75,14 @@ internal fun AiStudioScreen(
                 )
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
-                AuroraWorkspace(
-                    state, draft, liveText, backdrop, touch, onAction, showNavigation = !panes.sidebar,
-                    modifier = Modifier.fillMaxSize(),
-                    captionOverlap = panes.captionOverlap,
-                    caption = caption,
-                )
+                CompositionLocalProvider(LocalDiagramPreviews provides previews) {
+                    AuroraWorkspace(
+                        state, draft, liveText, backdrop, touch, onAction, showNavigation = !panes.sidebar,
+                        modifier = Modifier.fillMaxSize(),
+                        captionOverlap = panes.captionOverlap,
+                        caption = caption,
+                    )
+                }
                 if (state.chatsVisible && !panes.sidebar) {
                     AuroraPanelDialog({ onAction(AiStudioAction.ToggleChats(false)) }) {
                         AuroraChats(state, touch, avatarVisible, onAction, onOpenSettings,
@@ -95,7 +104,7 @@ internal fun AiStudioScreen(
                 )
             }
         }
-        viewer?.let { file -> AuroraViewer(file, touch, { onAction(AiStudioAction.CloseViewer) }) }
+        viewer?.let { file -> AuroraViewer(file, touch, previews) { onAction(AiStudioAction.CloseViewer) } }
     }
 }
 

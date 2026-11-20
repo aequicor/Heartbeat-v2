@@ -1,10 +1,14 @@
 plugins {
+    id("heartbeat-desktop-wheel")
     id("heartbeat-kmp-compose")
     id("heartbeat-metro")
 }
 
 kotlin {
     android { androidResources.enable = true }
+    sourceSets.jvmMain.dependencies {
+        compileOnly(libs.jcef.api)
+    }
     sourceSets.commonMain.dependencies {
         implementation(compose.components.resources)
         implementation(project(":designsystem:compose:components"))

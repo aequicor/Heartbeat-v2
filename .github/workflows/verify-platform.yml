@@ -29,13 +29,13 @@ jobs:
         include:
           - platform: Windows x64
             runner: windows-2025
-            task: :platform:desktop:classes
+            task: :platform:desktop:createDistributable
           - platform: Linux x64
             runner: ubuntu-24.04
-            task: :platform:desktop:classes
+            task: :platform:desktop:createDistributable
           - platform: macOS ARM64
             runner: macos-15
-            task: :platform:desktop:classes
+            task: :platform:desktop:createDistributable
           - platform: Android Emulator
             runner: ubuntu-24.04
             task: :platform:android:assembleDebug
@@ -52,6 +52,7 @@ jobs:
         with:
           distribution: jetbrains
           java-version: '25'
+          java-package: ${{ matrix.platform == 'Android Emulator' && 'jdk' || 'jdk+jcef' }}
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
         with:
           cache-read-only: false

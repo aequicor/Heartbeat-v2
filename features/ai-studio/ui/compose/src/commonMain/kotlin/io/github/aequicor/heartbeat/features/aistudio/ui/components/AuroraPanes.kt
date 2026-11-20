@@ -24,9 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
@@ -266,23 +269,38 @@ internal fun AuroraFileLabel(file: File, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun AuroraViewer(file: File, touch: Boolean, onClose: () -> Unit) {
+internal fun AuroraViewer(
+    file: File,
+    touch: Boolean,
+    previews: AuroraDiagramPreviews? = null,
+    onClose: () -> Unit,
+) {
     AuroraPanelDialog(onClose) {
-        Column(
-            Modifier.fillMaxSize().background(AuroraColors.ViewerSurface),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AuroraViewerHeader("${file.kind} · ${file.name}", touch, onClose)
-            val monospaced = file.kind == "Код" || file.kind == "Таблица"
-            val style = if (monospaced) HbTypography.Code else HbTypography.Body
-            SelectionContainer(
-                Modifier.weight(1f).widthIn(max = AuroraLayout.Composer).fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                BasicText(
-                    file.content, Modifier.padding(AuroraLayout.PaneGap),
-                    style.copy(color = AuroraColors.DesktopInk),
-                )
+        key(file.id) {
+            CompositionLocalProvider(LocalDiagramPreviews provides previews) {
+                Column(
+                    Modifier.fillMaxSize().background(AuroraColors.ViewerSurface),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    AuroraViewerHeader("${file.kind} · ${file.name}", touch, onClose)
+                    val markdown = file.markdownContent
+                    val monospaced = markdown == null && (file.kind == "Код" || file.kind == "Таблица")
+                    val style = (if (monospaced) HbTypography.Code else HbTypography.Body)
+                        .copy(color = AuroraColors.DesktopInk)
+                    val selection = rememberSelectionState()
+                    val inset = Modifier.padding(AuroraLayout.PaneGap)
+                    SelectionContainer(
+                        state = selection,
+                        modifier = Modifier.weight(1f).widthIn(max = AuroraLayout.Composer).fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        if (markdown == null) {
+                            BasicText(file.content, inset, style)
+                        } else {
+                            AuroraMarkdownContent(file.content, markdown, selection, style, touch, inset)
+                        }
+                    }
+                }
             }
         }
     }

@@ -43,10 +43,16 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** Anchors the activated row while a work disclosure changes the size of its reply. */
-internal class AuroraHistoryReflow(private val list: LazyListState) : NestedScrollConnection {
+internal class AuroraHistoryReflow(
+    private val list: LazyListState,
+    private val currentViewportHeight: () -> Dp = { Dp.Hairline },
+) : NestedScrollConnection {
+    val viewportHeight: Dp get() = currentViewportHeight()
     private var reservedTail by mutableFloatStateOf(0f)
     private var request: Adjustment? = null
     private var motion: Resize? = null
@@ -137,13 +143,21 @@ internal class AuroraHistoryReflow(private val list: LazyListState) : NestedScro
         if (targetHeight > 0 && shown == targetHeight) anchored = null
     }
 
-    fun streamingReplyResized(id: String, delta: Int) {
-        if (anchored?.id == id) return
-        if (delta == 0 || !list.canScrollBackward || list.isScrollInProgress) return
-        val index = list.firstVisibleItemIndex
-        val first = list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-        if (first?.key == id) list.requestScrollToItem(index, list.firstVisibleItemScrollOffset + delta)
+    fun streamingReplyResized(id: String, delta: Int, scope: CoroutineScope, selected: Boolean) {
+        if (delta == 0 || anchored?.id == id || !isReading(id, selected)) return
+        if (list.isScrollInProgress) {
+            // Resizing moves the origin of the reverse list. Apply only this displacement
+            // after layout so the wheel or fling keeps its own scroll mutation and velocity.
+            scope.launch {
+                if (isReading(id, selected)) list.dispatchRawDelta(delta.toFloat())
+            }
+        } else {
+            list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset + delta)
+        }
     }
+
+    private fun isReading(id: String, selected: Boolean): Boolean = (selected || list.canScrollBackward) &&
+        list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == list.firstVisibleItemIndex }?.key == id
 
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
         if (source == NestedScrollSource.UserInput && available.y != 0f) {
@@ -230,31 +244,43 @@ internal fun auroraWorkHeightMotion(
     var target by remember(access) { mutableIntStateOf(-1) }
     var shown by remember(access) { mutableIntStateOf(-1) }
     // Publish the height and its scroll compensation before LazyColumn measures this frame.
-    LaunchedEffect(target, animated, duration) {
-        if (target < 0) return@LaunchedEffect
+    if (target >= 0) {
         val end = target
-        val start = access.displayedHistoryHeight
-        if (animated && start != end) {
-            Animatable(start, Int.VectorConverter).animateTo(end, tween(duration)) {
-                shown = value
-                resize(value, end)
+        LaunchedEffect(end, animated, duration) {
+            val start = access.displayedHistoryHeight
+            if (animated && start != end) {
+                Animatable(start, Int.VectorConverter).animateTo(end, tween(duration)) {
+                    shown = value
+                    resize(value, end)
+                }
+                finish()
+            } else {
+                shown = end
+                resize(end, end)
             }
-            finish()
-        } else {
-            shown = end
-            resize(end, end)
         }
     }
     return Modifier.clipToBounds().then(remember(access) {
         object : LayoutModifier {
+            private var measuredHeight = -1
+
             // Width queries must not update the displayed height or start a scroll adjustment.
             override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int =
                 measurable.maxIntrinsicWidth(height)
 
             override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
                 val work = measurable.measure(constraints)
-                target = work.height
-                val height = if (shown >= 0) constraints.constrainHeight(shown) else work.height
+                // Lazy rows enter the viewport at their final height. Start resize bookkeeping
+                // only after that height actually changes, so entering a row avoids a second layout.
+                if (measuredHeight >= 0 && work.height != measuredHeight) target = work.height
+                measuredHeight = work.height
+                val height = constraints.constrainHeight(
+                    when {
+                        shown >= 0 -> shown
+                        target < 0 -> work.height
+                        else -> access.displayedHistoryHeight
+                    },
+                )
                 access.displayedHistoryHeight = height
                 return layout(work.width, height) { work.placeRelative(0, 0) }
             }

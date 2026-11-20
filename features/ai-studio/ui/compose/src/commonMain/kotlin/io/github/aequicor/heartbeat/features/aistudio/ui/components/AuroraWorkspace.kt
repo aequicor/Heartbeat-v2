@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -82,7 +81,7 @@ internal fun AuroraWorkspace(
         if (chatId == null) {
             AuroraText("Загрузка истории…", Modifier.align(Alignment.Center))
         } else {
-            key(chatId) {
+            AuroraChatHost(chatId) {
                 AuroraChatViewport(
                     state, draft, liveText, touch, onAction, showNavigation, Dp(preferredWidth),
                     onWidthChange = { preferredWidth = it.value },
@@ -144,7 +143,7 @@ private fun AuroraChatViewport(
                 state, liveText, list, touch, onAction,
                 historyPadding,
                 historyWithEdges,
-                readingWidth = corridor,
+                readingWidth = corridor, viewportHeight = maxHeight,
             )
             val trackPadding = auroraTrackPadding(touch, historyPadding, captionClearance, caption)
             AuroraHistoryScrollbar(
