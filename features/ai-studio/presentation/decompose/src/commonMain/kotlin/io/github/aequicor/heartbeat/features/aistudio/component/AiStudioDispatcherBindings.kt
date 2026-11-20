@@ -14,7 +14,7 @@ annotation class AiStudioWorker
 
 @BindingContainer
 @ContributesTo(AppScope::class)
-interface AiStudioDispatcherBindings {
+object AiStudioDispatcherBindings {
     @Provides
     @AiStudioWorker
     @Suppress("InjectDispatcher") // This binding selects the dispatcher for the Aurora store.
