@@ -22,6 +22,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -247,7 +248,12 @@ class AuroraHeaderTest {
             scene.frame()
             val context = ContextAndQuotaDescription
             val metrics = assertNotNull(scene.desc(context)).boundsInRoot
-            assertEquals(78f, metrics.width, absoluteTolerance = 1f)
+            val percent = scene.semanticsOwners.flatMap { it.getAllSemanticsNodes(mergingEnabled = false) }
+                .single { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == "61%" } }
+                .boundsInRoot
+            val contentWidth = percent.width + HbAuroraLayout.SmallGlyph.value + HbAuroraLayout.ControlGap.value +
+                2 * HbAuroraLayout.MessageRadius.value
+            assertEquals(maxOf(HbAuroraLayout.TouchHeaderMetricWidth.value, contentWidth), metrics.width, 1f)
             assertEquals(48f, metrics.height, absoluteTolerance = 1f)
             scene.click(assertNotNull(scene.desc("Субагенты · 1")).boundsInRoot.center)
             scene.click(assertNotNull(scene.text("Проверка контрактов")).boundsInWindow.center)
