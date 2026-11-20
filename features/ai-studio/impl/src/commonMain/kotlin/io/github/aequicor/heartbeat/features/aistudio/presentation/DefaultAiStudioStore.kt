@@ -65,7 +65,10 @@ internal class DefaultAiStudioStore(
     init {
         scope.launch {
             workspace = restore()
-            if (workspace.chats.none { it.summary.id == workspace.selectedId }) workspace = AuroraMock.workspace()
+            if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
+                val fallback = workspace.activeChats().firstOrNull()?.id ?: workspace.chats.first().summary.id
+                workspace = workspace.copy(selectedId = fallback)
+            }
             openChat(workspace.selectedId)
             for (command in commands) command()
         }
@@ -408,9 +411,7 @@ internal class DefaultAiStudioStore(
 
     internal fun changed(chatId: String, structural: Boolean) {
         val turn = turns[chatId] ?: return
-        if (structural) {
-            updateChat(chatId) { it.copy(interrupted = turn.reply) }
-        }
+        rememberReply(chatId, turn.reply, deferSave = !structural)
         if (chatId != workspace.selectedId && structural) {
             screen.update { it.copy(navigation = sidebar(it.chatSearch)) }
         }
@@ -432,7 +433,14 @@ internal class DefaultAiStudioStore(
     }
 
     internal fun streamText(chatId: String, reply: Reply) {
+        rememberReply(chatId, reply, deferSave = true)
         if (chatId == workspace.selectedId) stream.value = reply.toLiveText()
+    }
+
+    private fun rememberReply(chatId: String, reply: Reply?, deferSave: Boolean) {
+        if (chat(chatId).interrupted === reply) return
+        updateChat(chatId) { it.copy(interrupted = reply) }
+        if (deferSave) saveRequests.trySend(Unit)
     }
 
     private fun Reply?.toLiveText() = if (this == null) LiveText() else LiveText(id, text)
@@ -496,7 +504,7 @@ internal class DefaultAiStudioStore(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun restore(): AuroraWorkspace = try {
         val data = preferences.observeString(WorkspaceKey).first()
-        if (data.isBlank()) {
+        if (data.isEmpty()) {
             AuroraMock.workspace()
         } else {
             Json.decodeFromString<AuroraWorkspace>(data).recover().withMockNavigation()
@@ -504,7 +512,11 @@ internal class DefaultAiStudioStore(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
-        screen.update { it.copy(storageError = "Не удалось восстановить сохранённый диалог") }
+        // This workspace is temporary. Never replace a snapshot we could not read.
+        snapshots.close()
+        screen.update {
+            it.copy(storageError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются.")
+        }
         AuroraMock.workspace()
     }
 

@@ -39,18 +39,17 @@ internal fun mockNavigation(): List<AuroraChat> = buildList {
 }.map { AuroraChat(it) }
 
 internal fun AuroraWorkspace.withMockNavigation(): AuroraWorkspace {
-    val existing = chats.associateBy { it.summary.id }
-    val defaults = mockNavigation()
-    val ids = defaults.map { it.summary.id }.toSet()
-    return copy(chats = chats.filterNot { it.summary.id in ids } + defaults.map { fixture ->
-        val saved = existing[fixture.summary.id] ?: return@map fixture
+    val missing = mockNavigation().associateBy { it.summary.id }.toMutableMap()
+    val restored = chats.map { saved ->
+        val fixture = missing.remove(saved.summary.id) ?: return@map saved
         saved.copy(summary = saved.summary.copy(
             project = fixture.summary.project,
             parentId = fixture.summary.parentId,
             quota = fixture.summary.quota,
             mockSubagent = fixture.summary.mockSubagent,
         ))
-    })
+    }
+    return copy(chats = restored + missing.values)
 }
 
 private fun MutableList<Chat>.addProject(

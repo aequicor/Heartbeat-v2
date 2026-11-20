@@ -17,6 +17,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,6 +70,49 @@ class DefaultAiStudioStoreTest {
         store.dispatch(AiStudioAction.NavigationFocusHandled(firstAdded.id))
         runCurrent()
         assertNull(store.screenState.value.navigationFocusId)
+    }
+
+    @Test
+    fun failedRestorePreservesStoredDataThroughLaterEdits() = runTest {
+        val data = TestPreferences()
+        val saved = "{unreadable workspace}"
+        data.snapshot.value = saved
+        val store = studio(data)
+        assertNotNull(store.screenState.value.storageError)
+        assertEquals(saved, data.snapshot.value)
+        store.dispatch(AiStudioAction.NewChat)
+        runCurrent()
+        store.dispatch(AiStudioAction.EditDraft(assertNotNull(store.draft.value.chatId), "Черновик"))
+        advance(200)
+        assertEquals("Черновик", store.draft.value.text)
+        assertEquals(saved, data.snapshot.value)
+    }
+
+    @Test
+    fun restoringAProjectChatKeepsSidebarOrder() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.NewProjectChat("Документы"))
+        runCurrent()
+        val id = assertNotNull(store.draft.value.chatId)
+        val navigation = store.screenState.value.navigation.map { it.id }
+        val restored = studio(data)
+        assertEquals(id, restored.draft.value.chatId)
+        assertEquals(navigation, restored.screenState.value.navigation.map { it.id })
+    }
+
+    @Test
+    fun missingSelectedChatKeepsTheOtherChats() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.NewChat)
+        runCurrent()
+        val id = assertNotNull(store.draft.value.chatId)
+        val saved = Json.decodeFromString<AuroraWorkspace>(data.snapshot.value)
+        data.snapshot.value = Json.encodeToString(saved.copy(selectedId = "missing"))
+        val recovered = studio(data)
+        assertTrue(recovered.screenState.value.chats.any { it.id == id })
+        assertNotNull(recovered.screenState.value.chat)
     }
 
     @Test
@@ -416,6 +460,27 @@ class DefaultAiStudioStoreTest {
         assertEquals(StepStatus.Stopped, saved.status)
         assertEquals("Размышления прерваны", saved.title)
         assertEquals(received.details, saved.details)
+    }
+
+    @Test
+    fun restoresReceivedTextWhenAStreamingTurnIsInterrupted() = runTest {
+        val data = TestPreferences()
+        val store = studio(data)
+        store.dispatch(AiStudioAction.SetScenario(Scenario.Stream))
+        send(store)
+        advance(2_000)
+        val received = store.liveText.value
+        assertTrue(received.text.isNotBlank())
+        store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
+        runCurrent()
+
+        val restored = studio(data)
+        restored.dispatch(AiStudioAction.OpenChat(AuroraMock.InitialChat))
+        runCurrent()
+        val interrupted = assertIs<Reply>(restored.screenState.value.messages.first())
+        assertEquals(received.replyId, interrupted.id)
+        assertEquals(ReplyStatus.Stopped, interrupted.status)
+        assertEquals(received.text, interrupted.text)
     }
 
     @Test
