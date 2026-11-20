@@ -10,8 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbDivider
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.features.settings.component.SettingsComponent
 import io.github.aequicor.heartbeat.features.settings.ui.components.SettingsContentHost
@@ -44,7 +44,7 @@ fun SettingsScreen(
             onQueryChange = component::search,
             onSelect = component::select,
             onBack = component::back,
-            modifier = Modifier.width(SettingsSidebarWidth),
+            modifier = Modifier.width(HbAuroraLayout.NavigationWidth),
         )
         HbDivider(vertical = true)
         SettingsContentHost(
@@ -55,5 +55,3 @@ fun SettingsScreen(
         )
     }
 }
-
-private val SettingsSidebarWidth = 272.dp
