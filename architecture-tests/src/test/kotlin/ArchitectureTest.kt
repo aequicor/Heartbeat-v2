@@ -212,14 +212,18 @@ class ArchitectureTest {
     fun aiStudioAdaptersUseImplContracts() {
         Konsist.scopeFromProduction(moduleName = ":features:ai-studio..").assertArchitecture {
             val api = Layer("API", rolePattern("api"))
+            val domain = Layer("Domain", rolePattern("domain"))
+            val data = Layer("Data", rolePattern("data"))
             val presentation = Layer("Presentation", rolePattern("presentation"))
             val di = Layer("DI", rolePattern("di"))
             val component = Layer("Component", rolePattern("component"))
             val ui = Layer("UI", rolePattern("ui"))
 
             api.dependsOnNothing()
-            presentation.dependsOn(api)
-            di.dependsOn(api, presentation)
+            domain.dependsOnNothing()
+            data.dependsOn(domain)
+            presentation.dependsOn(api, domain)
+            di.dependsOn(api, domain, data, presentation)
             component.dependsOn(api, presentation)
             ui.dependsOn(api, component, presentation)
         }

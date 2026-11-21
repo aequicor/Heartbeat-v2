@@ -1,0 +1,6 @@
+ALTER TABLE chat ADD COLUMN snapshot TEXT;
+
+CREATE TABLE chat_workspace (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    snapshot TEXT NOT NULL
+);

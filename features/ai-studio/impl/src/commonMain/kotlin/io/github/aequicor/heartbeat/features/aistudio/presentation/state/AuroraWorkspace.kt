@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.state
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.WorkspaceChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
@@ -13,19 +15,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.Serializable
 
-@Serializable
-internal data class AuroraWorkspace(
-    val selectedId: String,
-    val chats: List<AuroraChat>,
-    val serial: Long = 0,
-    val collapsedNavigation: Set<String> = setOf(),
-    val expandedProjects: Set<String> = setOf(),
-    val archivedChats: Set<String> = setOf(),
-) {
-    fun recover(): AuroraWorkspace = copy(chats = chats.map(AuroraChat::recover))
-
-    fun activeChats(): Sequence<Chat> = chats.asSequence().map(AuroraChat::summary).filterNot { it.id in archivedChats }
-}
+internal typealias AuroraWorkspace = ChatWorkspace<AuroraChat>
 
 @Serializable
 internal data class AuroraChat(
@@ -35,7 +25,11 @@ internal data class AuroraChat(
     val attachments: List<File> = listOf(),
     val messages: List<Message> = listOf(),
     val interrupted: Reply? = null,
-) {
+) : WorkspaceChat {
+    override val id: String get() = summary.id
+    override val title: String get() = summary.title
+    override val project: String get() = summary.project
+
     fun recover(): AuroraChat {
         val history = messages.map { message ->
             when (message) {

@@ -22,8 +22,12 @@ kotlin {
         api(libs.kotlinx.coroutines.core)
         implementation(project(":di:api"))
         implementation(project(":core:preferences:api"))
+        implementation(project(":core:database"))
     }
     sourceSets.commonTest.dependencies {
         implementation(libs.kotlinx.coroutines.test)
+    }
+    sourceSets.jvmTest.dependencies {
+        implementation(libs.sqldelight.sqlite.driver)
     }
 }
