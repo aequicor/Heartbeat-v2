@@ -22,6 +22,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -68,6 +72,7 @@ internal fun AuroraHistory(
     modifier: Modifier = Modifier,
     readingWidth: Dp = Dp.Infinity,
     viewportHeight: Dp = Dp.Hairline,
+    tailFollow: AuroraTailFollow? = null,
 ) {
     val live = state.live
     val history = state.messages
@@ -76,8 +81,13 @@ internal fun AuroraHistory(
     val usableHeight = (viewportHeight - padding.calculateTopPadding() - padding.calculateBottomPadding())
         .coerceAtLeast(Dp.Hairline)
     val currentHeight = rememberUpdatedState(usableHeight)
-    val reflow = remember(list, live?.id ?: history.firstOrNull()?.id) {
-        AuroraHistoryReflow(list) { currentHeight.value }
+    val reflow = remember(list, live?.id ?: history.firstOrNull()?.id, tailFollow) {
+        AuroraHistoryReflow(list, tailFollow ?: AuroraTailFollow(list)) { currentHeight.value }
+    }
+    LaunchedEffect(list, reflow.tail) {
+        snapshotFlow {
+            list.canScrollBackward to list.isScrollInProgress
+        }.collect { reflow.tail.observePosition() }
     }
     val adjustment = reflow.ready(state.expandedWork)
     val density = LocalDensity.current
@@ -335,14 +345,34 @@ private fun Modifier.trackReplyHeight(
     reply: Reply, reflow: AuroraHistoryReflow?, selection: SelectionState, tracksHeight: Boolean,
 ): Modifier {
     val scope = rememberCoroutineScope()
-    var height by remember(reply.id) { mutableIntStateOf(0) }
-    return onSizeChanged { size ->
-        val previous = height
-        height = size.height
-        if (previous > 0 && tracksHeight) {
-            reflow?.streamingReplyResized(reply.id, size.height - previous, scope, selection.selectedTexts.isNotEmpty())
+    val tracker = remember(reply.id) { ReplyHeightTracker() }
+    return layout { measurable, constraints ->
+        // Final Markdown preparation can finish after the stream's first completed frame.
+        tracker.tracked = tracker.tracked || tracksHeight
+        tracker.before = Snapshot.withoutReadObservation { reflow?.tail?.beforeResize() }
+        // A child resize can settle the disclosure anchor during this measure.
+        // Preserve its ownership so the same delta is not compensated twice.
+        tracker.workOwned = reflow?.ownsWorkResize(reply.id) == true
+        val placeable = measurable.measure(constraints)
+        layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+    }.onSizeChanged { size ->
+        val previous = tracker.height
+        tracker.height = size.height
+        if (tracker.workOwned) return@onSizeChanged
+        val before = tracker.before
+        if (previous > 0 && tracker.tracked && before != null) {
+            reflow?.streamingReplyResized(
+                reply.id, size.height - previous, before, scope, selection.selectedTexts.isNotEmpty(),
+            )
         }
     }
+}
+
+private class ReplyHeightTracker {
+    var height = 0
+    var tracked = false
+    var workOwned = false
+    var before: AuroraTailFollow.BeforeResize? = null
 }
 
 @Composable

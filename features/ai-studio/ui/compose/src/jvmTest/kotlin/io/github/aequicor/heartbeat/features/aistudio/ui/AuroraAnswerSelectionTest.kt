@@ -261,10 +261,11 @@ class AuroraAnswerSelectionTest {
         try {
             val initialBoundary = verifyChunkedCopy(scene, clock, selection = { selection }, clipboard, source)
             assertEquals(nativeHeight, chunkedHeight)
+            val initialHeight = nativeHeight
             width = 460.dp
-            val widerBoundary = verifyChunkedCopy(scene, clock, selection = { selection }, clipboard, source)
+            verifyChunkedCopy(scene, clock, selection = { selection }, clipboard, source)
             assertEquals(nativeHeight, chunkedHeight)
-            assertTrue(widerBoundary != initialBoundary)
+            assertTrue(nativeHeight < initialHeight, "A wider layout must reflow the same text")
             width = 390.dp
             assertEquals(initialBoundary, verifyChunkedCopy(scene, clock, { selection }, clipboard, source))
             assertEquals(nativeHeight, chunkedHeight)

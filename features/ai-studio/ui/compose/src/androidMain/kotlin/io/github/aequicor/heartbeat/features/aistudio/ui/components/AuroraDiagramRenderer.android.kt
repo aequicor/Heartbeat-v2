@@ -35,14 +35,16 @@ internal actual fun BindAuroraDiagramContext() {
     SideEffect { diagramApplication = application }
 }
 
-internal actual suspend fun renderAuroraDiagramOnPlatform(format: String, source: String): ImageBitmap {
+internal actual suspend fun renderAuroraDiagramOnPlatform(
+    format: String, source: String, pixelScale: Float,
+): ImageBitmap {
     val application = checkNotNull(diagramApplication) { "Diagram renderer is unavailable" }
     val browser = withContext(Dispatchers.Main.immediate) {
         androidDiagramBrowser?.takeUnless { it.closed }
             ?: AndroidDiagramBrowser(application).also { androidDiagramBrowser = it }
     }
     val result = try {
-        browser.render(diagramRequest(format, source))
+        browser.render(diagramRequest(format, source, pixelScale))
     } catch (canceled: CancellationException) {
         withContext(NonCancellable + Dispatchers.Main.immediate) {
             browser.close()

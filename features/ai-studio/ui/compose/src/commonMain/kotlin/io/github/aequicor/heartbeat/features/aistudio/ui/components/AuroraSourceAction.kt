@@ -28,6 +28,7 @@ internal enum class AuroraSourceAction(val label: String, val icon: HbIconGlyph?
     Copy("Копировать исходник", HbIconGlyph.Copy), Copied("Скопировано", HbIconGlyph.Check),
     Retry("Повторить отображение", HbIconGlyph.Retry), Close("Закрыть просмотр", HbIconGlyph.Close),
     Larger("Увеличить масштаб", HbIconGlyph.Plus), Smaller("Уменьшить масштаб", HbIconGlyph.Minus),
+    Center("Центрировать"),
 }
 
 @Composable
@@ -66,6 +67,17 @@ private fun DrawScope.drawSourceAction(action: AuroraSourceAction, color: Color)
         drawLine(color, point(x, y), point(endX, endY), size.width / 12, StrokeCap.Round)
     }
     when (action) {
+        AuroraSourceAction.Center -> {
+            line(4, 9, 4, 4)
+            line(4, 4, 9, 4)
+            line(15, 4, 20, 4)
+            line(20, 4, 20, 9)
+            line(20, 15, 20, 20)
+            line(20, 20, 15, 20)
+            line(9, 20, 4, 20)
+            line(4, 20, 4, 15)
+            drawCircle(color, size.width / 12, center = center)
+        }
         AuroraSourceAction.Expand -> {
             line(14, 4, 20, 4)
             line(20, 4, 20, 10)

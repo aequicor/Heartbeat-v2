@@ -27,14 +27,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.verticalScroll
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,13 +44,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -73,12 +74,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
+import kotlin.math.ceil
 
 private class BlockView(source: Boolean = false, wrapped: Boolean = false, full: Boolean = false, scale: Float = 1f) {
     var sourceMode by mutableStateOf(source)
     var wrap by mutableStateOf(wrapped)
     var expanded by mutableStateOf(full)
     var zoom by mutableFloatStateOf(scale)
+    var pan by mutableStateOf(Offset.Zero)
+    var panGeneration by mutableIntStateOf(0)
     var retry by mutableIntStateOf(0)
     var copied by mutableIntStateOf(0)
     var restoreFocus by mutableStateOf(false)
@@ -92,6 +97,18 @@ private class BlockView(source: Boolean = false, wrapped: Boolean = false, full:
 
     fun scaleBy(factor: Float) {
         zoom = (zoom * factor).coerceIn(.25f, 4f)
+    }
+
+    fun scaleAt(factor: Float, anchor: Offset) {
+        val previous = zoom
+        scaleBy(factor)
+        pan = anchor + (pan - anchor) * (zoom / previous)
+    }
+
+    fun center() {
+        zoom = 1f
+        pan = Offset.Zero
+        panGeneration++
     }
 
     companion object {
@@ -112,7 +129,7 @@ private class BlockSource(val code: ReplyBlock.Code?, val diagram: ReplyBlock.Di
     }
 }
 
-private class Preview(val bitmap: ImageBitmap? = null, val failed: Boolean = false) {
+private class Preview(val bitmap: ImageBitmap? = null, val failed: Boolean = false, val size: Size? = null) {
     fun unavailable(source: BlockSource, streaming: Boolean) = failed || (!streaming && source.diagram?.closed == false)
 }
 
@@ -123,16 +140,24 @@ private fun diagramPreview(source: BlockSource, view: BlockView): Preview {
     val diagram = source.diagram ?: return NoPreview
     val cache = LocalDiagramPreviews.current ?: remember { AuroraDiagramPreviews() }
     val complete = diagram.takeIf { it.closed && source.hasContent }?.source
+    val pixelScale = if (view.expanded) ceil(view.zoom * LocalDensity.current.density).coerceIn(2f, 8f) else 2f
     var result by remember(complete, source.format) { mutableStateOf(Preview()) }
-    LaunchedEffect(complete, source.format, view.retry) {
+    LaunchedEffect(complete, source.format, view.retry, pixelScale) {
         if (complete == null) return@LaunchedEffect
         if (result.failed) result = Preview()
-        result = try {
-            Preview(cache.preview(source.format, complete))
+        try {
+            val base = cache.preview(source.format, complete)
+            val size = Size(base.width * .5f, base.height * .5f)
+            if (result.bitmap == null) result = Preview(base, size = size)
+            if (pixelScale > 2f) {
+                // Coalesce rapid zoom steps before starting the browser's raster job.
+                delay(DiagramQualityDelayMs)
+                result = Preview(cache.preview(source.format, complete, pixelScale), size = size)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            Preview(failed = true)
+            if (result.bitmap == null) result = Preview(failed = true)
         }
     }
     return result
@@ -152,6 +177,8 @@ private fun preparedSource(source: BlockSource, show: Boolean): AuroraPreparedCo
     }
     return prepared
 }
+
+private const val DiagramQualityDelayMs = 150L
 
 @Composable
 internal fun AuroraSourceBlock(
@@ -176,8 +203,8 @@ internal fun AuroraSourceBlock(
                 preview.unavailable(source, streaming) ->
                     AuroraText("Не удалось отобразить диаграмму", small = true, color = Colors.Error)
                 preview.bitmap != null -> AuroraDiagramImage(
-                    preview.bitmap, source.format, view.expanded, view.zoom,
-                    requireNotNull(imageScroll).first, imageScroll.second, touch, view::scaleBy,
+                    preview.bitmap, requireNotNull(preview.size), source.format, view,
+                    requireNotNull(imageScroll).first, imageScroll.second, touch,
                 )
                 else -> AuroraText("Подготавливаю диаграмму…", small = true)
             }
@@ -201,7 +228,7 @@ private fun SourceBlockLayout(
     val modal = view.expanded
     val surface = if (modal) {
         Modifier.fillMaxSize().background(Colors.ViewerSurface).semantics { paneTitle = source.format }
-            .onPreviewKeyEvent {
+            .onKeyEvent {
                 val escape = it.key == Key.Escape && it.type == KeyEventType.KeyDown
                 if (escape) view.close()
                 escape
@@ -212,18 +239,12 @@ private fun SourceBlockLayout(
     }
     Column(surface) {
         DisableSelection { SourceToolbar(source, view, preview, touch) }
-        if (modal && !view.sourceMode && preview.bitmap != null) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                SourceAction(
-                    AuroraSourceAction.Smaller, touch, { view.scaleBy(1f / 1.25f) }, enabled = view.zoom > .25f,
-                )
-                SourceAction(AuroraSourceAction.Larger, touch, { view.scaleBy(1.25f) }, enabled = view.zoom < 4f)
-            }
-        }
-        Box(Modifier.fillMaxWidth().padding(
-            start = AuroraLayout.ContentInset, end = AuroraLayout.ContentInset,
-            top = AuroraLayout.Space, bottom = AuroraLayout.ContentInset,
-        )) { content() }
+        val body = if (modal) Modifier.weight(1f) else Modifier
+        val inset = if (modal && !touch) AuroraLayout.PaneGap else AuroraLayout.ContentInset
+        Box(body.fillMaxWidth().padding(
+            start = inset, end = inset,
+            top = if (modal) inset else AuroraLayout.Space, bottom = inset,
+        ), contentAlignment = if (modal) Alignment.Center else Alignment.TopStart) { content() }
     }
 }
 
@@ -241,6 +262,9 @@ private fun SourceToolbar(source: BlockSource, view: BlockView, preview: Preview
     ) {
         BasicText(source.format, Modifier.weight(1f), style = auroraTimestampStyle().copy(color = Colors.MessageMuted),
             maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (view.expanded && !view.sourceMode && preview.bitmap != null) {
+            DiagramControls(view, touch)
+        }
         SourceControls(source, view, preview, touch)
         SourceAction(
             if (view.expanded) AuroraSourceAction.Close else AuroraSourceAction.Expand, touch,
@@ -253,6 +277,14 @@ private fun SourceToolbar(source: BlockSource, view: BlockView, preview: Preview
             modifier = Modifier.focusRequester(edge), enabled = view.expanded || source.hasContent,
         )
     }
+}
+
+@Composable
+private fun DiagramControls(view: BlockView, touch: Boolean) {
+    SourceAction(AuroraSourceAction.Smaller, touch, { view.scaleBy(1f / 1.25f) }, enabled = view.zoom > .25f)
+    if (!touch) BasicText("${(view.zoom * 100).roundToInt()}%", style = auroraTimestampStyle())
+    SourceAction(AuroraSourceAction.Larger, touch, { view.scaleBy(1.25f) }, enabled = view.zoom < 4f)
+    SourceAction(AuroraSourceAction.Center, touch, view::center)
 }
 
 @Composable
@@ -302,7 +334,7 @@ private fun AuroraCodeViewport(
                     .then(scroll).then(if (wrap) Modifier else Modifier.widthIn(min = naturalWidth)), state = vertical,
             ) {
                 items(rows.size) { index ->
-                    BasicText(rows[index], style = textStyle, softWrap = wrap)
+                    AuroraReplyText(rows[index], style = textStyle, softWrap = wrap, revealKey = "code/$index")
                 }
             }
             Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {
@@ -318,24 +350,25 @@ private fun AuroraCodeViewport(
 
 @Composable
 private fun AuroraDiagramImage(
-    bitmap: ImageBitmap, label: String, modal: Boolean, zoom: Float,
-    horizontal: ScrollState, vertical: ScrollState, touch: Boolean, onScale: (Float) -> Unit,
+    bitmap: ImageBitmap, logicalSize: Size, label: String, view: BlockView,
+    horizontal: ScrollState, vertical: ScrollState, touch: Boolean,
 ) {
-    val scale = if (modal) zoom else 1f
-    val width = (bitmap.width * .5f * scale).dp
-    val height = (bitmap.height * .5f * scale).dp
-    val transform = rememberTransformableState { factor, pan, _ ->
-        onScale(factor)
-        horizontal.dispatchRawDelta(-pan.x)
-        vertical.dispatchRawDelta(-pan.y)
+    val scale = if (view.expanded) view.zoom else 1f
+    val width = (logicalSize.width * scale).dp
+    val height = (logicalSize.height * scale).dp
+    if (view.expanded) {
+        key(view.panGeneration) {
+            AuroraDiagramViewport(
+                bitmap, label, width, height, touch,
+                pan = { view.pan }, onPan = { view.pan += it },
+                onScale = view::scaleBy, onZoomAt = view::scaleAt,
+            )
+        }
+        return
     }
     Column {
-        val viewport = if (modal) Modifier.weight(1f, fill = false) else {
-            Modifier.heightIn(max = AuroraLayout.DiagramViewportHeight)
-        }
         Box(
-            Modifier.fillMaxWidth().then(viewport)
-                .then(if (modal) Modifier.transformable(transform, canPan = { false }) else Modifier)
+            Modifier.fillMaxWidth().heightIn(max = AuroraLayout.DiagramViewportHeight)
                 .horizontalScroll(horizontal).verticalScroll(vertical),
         ) {
             Image(bitmap, label, Modifier.size(width, height), contentScale = ContentScale.FillBounds)

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -120,13 +121,14 @@ private fun AuroraChatViewport(
     val density = LocalDensity.current
     val restoredOffset = if (state.restoreAnchor.messageId == null) 0 else state.restoreAnchor.offset
     val list = rememberLazyListState(state.restoreIndex, restoredOffset)
+    val tailFollow = remember(list) { AuroraTailFollow(list) }
     var topPx by remember { mutableIntStateOf(0) }
     var lowerPanelPx by remember { mutableIntStateOf(0) }
     val hasMessages = state.messages.isNotEmpty() || state.live != null
     val awayFromTail by remember(list) { derivedStateOf { list.canScrollBackward } }
     val bottomEdgePx = with(density) { AuroraLayout.DesktopComposerBottom.roundToPx() }
 
-    TrackAuroraReading(chatId, state, list, onAction)
+    TrackAuroraReading(chatId, state, list, tailFollow, onAction)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val corridor = preferredWidth.coerceAtMost(maxWidth)
@@ -143,14 +145,10 @@ private fun AuroraChatViewport(
                 state, liveText, list, touch, onAction,
                 historyPadding,
                 historyWithEdges,
-                readingWidth = corridor, viewportHeight = maxHeight,
+                readingWidth = corridor, viewportHeight = maxHeight, tailFollow = tailFollow,
             )
             val trackPadding = auroraTrackPadding(touch, historyPadding, captionClearance, caption)
-            AuroraHistoryScrollbar(
-                list, "Прокрутка истории", Modifier.align(Alignment.CenterEnd)
-                    .padding(trackPadding).padding(end = AuroraLayout.TimerThickness),
-                touch = touch,
-            )
+            AuroraChatScrollbar(list, touch, trackPadding, tailFollow::userScroll)
         }
         AuroraHeader(
             state, touch, showNavigation, onHeaderAction,
@@ -162,12 +160,14 @@ private fun AuroraChatViewport(
         )
         AuroraPlaceLowerControls(list, touch, maxWidth, corridor, awayFromTail && hasMessages, state.request != null,
             onStop = { onAction(AiStudioAction.CancelTurn) },
+            onTail = tailFollow::returnToTail,
         ) { inlineTail, inlineStop ->
             AuroraLowerControls(
                 state, draft, list, inlineTail, touch, onAction,
                 modifier = Modifier.align(Alignment.BottomCenter).zIndex(1f)
                     .auroraLowerLayout(touch, corridor),
                 maxPanelHeight = maxHeight * 0.76f, inlineRequestStop = inlineStop,
+                onTail = tailFollow::returnToTail,
                 onPanelHeight = { next ->
                     if (!touch) list.preserveReadingOnComposerResize(lowerPanelPx, next)
                     lowerPanelPx = next
@@ -212,6 +212,7 @@ private fun BoxScope.AuroraPlaceLowerControls(
     showTail: Boolean,
     hasRequest: Boolean,
     onStop: () -> Unit,
+    onTail: () -> Unit,
     content: @Composable (inlineTail: Boolean, inlineStop: Boolean) -> Unit,
 ) {
     val inset = AuroraLayout.ContentInset + AuroraLayout.Space
@@ -224,6 +225,7 @@ private fun BoxScope.AuroraPlaceLowerControls(
             list, touch,
             Modifier.align(Alignment.BottomEnd).zIndex(1f)
                 .padding(end = inset, bottom = bottom),
+            onJump = onTail,
         )
     }
     if (hasRequest && fitsSide) {
@@ -326,13 +328,13 @@ private fun TrackAuroraReading(
     chatId: String,
     state: AiStudioScreenState,
     list: LazyListState,
+    tail: AuroraTailFollow,
     onAction: (AiStudioAction) -> Unit,
 ) {
-    var followTail by remember(list) { mutableStateOf(state.restoreAnchor.messageId == null) }
     val dispatchReading by rememberUpdatedState(onAction)
     val newestId = state.live?.id ?: state.messages.firstOrNull()?.id
-    LaunchedEffect(newestId, list) {
-        if (followTail && newestId != null) list.scrollToItem(0)
+    SideEffect(newestId, list) {
+        if (tail.following && newestId != null) tail.returnToTail()
     }
     LaunchedEffect(chatId, list) {
         snapshotFlow {
@@ -347,7 +349,6 @@ private fun TrackAuroraReading(
             }
         }.collect { anchor ->
             if (anchor != null) {
-                followTail = anchor.messageId == null
                 dispatchReading(AiStudioAction.ReadAt(chatId, anchor))
             }
         }

@@ -17,18 +17,20 @@ private const val MaxDiagramSourceLength = 32_768
 private val renderTimeout = 20.seconds
 private const val MaxEncodedPngLength = 3_000_000
 private const val PngResultPrefix = "ok:"
+private const val MaxDiagramPixelScale = 8f
 
 @Composable
 internal expect fun BindAuroraDiagramContext()
 
 @Suppress("InjectDispatcher") // Direct callers also decode the preview off the UI thread.
-internal suspend fun renderAuroraDiagram(format: String, source: String): ImageBitmap {
+internal suspend fun renderAuroraDiagram(format: String, source: String, pixelScale: Float = 2f): ImageBitmap {
     val language = format.lowercase()
     require(language == "mermaid" || language == "plantuml") { "Unknown diagram format" }
     require(source.isNotBlank() && source.length <= MaxDiagramSourceLength) { "Invalid diagram source size" }
+    require(pixelScale.isFinite() && pixelScale in 2f..MaxDiagramPixelScale) { "Invalid diagram pixel scale" }
     return diagramQueue.withLock {
         withContext(Dispatchers.Default) {
-            withTimeoutOrNull(renderTimeout) { renderAuroraDiagramOnPlatform(language, source) }
+            withTimeoutOrNull(renderTimeout) { renderAuroraDiagramOnPlatform(language, source, pixelScale) }
                 ?: error("Diagram renderer timed out")
         }
     }
@@ -68,8 +70,8 @@ internal suspend fun readDiagramAsset(url: String): DiagramAsset? {
     }
 }
 
-internal fun diagramRequest(format: String, source: String): String =
-    "window.startAuroraDiagram('$format', '${Base64.encode(source.encodeToByteArray())}')"
+internal fun diagramRequest(format: String, source: String, pixelScale: Float = 2f): String =
+    "window.startAuroraDiagram('$format', '${Base64.encode(source.encodeToByteArray())}', $pixelScale)"
 
 internal fun decodeDiagramResult(result: String): ByteArray {
     check(result.startsWith(PngResultPrefix) && result.length <= MaxEncodedPngLength + PngResultPrefix.length) {
@@ -78,4 +80,6 @@ internal fun decodeDiagramResult(result: String): ByteArray {
     return Base64.decode(result.removePrefix(PngResultPrefix))
 }
 
-internal expect suspend fun renderAuroraDiagramOnPlatform(format: String, source: String): ImageBitmap
+internal expect suspend fun renderAuroraDiagramOnPlatform(
+    format: String, source: String, pixelScale: Float,
+): ImageBitmap

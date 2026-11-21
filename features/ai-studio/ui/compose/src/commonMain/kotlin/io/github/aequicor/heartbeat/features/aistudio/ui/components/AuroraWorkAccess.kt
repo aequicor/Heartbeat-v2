@@ -107,7 +107,9 @@ internal fun AuroraReplyWork(
     val hasWork = reply.steps.isNotEmpty()
     val settled = !finalResize && focus.displayedHistoryHeight == 0
     if (completed && !hasWork && settled) return
-    val resize = auroraWorkHeightMotion(focus, finalResize, onResizeEnd) { height, target ->
+    val resize = auroraWorkHeightMotion(
+        focus, finalResize, onResizeEnd, streaming = reply.status == ReplyStatus.Working,
+    ) { height, target ->
         reflow?.workResized(reply.id, expanded, height, target)
     }
     Column(resize) {

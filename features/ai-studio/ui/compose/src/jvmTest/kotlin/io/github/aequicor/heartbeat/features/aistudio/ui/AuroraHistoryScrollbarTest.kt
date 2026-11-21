@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraHistoryScrollbar
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraScrollbar
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraTailFollow
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraScrollbarViewport
 import java.io.File
 import kotlin.test.Test
@@ -38,6 +40,26 @@ import org.jetbrains.skia.EncodedImageFormat
 
 class AuroraHistoryScrollbarTest {
     private val clock = AuroraHoverTestClock()
+
+    @Test
+    fun endAtTheTailDoesNotDetachStreamingFollow() {
+        val list = LazyListState()
+        withScene(list, reverse = true) { scene ->
+            val tail = AuroraTailFollow(list)
+            val scrollbar = AuroraScrollbar(list, true, 16f, tail::userScroll)
+            assertTrue(tail.following)
+
+            assertTrue(scrollbar.onKey(Key.MoveEnd))
+            clock.frame(scene)
+            assertFalse(list.canScrollBackward)
+            assertTrue(tail.following, "A boundary key must not detach a stationary reader")
+
+            assertTrue(scrollbar.onKey(Key.DirectionUp))
+            clock.frame(scene)
+            assertTrue(list.canScrollBackward)
+            assertFalse(tail.following)
+        }
+    }
 
     @Test
     fun hoverAndGrabAreLimitedToTheThumbAndWheelPassesThroughWithoutHighlight() {

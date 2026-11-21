@@ -236,13 +236,11 @@ private fun AuroraWorkStackedLabels(
             )
         }
         if (showPreview || transition?.drawPreview == true) {
-            val previewLines = if (event.kind == WorkEventKind.Thinking) 2 else Int.MAX_VALUE
-            AuroraWorkText(
-                event.preview, AuroraWorkRole.Summary,
-                modifier = Modifier.thinkingPreviewTransition(showPreview, transition),
-                color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopWorkMuted,
-                maxLines = previewLines,
-            )
+            val preview = Modifier.thinkingPreviewTransition(showPreview, transition)
+            val color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopWorkMuted
+            if (event.kind == WorkEventKind.Thinking) AuroraThinkingPreview(event, color, preview) else {
+                AuroraWorkText(event.preview, AuroraWorkRole.Summary, preview, color)
+            }
         }
     }
 }

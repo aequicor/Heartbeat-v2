@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.mock
 
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
@@ -45,14 +46,16 @@ internal object LargeMessageDemo {
     val plain by lazy { cases.joinToString("\n\n") }
     val reasoning by lazy {
         buildList {
+            add("Проверяю чтение истории, выделение текста и возврат к последнему фрагменту.\n\n")
             for ((index, pair) in situations.withIndex()) {
                 val (action, expected) = pair
                 windows.forEachIndexed { position, window ->
                     add(buildString {
-                        if (position == 0) append("Случай ${index + 1}. $action. Проверяем, что $expected.\n\n")
-                        append("Разберём $window. ")
+                        if (position == 0) append("## Случай ${index + 1}. $action\n\n**Проверяем:** $expected.\n\n")
+                        append("### Разберём $window\n\n")
                         for (arrival in arrivals) append("Когда $arrival, проверяем, что $expected. ")
                         append("\n\n")
+                        append(reasoningFormatting(position, index + 1))
                     })
                 }
             }
@@ -87,6 +90,47 @@ internal object LargeMessageDemo {
         }
     }
 
+    private fun reasoningFormatting(position: Int, number: Int): String = when (position) {
+        0 -> "- **Условие:** ответ продолжает поступать.\n" +
+            "- *Действие:* сохранить `anchor$number`.\n  - Проверить строку над курсором.\n\n"
+        1 -> "> Не сдвигать место чтения из-за нового фрагмента.\n> ~~Сброс к началу~~ исключён.\n\n"
+        2 -> "| Момент | Якорь |\n| :--- | ---: |\n| До порции | Сохранён |\n| После порции | Тот же |\n\n"
+        else -> "```kotlin\nval anchor$number = rememberReadingPosition()\n" +
+            "restoreReadingPosition(anchor$number)\n```\n\n" +
+            "1. Получить порцию.\n2. Обновить текст.\n3. Сверить [сценарий](https://example.com/cases/$number).\n\n"
+    }
+
+    private val reasoningAnswer = """
+        # Разбор поведения чата
+
+        $Conclusion
+
+        ## Что проверено
+
+        1. **Привязка к низу** при поступлении текста.
+        2. *Место чтения* после ручной прокрутки.
+        3. Сохранение `messageId` между обновлениями.
+
+        > Новые строки занимают место сразу; проявляется только новый текст.
+
+        | Сценарий | Ожидание |
+        | :--- | ---: |
+        | Чтение истории | Позиция сохранена |
+        | Возврат к последнему | Следование включено |
+
+        - [x] Рассуждение доступно в деталях
+        - [x] Промежуточный результат сохранён
+        - [ ] ~~Автоматический сброс истории~~ не требуется
+
+        ```kotlin
+        val anchor = rememberReadingPosition()
+        restoreReadingPosition(anchor)
+        ```
+
+        ---
+
+        [Открыть сценарии](https://example.com/cases).
+    """.trimIndent()
     private val longCode by lazy {
         buildString {
             appendLine("## Набор событий для воспроизведения прокрутки\n")
@@ -104,16 +148,17 @@ internal object LargeMessageDemo {
     fun answer(prompt: String): String = when (prompt.trim().lowercase()) {
         "текст" -> plain
         "код" -> longCode
-        "рассуждение" -> Conclusion
+        "рассуждение" -> reasoningAnswer
         else -> report
     }
 
     fun history(): List<Message> {
         val details = reasoning.joinToString("").trimEnd()
-        val event = WorkEvent("reasoning", "Размышления", details, details, WorkEventKind.Thinking, StepStatus.Done)
+        val event = WorkEvent("reasoning", "Размышления", details, details, WorkEventKind.Thinking, StepStatus.Done,
+            detailsFormat = DetailFormat.Markdown)
         val step = Step("analysis", "Разбор поведения чата", "", StepStatus.Done, events = listOf(event))
         return listOf(
-            Reply("large-analysis", "14:12", steps = listOf(step), text = "$Conclusion\n\n$Replay",
+            Reply("large-analysis", "14:12", steps = listOf(step), text = "$reasoningAnswer\n\n$Replay",
                 status = ReplyStatus.Completed),
             User("ask-analysis", "14:11", "Разбери сценарии чтения по шагам."),
             Reply("large-text", "14:08", text = plain, status = ReplyStatus.Completed),

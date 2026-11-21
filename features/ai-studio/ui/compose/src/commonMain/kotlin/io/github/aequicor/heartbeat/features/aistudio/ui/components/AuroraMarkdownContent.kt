@@ -1,7 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
@@ -44,11 +43,13 @@ internal fun AuroraMarkdownContent(
         prepared?.takeIf { source.startsWith(it.source) }
             ?: MarkdownRevision(source, source.takeIf { content == null })
     }
+    val completed = replyRevealIsFinal()
     val displayed = keepSelectedReplyRevision(ready, selection) { previous, incoming ->
-        if (previous.document != null && incoming.document != null && incoming.source.startsWith(previous.source)) {
-            incoming
-        } else {
-            previous
+        when {
+            completed -> incoming
+            previous.document != null && incoming.document != null && incoming.source.startsWith(previous.source) ->
+                incoming
+            else -> previous
         }
     }
     val blocks = selectedPreparedDocument(displayed.document, selection)?.blocks
@@ -56,7 +57,7 @@ internal fun AuroraMarkdownContent(
         blocks != null -> Box(modifier) {
             AuroraDocumentBlocks(blocks, touch, streaming, Dp.Hairline, bodyStyle = style)
         }
-        displayed.text != null -> BasicText(displayed.text, modifier, style)
+        displayed.text != null -> AuroraReplyText(displayed.text, modifier, style)
         else -> DisableSelection { AuroraPreparingReply(modifier) }
     }
 }

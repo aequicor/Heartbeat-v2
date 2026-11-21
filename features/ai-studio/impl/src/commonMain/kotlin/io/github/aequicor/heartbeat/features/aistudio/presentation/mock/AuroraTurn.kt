@@ -53,9 +53,13 @@ internal class AuroraTurn(
     private val answerSample by lazy {
         if (demonstration) LargeMessageDemo.answer(prompt.text) else AuroraMock.richSample
     }
-    private val thinkingFragments = if (demonstration && prompt.text.trim().equals("рассуждение", ignoreCase = true)) {
-        LargeMessageDemo.reasoning
-    } else ThinkingFragments
+    private val thinkingStream by lazy {
+        val fragments = if (demonstration && prompt.text.trim().equals("рассуждение", ignoreCase = true)) {
+            LargeMessageDemo.reasoning
+        } else ThinkingFragments
+        val text = fragments.joinToString("")
+        MockTokenStream(if (demonstration) text else text.replaceFirst("повтора", "**повтора**"))
+    }
 
     fun sendPrompt() {
         store.putMessage(chatId, prompt.copy(delivery = Delivery.Sending, error = null))
@@ -68,7 +72,7 @@ internal class AuroraTurn(
             } else {
                 store.putMessage(chatId, prompt.copy(delivery = Delivery.Sent, error = null))
                 beginReply()
-                receiveThinkingFragment(index = 0)
+                receiveThinkingFragment()
             }
         }
     }
@@ -101,41 +105,37 @@ internal class AuroraTurn(
                     WorkEventKind.Search, StepStatus.Done),
                 WorkEvent(
                     "thinking", "Думает...", "", "", WorkEventKind.Thinking, StepStatus.Current,
-                    detailsFormat = if (demonstration) DetailFormat.Plain else DetailFormat.Markdown,
+                    detailsFormat = if (demonstration && prompt.text.trim().equals("текст", ignoreCase = true)) {
+                        DetailFormat.Plain
+                    } else DetailFormat.Markdown,
                 ),
             ),
         )
     }
 
-    private fun receiveThinkingFragment(index: Int) {
-        after(ThinkingFragmentDelay) {
-            val fragment = thinkingFragments.getOrNull(index)
-            if (fragment == null) {
-                afterReading()
-            } else {
-                val current = checkNotNull(reply)
-                val step = current.steps.last()
-                val events = step.events.map { event ->
-                    if (event.kind != WorkEventKind.Thinking) event else {
-                        val stream = if (event.detailsFormat == DetailFormat.Markdown) thinkingMarkdown else null
-                        val detail = if (stream != null && index == 0) {
-                            "Выделяю условия **повтора**, "
-                        } else {
-                            fragment
-                        }
-                        event.appendDetails(detail, fragment, stream)
+    private fun receiveThinkingFragment() {
+        val batch = thinkingStream.next() ?: return afterReading()
+        after(batch.delayMillis) {
+            val current = checkNotNull(reply)
+            val step = current.steps.last()
+            val events = step.events.map { event ->
+                if (event.kind != WorkEventKind.Thinking) event else {
+                    val stream = if (event.detailsFormat == DetailFormat.Markdown) thinkingMarkdown else null
+                    val summary = if (stream == null) batch.text else {
+                        (event.details + batch.text).replace("**", "").trimEnd('*').removePrefix(event.summary)
                     }
+                    event.appendDetails(batch.text, summary, stream)
                 }
-                reply = current.copy(steps = current.steps.dropLast(1) + step.copy(events = events))
+            }
+            reply = current.copy(steps = current.steps.dropLast(1) + step.copy(events = events))
+            if (batch.complete) afterReading() else {
                 publish()
-                receiveThinkingFragment(index + 1)
+                receiveThinkingFragment()
             }
         }
     }
-
     private fun afterReading() {
-        val result = "Проверка исходных условий завершена. Повтор можно привязать к исходной реплике " +
-            "и сохранить позицию пользователя во время получения ответа."
+        val result = AuroraMock.interimSample
         val current = checkNotNull(reply).finishCurrentSteps(StepStatus.Done)
         val finished = current.steps.last().copy(result = result)
         val pending = Step(
@@ -454,7 +454,6 @@ internal class AuroraTurn(
     private companion object {
         const val SendDelay = 360L
         const val StageDelay = 900L
-        const val ThinkingFragmentDelay = 300L
         val ThinkingFragments = listOf("Выделяю условия повтора, ", "остановки и восстановления.")
         const val StreamDelay = 40L
         const val StreamBatch = 3

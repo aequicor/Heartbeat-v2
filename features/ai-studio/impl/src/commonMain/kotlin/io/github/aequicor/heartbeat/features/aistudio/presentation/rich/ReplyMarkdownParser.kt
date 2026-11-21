@@ -25,7 +25,7 @@ internal class ReplyMarkdownParser(private val literalFastPath: Boolean = true) 
     private var linkDestinations = mapOf<CharSequence, CharSequence>()
     private var openFence: OpenReplyFence? = null
 
-    fun renderLiveText(id: String, source: String): LiveText =
+    fun renderReadyText(id: String, source: String): LiveText =
         LiveText(id, source, parseContent(source, final = false))
 
     fun parse(source: String, final: Boolean): ReplyDocument =

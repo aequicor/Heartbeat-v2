@@ -6,11 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -18,6 +19,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextLayoutResult
@@ -60,14 +62,21 @@ internal fun AuroraReplyAnswer(
     val hasAnswer = reply.text.isNotEmpty() || reply.result != null
     val hasWork = reply.steps.isNotEmpty()
     val showAnswer = reply.status != ReplyStatus.Working || liveText != null || hasAnswer
-    val width = if (!showAnswer && hasWork) Modifier.fillMaxWidth() else Modifier
+    val width = if (hasWork && reply.status == ReplyStatus.Working) Modifier.fillMaxWidth() else Modifier
     // Use the placed archive body as the starting size for subsequent resize animations.
     val opening = archiveReveal?.takeUnless { it.isPlaced }
-    val size = if (opening != null) width else width.auroraHeightMotion(StreamResizeMillis, finalResize, onResizeEnd)
-    Box(size, propagateMinConstraints = true) {
-        if (showAnswer) {
-            val wide = hasWork && (reply.status != ReplyStatus.Completed || !hasAnswer)
-            AuroraReplyContent(reply, touch, onAction, liveText, selection, wide, viewportHeight, opening)
+    val immediate = opening != null || liveText != null || finalResize
+    val size = if (immediate) width else width.auroraHeightMotion(StreamResizeMillis, false, onResizeEnd)
+    val finishResize by rememberUpdatedState(onResizeEnd)
+    LaunchedEffect(finalResize) {
+        if (finalResize) withFrameNanos { finishResize() }
+    }
+    AuroraReplyReveal(liveText != null) {
+        Box(size, propagateMinConstraints = true) {
+            if (showAnswer) {
+                val wide = hasWork && (reply.status != ReplyStatus.Completed || !hasAnswer)
+                AuroraReplyContent(reply, touch, onAction, liveText, selection, wide, viewportHeight, opening)
+            }
         }
     }
 }
@@ -83,11 +92,14 @@ private fun AuroraReplyContent(
     viewportHeight: Dp,
     archiveReveal: ArchiveReveal?,
 ) {
-    val textPresent = reply.text.isNotEmpty()
+    val current = liveText?.collectAsState()?.value?.takeIf { it.replyId == reply.id }
+    val text = if (liveText == null) reply.text else current?.text ?: reply.text
     val working = reply.status == ReplyStatus.Working
+    // The timeline owns the thinking bubble's insets until an answer actually exists.
+    if (reply.workingWithoutResult && text.isEmpty()) return
+    val textPresent = reply.text.isNotEmpty()
     val simple = reply.historyContent?.plain != false
-    val inline = simple && reply.status == ReplyStatus.Completed && liveText == null &&
-        reply.result == null && textPresent
+    val inline = liveText == null && reply.inlineAnswerTime
     val width = if (wide || working) Modifier.fillMaxWidth() else Modifier
     val horizontalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset
     val verticalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageVerticalInset
@@ -104,18 +116,26 @@ private fun AuroraReplyContent(
     ) { onTextLayout ->
         Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
             AuroraReplyBlocks(
-                reply, touch, onAction, liveText, selection, viewportHeight, archiveReveal, onTextLayout,
+                reply, touch, onAction, current, liveText != null, selection,
+                viewportHeight, archiveReveal, onTextLayout,
             )
         }
     }
 }
+
+private val Reply.workingWithoutResult: Boolean
+    get() = status == ReplyStatus.Working && steps.isNotEmpty() && result == null
+
+private val Reply.inlineAnswerTime: Boolean
+    get() = historyContent?.plain != false && status == ReplyStatus.Completed && result == null && text.isNotEmpty()
 
 @Composable
 private fun AuroraReplyBlocks(
     reply: Reply,
     touch: Boolean,
     onAction: (AiStudioAction) -> Unit,
-    liveText: StateFlow<LiveText>?,
+    current: LiveText?,
+    streaming: Boolean,
     selection: SelectionState,
     viewportHeight: Dp,
     archiveReveal: ArchiveReveal?,
@@ -123,18 +143,20 @@ private fun AuroraReplyBlocks(
 ) {
     val textWidth = if (touch) AuroraLayout.AgentText else AuroraLayout.DesktopAgentText
     val width = Modifier.widthIn(max = textWidth)
-    val current = liveText?.collectAsState()?.value?.takeIf { it.replyId == reply.id }
-    val text = if (liveText == null) reply.text else current?.text.orEmpty()
-    val history = reply.historyContent?.takeUnless { it.plain || liveText != null }
+    val text = if (streaming) current?.text ?: reply.text else reply.text
+    val history = reply.historyContent?.takeUnless { it.plain || streaming }
     val latest = if (history == null) {
-        AnswerFrame(current?.document, text, liveText != null)
+        AnswerFrame(current?.document, text, streaming)
     } else key(history) {
         completedAnswer(history, text)
     }
     val frame = key(reply.id) {
         keepSelectedReplyRevision(latest, selection) { displayed, incoming ->
-            if (displayed.isRich && incoming.isRich && incoming.text.startsWith(displayed.text)) incoming
-            else displayed
+            when {
+                !incoming.streaming -> incoming
+                displayed.isRich && incoming.isRich && incoming.text.startsWith(displayed.text) -> incoming
+                else -> displayed
+            }
         }
     }
     val preparingHeight = remember(history, viewportHeight) {
@@ -227,7 +249,7 @@ private fun AuroraAnswerDocument(
         AuroraStreamingPlainText(document?.plainText ?: text, selection, onTextLayout, modifier)
     } else if (document == null) {
         SelectionContainer(state = selection) {
-            BasicText(text, modifier, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+            AuroraReplyText(text, modifier, style = auroraMessageStyle(), onTextLayout = onTextLayout)
         }
     } else {
         AuroraRichDocument(
