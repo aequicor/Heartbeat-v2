@@ -1,0 +1,3 @@
+package io.github.aequicor.heartbeat.features.aistudio.domain.model
+
+internal enum class ProjectStatus { ACTIVE, ARCHIVED }

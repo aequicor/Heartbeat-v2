@@ -1,0 +1,52 @@
+CREATE TABLE studio_project (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    alias TEXT NOT NULL,
+    working_directory TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    created_at_seconds INTEGER NOT NULL,
+    created_at_nanos INTEGER NOT NULL,
+    updated_at_seconds INTEGER NOT NULL,
+    updated_at_nanos INTEGER NOT NULL
+);
+
+CREATE INDEX studio_project_page
+ON studio_project(status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);
+
+insertProject:
+INSERT OR IGNORE INTO studio_project(
+    id, name, alias, working_directory, status,
+    created_at_seconds, created_at_nanos, updated_at_seconds, updated_at_nanos
+)
+VALUES (
+    :id, :immutable_name, :immutable_name, :working_directory, 'ACTIVE',
+    :now_seconds, :now_nanos, :now_seconds, :now_nanos
+);
+
+selectProjectByImmutableName:
+SELECT * FROM studio_project WHERE name = :immutable_name;
+
+selectProjectById:
+SELECT * FROM studio_project WHERE id = :id;
+
+listProjects:
+SELECT * FROM studio_project
+WHERE status = :status
+  AND (
+      :cursor_id IS NULL
+      OR updated_at_seconds < :cursor_seconds
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos < :cursor_nanos)
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos = :cursor_nanos AND id > :cursor_id)
+  )
+ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
+LIMIT :fetch_limit;
+
+renameProjectTitle:
+UPDATE studio_project
+SET alias = :title, updated_at_seconds = :now_seconds, updated_at_nanos = :now_nanos
+WHERE id = :id AND alias != :title;
+
+setProjectStatus:
+UPDATE studio_project
+SET status = :status, updated_at_seconds = :now_seconds, updated_at_nanos = :now_nanos
+WHERE id = :id AND status != :status;
