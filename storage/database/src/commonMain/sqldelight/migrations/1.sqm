@@ -1,0 +1,15 @@
+CREATE TABLE studio_project (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    working_directory TEXT UNIQUE
+);
+
+ALTER TABLE chat ADD COLUMN project_id TEXT REFERENCES studio_project(id);
+ALTER TABLE chat ADD COLUMN engine_id TEXT;
+ALTER TABLE chat ADD COLUMN native_id TEXT;
+ALTER TABLE chat ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chat ADD COLUMN details TEXT;
+ALTER TABLE chat ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chat ADD COLUMN parent_id TEXT;
+
+CREATE UNIQUE INDEX studio_session_owner ON chat(engine_id, native_id);

@@ -1,7 +1,22 @@
+CREATE TABLE studio_project (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    working_directory TEXT UNIQUE
+);
+
 CREATE TABLE chat (
     id TEXT NOT NULL PRIMARY KEY,
-    title TEXT NOT NULL
+    title TEXT NOT NULL,
+    project_id TEXT REFERENCES studio_project(id),
+    engine_id TEXT,
+    native_id TEXT,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    details TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    parent_id TEXT
 );
+
+CREATE UNIQUE INDEX studio_session_owner ON chat(engine_id, native_id);
 
 selectById:
 SELECT id, title
@@ -13,10 +28,53 @@ SELECT id, title
 FROM chat
 ORDER BY title ASC;
 
-insert:
-INSERT OR REPLACE INTO chat(id, title)
-VALUES (?, ?);
+insert {
+    INSERT OR IGNORE INTO chat(id, title) VALUES (:id, :title);
+    UPDATE chat SET title = :title WHERE id = :id;
+}
 
 deleteById:
 DELETE FROM chat
 WHERE id = ?;
+
+allProjects:
+SELECT * FROM studio_project ORDER BY name COLLATE NOCASE, id;
+
+allSessions:
+SELECT id, title, project_id, engine_id, native_id, archived, parent_id FROM chat ORDER BY updated_at DESC, id;
+
+addProject:
+INSERT OR IGNORE INTO studio_project(id, name, working_directory) VALUES (?, ?, ?);
+
+addSession:
+INSERT OR IGNORE INTO chat(id, title, project_id, engine_id, native_id, updated_at, details, parent_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+findNative:
+SELECT id FROM chat WHERE engine_id = ? AND native_id = ?;
+
+updateNative:
+UPDATE chat SET title = CASE WHEN :activity >= updated_at OR :activity = 0 THEN coalesce(:title, title) ELSE title END,
+    updated_at = max(updated_at, :activity)
+WHERE engine_id = :engine AND native_id = :native;
+
+updateActivity:
+UPDATE chat SET title = ?, updated_at = ? WHERE id = ?;
+
+projectDirectory:
+SELECT * FROM studio_project WHERE id = ?;
+
+projectByDirectory:
+SELECT id FROM studio_project WHERE working_directory = ?;
+
+updateDetails:
+UPDATE chat SET details = ? WHERE id = ?;
+
+sessionDetails:
+SELECT details FROM chat WHERE id = ?;
+
+archive:
+UPDATE chat SET archived = 1 WHERE id = ?;
+
+catalogChanges:
+SELECT (SELECT count(*) FROM studio_project) + (SELECT count(*) FROM chat);

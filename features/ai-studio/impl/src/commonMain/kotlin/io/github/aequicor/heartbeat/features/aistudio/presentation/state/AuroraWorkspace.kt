@@ -21,6 +21,8 @@ internal data class AuroraWorkspace(
     val collapsedNavigation: Set<String> = setOf(),
     val expandedProjects: Set<String> = setOf(),
     val archivedChats: Set<String> = setOf(),
+    val projects: Map<String, String> = emptyMap(),
+    val activeProjectId: String? = null,
 ) {
     fun recover(): AuroraWorkspace = copy(chats = chats.map(AuroraChat::recover))
 

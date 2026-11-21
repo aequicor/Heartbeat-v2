@@ -19,19 +19,19 @@ internal fun AuroraWorkspace.navigation(
 ): List<NavigationRow> = buildList {
     val chatsByProject = activeChats().map { chat ->
         if (chat.parentId in archivedChats) chat.copy(parentId = null) else chat
-    }.groupBy(Chat::project)
+    }.groupBy { it.projectId ?: it.project }
     val ungrouped = AuroraNavigation.Ungrouped
-    val projects = chatsByProject.keys.filterNot { it == ungrouped } +
+    val projectIds = (projects.keys + chatsByProject.keys).filterNot { it == ungrouped } +
         listOfNotNull(ungrouped.takeIf { it in chatsByProject })
-    projects.forEach { project ->
+    projectIds.forEach { project ->
+        val title = projects[project] ?: project
         val rootId = AuroraNavigation.ProjectPrefix + project
         val expanded = query.isNotEmpty() || rootId !in collapsedNavigation
-        val sessions = chatsByProject.getValue(project)
-        val filtered = sessions.visibleIn(project, query)
-        if (filtered.isEmpty()) return@forEach
+        val filtered = chatsByProject[project].orEmpty().visibleIn(title, query)
+        if (filtered.isEmpty() && !title.contains(query, ignoreCase = true)) return@forEach
 
         val kind = if (project == AuroraNavigation.Ungrouped) NavigationKind.Section else NavigationKind.Project
-        add(NavigationRow(rootId, project, kind, project, expanded = expanded))
+        add(NavigationRow(rootId, title, kind, project, expanded = expanded))
         if (expanded) addSessions(filtered, project, query, activity, this@navigation)
     }
 }
@@ -80,5 +80,5 @@ private fun Chat.row(
         Activity.Running, Activity.Sending, Activity.Stopping -> NavigationStatus.Working
         else -> navigationStatus
     }
-    return NavigationRow(id, title, NavigationKind.Chat, project, depth, expanded, id == selectedId, badge, lastChild)
+    return NavigationRow(id, title, NavigationKind.Chat, project, depth, expanded, id == selectedId, badge, lastChild, engineId)
 }

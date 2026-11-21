@@ -37,6 +37,7 @@ public data class AiStudioScreenState(
     val storageError: String? = null,
     val subagents: List<Subagent> = listOf(),
     val navigationFocusId: String? = null,
+    val availableEngines: Map<String, String> = emptyMap(),
 ) {
     public data class Draft(val chatId: String? = null, val text: String = "")
     public data class LiveText(
@@ -151,6 +152,9 @@ public data class AiStudioScreenState(
         val navigationStatus: NavigationStatus? = null,
         val quota: Quota? = null,
         val mockSubagent: Boolean = false,
+        val projectId: String? = null,
+        val engineId: String? = null,
+        val nativeId: String? = null,
     )
 
     @Serializable
@@ -168,6 +172,7 @@ public data class AiStudioScreenState(
         val selected: Boolean = false,
         val status: NavigationStatus? = null,
         val lastChild: Boolean = false,
+        val engineId: String? = null,
     )
 
     public enum class NavigationKind { Project, Chat, More, Section }

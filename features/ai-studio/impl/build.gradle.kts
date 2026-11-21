@@ -22,8 +22,15 @@ kotlin {
         api(libs.kotlinx.coroutines.core)
         implementation(project(":di:api"))
         implementation(project(":core:preferences:api"))
+        api(project(":core:database"))
+        implementation(libs.sqldelight.coroutines.extensions)
+        implementation(libs.okio)
+        api(project(":features:ai-engine-facade:api"))
     }
     sourceSets.commonTest.dependencies {
         implementation(libs.kotlinx.coroutines.test)
+    }
+    sourceSets.getByName("jvmTest").dependencies {
+        implementation(libs.sqldelight.sqlite.driver)
     }
 }

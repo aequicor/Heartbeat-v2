@@ -39,7 +39,7 @@ class DefaultAiStudioSettingsTest {
     }
 }
 
-private class FakePreferencesStore : PreferencesStore {
+internal class FakePreferencesStore : PreferencesStore {
 
     private val values = MutableStateFlow<Map<String, Any>>(mapOf())
 

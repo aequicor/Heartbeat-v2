@@ -13,7 +13,9 @@ public sealed interface AiStudioAction {
     public data class ShowChatSearch(val visible: Boolean) : AiStudioAction
     public data class ToggleNavigation(val id: String) : AiStudioAction
     public data class NavigationFocusHandled(val id: String) : AiStudioAction
-    public data class NewProjectChat(val project: String) : AiStudioAction
+    /** Opens a local project by its absolute working directory, including projects with no chats. */
+    public data class OpenProject(val workingDirectory: String, val name: String) : AiStudioAction
+    public data class NewProjectChat(val project: String, val engineId: String? = null) : AiStudioAction
     public data class SetScenario(val scenario: Scenario) : AiStudioAction
     public data class SetAccess(val access: Access) : AiStudioAction
     public data class SetEffort(val effort: String) : AiStudioAction
