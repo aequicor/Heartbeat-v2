@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -44,12 +45,12 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** Anchors the activated row while a work disclosure changes the size of its reply. */
 internal class AuroraHistoryReflow(
     private val list: LazyListState,
+    val tail: AuroraTailFollow = AuroraTailFollow(list),
     private val currentViewportHeight: () -> Dp = { Dp.Hairline },
 ) : NestedScrollConnection {
     val viewportHeight: Dp get() = currentViewportHeight()
@@ -143,24 +144,18 @@ internal class AuroraHistoryReflow(
         if (targetHeight > 0 && shown == targetHeight) anchored = null
     }
 
-    fun streamingReplyResized(id: String, delta: Int, scope: CoroutineScope, selected: Boolean) {
-        if (delta == 0 || anchored?.id == id || !isReading(id, selected)) return
-        if (list.isScrollInProgress) {
-            // Resizing moves the origin of the reverse list. Apply only this displacement
-            // after layout so the wheel or fling keeps its own scroll mutation and velocity.
-            scope.launch {
-                if (isReading(id, selected)) list.dispatchRawDelta(delta.toFloat())
-            }
-        } else {
-            list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset + delta)
-        }
-    }
+    fun ownsWorkResize(id: String): Boolean = anchored?.id == id || request?.id == id
 
-    private fun isReading(id: String, selected: Boolean): Boolean = (selected || list.canScrollBackward) &&
-        list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == list.firstVisibleItemIndex }?.key == id
+    fun streamingReplyResized(
+        id: String, delta: Int, before: AuroraTailFollow.BeforeResize, scope: CoroutineScope, selected: Boolean,
+    ) {
+        if (delta == 0 || anchored?.id == id) return
+        tail.resized(id, delta, before, scope, selected)
+    }
 
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
         if (source == NestedScrollSource.UserInput && available.y != 0f) {
+            tail.userScroll()
             motion = null
             request = null
             anchored = null
@@ -235,8 +230,17 @@ internal fun auroraWorkHeightMotion(
     access: AuroraWorkAccess,
     finalResize: Boolean,
     onResizeEnd: () -> Unit,
+    streaming: Boolean = false,
     onFrame: (height: Int, target: Int) -> Unit,
 ): Modifier {
+    if (streaming) {
+        // Streamed text reserves its full height immediately; only the new glyphs fade in.
+        return Modifier.onSizeChanged { size ->
+            val previous = access.displayedHistoryHeight
+            access.displayedHistoryHeight = size.height
+            if (previous > 0 && previous != size.height) onFrame(size.height, size.height)
+        }
+    }
     val animated = HbTheme.motion != HbMotionPreference.Reduced
     val duration = if (finalResize) FinalResizeMillis else HbMotions.Default.ordinaryTransitionMs
     val resize by rememberUpdatedState(onFrame)

@@ -17,6 +17,31 @@ import kotlin.test.assertTrue
 
 class ReplyMarkdownParserTest {
     @Test
+    fun livePreviewHoldsOnlyTheUnfinishedSyntaxAndFinalKeepsEverything() {
+        val examples = listOf(
+            "[пример](https://example.com)", "**выделение**", "_курсив_", "~~удалено~~",
+            "`код`", "![подпись](image.png)", "&amp;", "<https://example.com>",
+        )
+        for (syntax in examples) {
+            val parser = ReplyMarkdownParser()
+            for (length in 1 until syntax.length) {
+                val input = "См. " + syntax.take(length)
+                assertEquals("См. ", parser.renderLiveText("reply", input).text, input)
+                assertEquals(ReplyMarkdownParser().parse(input, final = true), parser.parse(input, final = true))
+            }
+            val complete = "См. $syntax "
+            assertEquals(complete, parser.renderLiveText("reply", complete).text)
+        }
+        val parser = ReplyMarkdownParser()
+        val ready = parser.renderLiveText("reply", "См. [пример](https://example.com)")
+        assertEquals("https://example.com", assertIs<ReplyBlock.Paragraph>(ready.document?.blocks?.single())
+            .lines.single().last().url)
+        assertEquals("literal \\* and snake_case ", readyReplyMarkdown("literal \\* and snake_case "))
+        assertEquals("До\n\n```kotlin\nval x = \"[**\"", readyReplyMarkdown("До\n\n```kotlin\nval x = \"[**\""))
+        assertEquals("До\r\n", readyReplyMarkdown("До\r\n```kot"))
+    }
+
+    @Test
     fun liveTextDistinguishesLiteralSourceFromMarkdownAndParserFallback() {
         val parser = ReplyMarkdownParser()
         val plain = parser.renderLiveText("reply", "Review")

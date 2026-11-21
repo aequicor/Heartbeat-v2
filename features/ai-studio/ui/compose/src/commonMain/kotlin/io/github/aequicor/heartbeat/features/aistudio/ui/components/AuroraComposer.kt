@@ -64,6 +64,7 @@ internal fun AuroraLowerControls(
     modifier: Modifier = Modifier,
     inlineRequestStop: Boolean = true,
     onPanelHeight: (Int) -> Unit = {},
+    onTail: () -> Unit = { list.requestScrollToItem(0) },
 ) {
     val chatId = state.chat?.id ?: return
     var field by remember(chatId, draft) {
@@ -85,7 +86,7 @@ internal fun AuroraLowerControls(
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.ControlGap),
     ) {
         if (showTail) {
-            AuroraTailControl(list, touch)
+            AuroraTailControl(list, touch, onJump = onTail)
         }
         val request = state.request
         if (request != null) {
@@ -116,8 +117,12 @@ internal fun AuroraLowerControls(
 }
 
 @Composable
-internal fun AuroraTailControl(list: LazyListState, touch: Boolean, modifier: Modifier = Modifier) {
-    AuroraControl({ list.requestScrollToItem(0) }, label = "К новым сообщениям", touch = touch, modifier = modifier) {
+internal fun AuroraTailControl(
+    list: LazyListState, touch: Boolean, modifier: Modifier = Modifier,
+    onJump: () -> Unit = { list.requestScrollToItem(0) },
+) {
+    AuroraControl(onJump,
+        label = "К новым сообщениям", touch = touch, modifier = modifier) {
         HbIcon(HbIconGlyph.ChevronDown, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
     }
 }

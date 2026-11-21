@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -313,17 +314,6 @@ private fun AuroraViewerHeader(title: String, touch: Boolean, onClose: () -> Uni
     val closeTarget = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget
     val titleLeft = if (caption.leftInset > Dp.Hairline) caption.leftInset + inset else inset
     Column(Modifier.fillMaxWidth()) {
-        if (caption.rightInset > Dp.Hairline) {
-            Box(
-                Modifier.fillMaxWidth().height(caption.height).padding(horizontal = inset),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                BasicText(
-                    "Heartbeat",
-                    style = HbTypography.Metadata.copy(color = AuroraColors.DesktopWorkMuted),
-                )
-            }
-        }
         Row(
             Modifier.fillMaxWidth().height(AuroraLayout.FileViewerHeader)
                 .fileHeaderDivider()
@@ -364,8 +354,24 @@ private fun Modifier.fileHeaderDivider() = drawBehind {
 @Composable
 internal fun AuroraPanelDialog(onClose: () -> Unit, content: @Composable () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(AuroraColors.Canvas), contentAlignment = Alignment.Center) {
-            content()
+        HbDesktopFocusIndication(Modifier.fillMaxSize()) {
+            val caption = HbWindowCaption.current
+            Column(Modifier.fillMaxSize().background(AuroraColors.Canvas)) {
+                if (caption.rightInset > Dp.Hairline) {
+                    Box(
+                        Modifier.fillMaxWidth().height(caption.height).padding(horizontal = AuroraLayout.PaneGap),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        BasicText(
+                            "Heartbeat",
+                            style = HbTypography.Metadata.copy(color = AuroraColors.DesktopWorkMuted),
+                        )
+                    }
+                }
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    content()
+                }
+            }
         }
     }
 }

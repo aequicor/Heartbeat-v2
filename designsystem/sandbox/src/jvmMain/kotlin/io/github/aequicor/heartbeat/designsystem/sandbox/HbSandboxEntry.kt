@@ -16,6 +16,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
+import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
@@ -38,7 +39,9 @@ object HbSandboxEntry {
                 state = rememberWindowState(size = DpSize(1440.dp, 1000.dp)),
             ) {
                 HbTheme(appearance = HbAppearance.System) {
-                    SandboxHost()
+                    HbDesktopFocusIndication(Modifier.fillMaxSize()) {
+                        SandboxHost()
+                    }
                 }
             }
         }

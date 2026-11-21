@@ -46,9 +46,11 @@ internal actual fun BindAuroraDiagramContext() {
     // Desktop initializes the browser on first use.
 }
 
-internal actual suspend fun renderAuroraDiagramOnPlatform(format: String, source: String): ImageBitmap {
+internal actual suspend fun renderAuroraDiagramOnPlatform(
+    format: String, source: String, pixelScale: Float,
+): ImageBitmap {
     val result = try {
-        DesktopDiagramRenderer.render(diagramRequest(format, source))
+        DesktopDiagramRenderer.render(diagramRequest(format, source, pixelScale))
     } catch (unavailable: LinkageError) {
         throw IllegalStateException("Diagram browser is unavailable", unavailable)
     } catch (unavailable: ReflectiveOperationException) {

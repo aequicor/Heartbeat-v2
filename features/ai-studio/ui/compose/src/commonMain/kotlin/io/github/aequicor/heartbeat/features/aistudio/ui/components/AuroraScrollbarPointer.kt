@@ -64,6 +64,7 @@ internal class AuroraScrollbar(
     private val list: LazyListState,
     private val reverse: Boolean,
     private val minimum: Float,
+    private val onUserScroll: () -> Unit = {},
 ) {
     private var hover by mutableStateOf<Offset?>(null)
     private var wheelPosition: Offset? = null
@@ -127,6 +128,7 @@ internal class AuroraScrollbar(
         val previous = enteredEdge ?: current.fromTop
         val next = (previous + delta / travel).coerceIn(0f, 1f)
         if (next == previous) return
+        onUserScroll()
         // At an actual edge, use its measured span so reversing takes effect on the next pointer movement.
         val measuredSpan = if (enteredEdge == null) null else list.auroraScrollbarViewport()?.visibleSpan
         val span = measuredSpan ?: current.visibleSpan
@@ -154,6 +156,7 @@ internal class AuroraScrollbar(
             Key.DirectionDown -> fromTop + item
             else -> return false
         }
+        onUserScroll()
         list.auroraScrollToProgress(target.coerceIn(0f, 1f).oriented(reverse))
         true
     } ?: false

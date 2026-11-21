@@ -46,7 +46,7 @@ async function renderPlantUml(source) {
     });
 }
 
-async function rasterize(markup, format) {
+async function rasterize(markup, format, pixelScale) {
     const document = new DOMParser().parseFromString(markup, "image/svg+xml");
     const svg = document.documentElement;
     if (svg.localName !== "svg") throw new Error("Diagram is not an SVG image");
@@ -63,7 +63,10 @@ async function rasterize(markup, format) {
     if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) {
         throw new Error("Diagram has invalid dimensions");
     }
-    const scale = Math.min(2, maxAxis / width, maxAxis / height, Math.sqrt(maxPixels / (width * height)));
+    if (!Number.isFinite(pixelScale) || pixelScale < 2 || pixelScale > 8) throw new Error("Invalid pixel scale");
+    const axisLimit = pixelScale > 2 ? maxAxis * 2 : maxAxis;
+    const pixelLimit = pixelScale > 2 ? maxPixels * 4 : maxPixels;
+    const scale = Math.min(pixelScale, axisLimit / width, axisLimit / height, Math.sqrt(pixelLimit / (width * height)));
     svg.setAttribute("width", Math.max(1, Math.floor(width * scale)));
     svg.setAttribute("height", Math.max(1, Math.floor(height * scale)));
     if (!svg.hasAttribute("viewBox")) svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -89,12 +92,12 @@ async function rasterize(markup, format) {
 
 let result;
 window.takeAuroraDiagramChunk = (offset, length) => result?.substring(offset, offset + length) ?? null;
-window.startAuroraDiagram = async (format, encodedSource) => {
+window.startAuroraDiagram = async (format, encodedSource, pixelScale = 2) => {
     result = null;
     try {
         const source = new TextDecoder().decode(Uint8Array.from(atob(encodedSource), (character) => character.charCodeAt(0)));
         const svg = await (format === "mermaid" ? renderMermaid(source) : renderPlantUml(source));
-        result = `ok:${await rasterize(svg, format)}`;
+        result = `ok:${await rasterize(svg, format, pixelScale)}`;
     } catch (error) {
         result = "error";
     }

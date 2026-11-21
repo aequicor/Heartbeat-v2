@@ -128,11 +128,13 @@ public data class AiStudioScreenState(
         private val streaming = stream?.snapshot(source)
 
         internal var lastStreamDocument: ReplyDocument? = null
+        internal var finalDocument: ReplyDocument? = null
 
-        public val available: ReplyDocument? get() = if (parsed.isInitialized()) parsed.value else lastStreamDocument
+        public val available: ReplyDocument?
+            get() = finalDocument ?: if (parsed.isInitialized()) parsed.value else lastStreamDocument
 
         public suspend fun document(worker: CoroutineDispatcher = Dispatchers.Default): ReplyDocument =
-            withContext(worker) { streaming?.document() ?: parsed.value }
+            withContext(worker) { finalDocument ?: streaming?.document() ?: parsed.value }
     }
 
     @Serializable
@@ -230,6 +232,9 @@ public data class AiStudioScreenState(
         val promptId: String? = null,
     ) : Message {
         @Transient
+        public val interimContent: ReplyHistoryContent? = interim?.let { ReplyHistoryContent(it) }
+
+        @Transient
         public val historyContent: ReplyHistoryContent? =
             if (status == ReplyStatus.Working) null else ReplyHistoryContent(text)
     }
@@ -246,7 +251,10 @@ public data class AiStudioScreenState(
         val events: List<WorkEvent> = listOf(),
         val result: String? = null,
         val activeTitle: String = title,
-    )
+    ) {
+        @Transient
+        public val resultContent: ReplyHistoryContent? = result?.let { ReplyHistoryContent(it) }
+    }
 
     @Serializable
     public data class WorkEvent(

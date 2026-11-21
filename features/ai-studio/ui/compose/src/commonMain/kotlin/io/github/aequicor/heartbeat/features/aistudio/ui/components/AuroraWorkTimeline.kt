@@ -33,6 +33,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyHistoryContent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
@@ -58,12 +59,7 @@ internal fun AuroraWorkTimeline(
         }
         val interim = reply.interim
         if (interim != null && reply.steps.none { it.result == interim }) {
-            SelectionContainer {
-                BasicText(
-                    interim, Modifier.padding(top = AuroraLayout.Space),
-                    style = auroraMessageStyle().copy(color = AuroraColors.WorkInk),
-                )
-            }
+            AuroraWorkResult(interim, reply.interimContent, touch, Modifier.padding(top = AuroraLayout.Space))
         }
     }
 }
@@ -124,22 +120,23 @@ private fun AuroraWorkStage(
                 )
             }
         }
-        if (!current) AuroraStageResult(step.result, laterPhase, showEvents)
+        if (!current) AuroraStageResult(step.result, step.resultContent, laterPhase, showEvents, touch)
     }
 }
 
 @Composable
-private fun AuroraStageResult(result: String?, laterPhase: Boolean, showEvents: Boolean) {
+private fun AuroraStageResult(
+    result: String?, content: ReplyHistoryContent?, laterPhase: Boolean, showEvents: Boolean, touch: Boolean,
+) {
     if (result != null) {
         val axis = if (laterPhase) Modifier.timelineLine() else Modifier
-        SelectionContainer(
+        AuroraWorkResult(
+            result, content, touch,
             axis.fillMaxWidth().padding(
                 start = AuroraLayout.DesktopTarget,
                 top = if (showEvents) AuroraLayout.ContentInset else Dp.Hairline,
             ),
-        ) {
-            BasicText(result, style = auroraMessageStyle().copy(color = AuroraColors.WorkInk))
-        }
+        )
     }
     if (laterPhase) {
         Spacer(Modifier.fillMaxWidth().height(AuroraLayout.ContentInset).timelineLine())

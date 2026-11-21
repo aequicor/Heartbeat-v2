@@ -15,6 +15,8 @@ import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.font.FontWeight
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
@@ -23,6 +25,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraReplyLayout
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraViewer
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkEvent
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkTimeline
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -116,6 +119,36 @@ class AuroraMarkdownSurfacesTest {
         }
     }
 
+    @Test
+    fun interimAndStageResultsUseTheSharedMarkdownRenderer() = runBlocking<Unit> {
+        val source = "## Результат этапа\n\nУсловие **выполнено**.\n\n" +
+            "- Первый пункт\n- Второй пункт\n\n| Поле | Значение |\n| --- | --- |\n| Якорь | Сохранён |\n\n" +
+            "```kotlin\nval anchor = 1\n```"
+        for (touch in listOf(false, true)) for (asInterim in listOf(false, true)) {
+            val clock = AuroraHoverTestClock()
+            val step = Step("scan", "Проверка", "", StepStatus.Done, result = source.takeUnless { asInterim })
+            val reply = Reply("reply", "", steps = listOf(step), interim = source.takeIf { asInterim })
+            val scene = ImageComposeScene(620, 720, coroutineContext = clock.context) {
+                AuroraTestTheme(motion = HbMotionPreference.Reduced) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        AuroraReplyLayout(
+                            history = { AuroraWorkTimeline(reply, setOf(), setOf(), touch, {}) },
+                            answer = { BasicText("Короткий итог") },
+                            expandToFitHistory = true,
+                        )
+                    }
+                }
+            }
+            try {
+                assertNotNull(scene.awaitText("Результат этапа", clock).config.getOrNull(SemanticsProperties.Heading))
+                val paragraph = scene.awaitText("Условие выполнено.", clock).config[SemanticsProperties.Text].single()
+                assertTrue(paragraph.spanStyles.any { it.item.fontWeight == FontWeight.SemiBold })
+                assertNotNull(scene.awaitText("Якорь", clock))
+                assertNotNull(scene.awaitText("val anchor = 1", clock))
+                assertNull(scene.textNode(source))
+            } finally { scene.close() }
+        }
+    }
     private suspend fun ImageComposeScene.awaitText(text: String, clock: AuroraHoverTestClock): SemanticsNode =
         withTimeout(5_000) {
             var found = textNode(text)

@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -247,8 +247,10 @@ private fun AuroraTableContent(
                         Modifier.heightIn(max = AuroraLayout.CodeViewportHeight)
                     }
                     LazyColumn(body, state = vertical) {
-                        items(table.rows) { row ->
-                            AuroraTableRow(row, table.alignments, widths, rowStyle, headingRow = false)
+                        itemsIndexed(table.rows) { index, row ->
+                            AuroraTableRow(
+                                row, table.alignments, widths, rowStyle, headingRow = false, revealRow = index,
+                            )
                         }
                     }
                 }
@@ -275,6 +277,7 @@ private fun AuroraTableRow(
     widths: List<Dp>,
     style: TextStyle,
     headingRow: Boolean,
+    revealRow: Int = -1,
 ) {
     val background = if (headingRow) Modifier.background(AuroraColors.WorkHistory) else Modifier
     Row(background.drawBehind {
@@ -287,11 +290,12 @@ private fun AuroraTableRow(
                 ReplyAlignment.Center -> TextAlign.Center
                 else -> TextAlign.Left
             }
-            BasicText(
+            AuroraReplyText(
                 cells.getOrNull(index) ?: AnnotatedString(""),
                 Modifier.width(width).padding(horizontal = AuroraLayout.ContentInset, vertical = AuroraLayout.Space)
                     .then(if (headingRow) Modifier.semantics { heading() } else Modifier),
                 style.copy(textAlign = align),
+                revealKey = "table/$revealRow/$index",
             )
         }
     }

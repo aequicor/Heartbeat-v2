@@ -2,6 +2,8 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.layout.IntrinsicMeasurable
 import androidx.compose.ui.layout.IntrinsicMeasureScope
 import androidx.compose.ui.layout.LayoutModifier
@@ -18,14 +20,27 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 @Composable
 internal fun AuroraWorkDetailContent(event: WorkEvent, touch: Boolean, selection: SelectionState) {
     val color = if (touch) AuroraColors.WorkInk else AuroraColors.DesktopInk
-    when {
-        event.detailsFormat == DetailFormat.Markdown -> AuroraMarkdownContent(
-            event.detailText, event.markdownDetails, selection, HbTypography.Detail.copy(color = color), touch,
-            WorkMarkdownIntrinsicSize, streaming = event.status == StepStatus.Current,
-        )
-        !touch && event.kind == WorkEventKind.Thinking ->
-            AuroraThinkingBody(event.id, event.detailText, selection)
-        else -> AuroraWorkText(event.detailText, AuroraWorkRole.Detail, WorkDetailWidth, color = color)
+    if (event.details.isBlank()) {
+        AuroraWorkText(event.detailText, AuroraWorkRole.Detail, WorkDetailWidth, color = color)
+        return
+    }
+    key(event.id) {
+        AuroraReplyReveal(streaming = event.status == StepStatus.Current) {
+            when {
+                event.detailsFormat == DetailFormat.Markdown -> AuroraMarkdownContent(
+                    event.detailText, event.markdownDetails, selection, HbTypography.Detail.copy(color = color), touch,
+                    WorkMarkdownIntrinsicSize, streaming = event.status == StepStatus.Current,
+                )
+                !touch && event.kind == WorkEventKind.Thinking ->
+                    AuroraThinkingBody(event.id, event.detailText, selection)
+                event.kind == WorkEventKind.Thinking -> {
+                    val tail = remember { ThinkingTextTail() }
+                    AuroraReplyText(event.detailText, WorkDetailWidth.then(tail.modifier),
+                        HbTypography.Detail.copy(color = color), onTextLayout = tail::update)
+                }
+                else -> AuroraReplyText(event.detailText, WorkDetailWidth, HbTypography.Detail.copy(color = color))
+            }
+        }
     }
 }
 
@@ -41,7 +56,7 @@ internal object WorkDetailWidth : LayoutModifier {
 }
 
 // The work body wraps to the reply. Viewports such as LazyColumn cannot answer intrinsic queries.
-private object WorkMarkdownIntrinsicSize : LayoutModifier {
+internal object WorkMarkdownIntrinsicSize : LayoutModifier {
     override fun IntrinsicMeasureScope.minIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int = 0
 
     override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int = 0

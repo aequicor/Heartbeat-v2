@@ -1,6 +1,5 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
@@ -17,6 +16,6 @@ internal actual fun AuroraStreamingPlainText(
     modifier: Modifier,
 ) {
     SelectionContainer(state = selection, modifier = modifier) {
-        BasicText(text, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+        AuroraReplyText(text, style = auroraMessageStyle(), onTextLayout = onTextLayout)
     }
 }

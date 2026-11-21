@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -60,7 +60,7 @@ internal fun AuroraRichDocument(
     if (plain != null) {
         val body = archiveReveal?.let { reveal -> Modifier.onPlaced { reveal.markPlaced() } } ?: Modifier
         SelectionContainer(state = selection, modifier = modifier) {
-            BasicText(plain, body, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+            AuroraReplyText(plain, body, style = auroraMessageStyle(), onTextLayout = onTextLayout)
         }
         return
     }
@@ -72,7 +72,7 @@ internal fun AuroraRichDocument(
         val blocks = visible?.blocks
         when {
             blocks != null -> AuroraDocumentBlocks(blocks, touch, streaming, preparingHeight, archiveReveal)
-            fallbackText.isNotEmpty() -> BasicText(fallbackText, style = auroraMessageStyle())
+            fallbackText.isNotEmpty() -> AuroraReplyText(fallbackText, style = auroraMessageStyle())
             preparingHeight > Dp.Hairline -> AuroraPreparingReply(minHeight = preparingHeight)
         }
     }
@@ -80,6 +80,7 @@ internal fun AuroraRichDocument(
 
 @Composable
 internal fun selectedPreparedDocument(latest: PreparedDocument?, selection: SelectionState): PreparedDocument? {
+    if (replyRevealIsFinal()) return latest
     val display = remember(selection) { DocumentSelectionRevision() }
     val selected = selection.selectedTexts
     val pinned = if (selected === display.selected) display.pinned else display.visible?.throughSelection(selected)
@@ -122,7 +123,9 @@ internal fun AuroraRichBlocks(
                 // Text applies its own gap so long documents do not create a layout node per separator.
                 val textBlock = block is ReplyBlock.Heading || block is ReplyBlock.Paragraph
                 if (!textBlock && gap > Dp.Hairline) Spacer(Modifier.height(gap))
-                AuroraRichBlock(prepared, touch, if (textBlock) gap else Dp.Hairline, streaming, bodyStyle)
+                CompositionLocalProvider(LocalReplyRevealBlock provides block.id) {
+                    AuroraRichBlock(prepared, touch, if (textBlock) gap else Dp.Hairline, streaming, bodyStyle)
+                }
             }
         }
     }
@@ -138,7 +141,7 @@ private fun AuroraRichBlock(
 ) {
     val textPadding = if (textGap > Dp.Hairline) Modifier.padding(top = textGap) else Modifier
     when (val block = prepared.source) {
-        is ReplyBlock.Paragraph -> BasicText(prepared.text, textPadding, style = bodyStyle)
+        is ReplyBlock.Paragraph -> AuroraReplyText(prepared.text, textPadding, style = bodyStyle)
         is ReplyBlock.Heading -> AuroraRichHeading(prepared.text, block.level, touch, bodyStyle, textPadding)
         is ReplyBlock.Quote -> Box(
             Modifier.drawBehind {
@@ -171,7 +174,7 @@ private fun AuroraRichHeading(
         else -> 14 to 20
     }
     val factor = body.fontSize.value / if (touch) 16 else 15
-    BasicText(
+    AuroraReplyText(
         text, modifier.semantics { heading() },
         body.copy(
             fontSize = (size * factor).sp,
@@ -209,7 +212,8 @@ private fun AuroraRichList(
                         role = Role.Checkbox
                         toggleableState = ToggleableState(checked)
                     }
-                    BasicText(marker, Modifier.widthIn(min = markerWidth).then(status), bodyStyle)
+                    AuroraReplyText(marker, Modifier.widthIn(min = markerWidth).then(status), bodyStyle,
+                        revealKey = "marker/$index")
                 }
                 Column(Modifier.weight(1f, fill = false)) {
                     AuroraRichBlocks(item, touch, streaming, bodyStyle = bodyStyle)

@@ -28,7 +28,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraN
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.filterFiles
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.navigation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
-import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
@@ -52,9 +52,11 @@ internal class DefaultAiStudioStore(
     private val screen = MutableStateFlow(AiStudioScreenState(fileChoices = AuroraMock.inputs))
     private val editor = MutableStateFlow(Draft())
     private val stream = MutableStateFlow(LiveText())
-    private data class RenderRequest(val turn: AuroraTurn, val id: String, val text: String)
-    private val renderRequests = Channel<RenderRequest>(Channel.CONFLATED)
-    private var requested: RenderRequest? = null
+    private var renderOwner: AuroraTurn? = null
+    private val renderer = ReplyRenderStream(
+        schedule = { milliseconds, action -> scope.launch { delay(milliseconds); enqueue(action) } },
+        publish = { stream.value = it },
+    )
     private val fixture = mutableMapOf<String, List<Message>>()
     private val turns = mutableMapOf<String, AuroraTurn>()
     private lateinit var workspace: AuroraWorkspace
@@ -67,26 +69,6 @@ internal class DefaultAiStudioStore(
     override val liveText = stream.asStateFlow()
 
     init {
-        scope.launch {
-            var owner: AuroraTurn? = null
-            var parser = ReplyMarkdownParser()
-            for (first in renderRequests) {
-                // Batch complete source snapshots before preparing spans. Conflation never drops text.
-                if (first.turn === owner) delay(RenderInterval)
-                val request = renderRequests.tryReceive().getOrNull() ?: first
-                if (request.turn !== owner) parser = ReplyMarkdownParser()
-                owner = request.turn
-                val snapshot = parser.renderLiveText(request.id, request.text)
-                enqueue {
-                    // Completed work can catch up during a token burst. A switched, replaced or
-                    // stopped turn must never overwrite the active reply.
-                    val latest = requested
-                    if (latest === request ||
-                        (latest?.turn === request.turn && latest.text.startsWith(request.text))
-                    ) stream.value = snapshot
-                }
-            }
-        }
         scope.launch {
             workspace = restore()
             if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
@@ -459,23 +441,21 @@ internal class DefaultAiStudioStore(
     }
 
     private fun requestRender(turn: AuroraTurn?, reply: Reply? = turn?.reply) {
-        val previous = requested
-        if (previous?.turn !== turn || reply == null) stream.value = LiveText()
+        if (renderOwner !== turn || reply == null) {
+            renderer.reset()
+            stream.value = LiveText()
+        }
+        renderOwner = turn
         if (turn == null || reply == null) {
-            requested = null
             return
         }
-        if (previous?.turn === turn && previous.text == reply.text) return
-        val next = RenderRequest(turn, reply.id, reply.text)
-        requested = next
-        renderRequests.trySend(next)
+        renderer.update(turn, reply.id, reply.text)
     }
 
     internal fun finish(chatId: String, reply: Reply? = null) {
         if (reply != null) {
-            val latest = stream.value
-            if (chatId == workspace.selectedId && latest.replyId == reply.id && latest.text == reply.text) {
-                reply.historyContent?.lastStreamDocument = latest.document
+            if (chatId == workspace.selectedId) {
+                reply.historyContent?.finalDocument = renderer.finish(reply.text)
             }
             putMessage(chatId, reply)
         }
@@ -483,7 +463,8 @@ internal class DefaultAiStudioStore(
         updateChat(chatId) { it.copy(interrupted = null) }
         val messages = if (chatId == workspace.selectedId) history(selected) else null
         if (messages != null) {
-            requestRender(null)
+            renderer.reset()
+            renderOwner = null
             refreshFiles(messages)
         }
         screen.update {
@@ -498,6 +479,8 @@ internal class DefaultAiStudioStore(
             }
             if (reply?.status == ReplyStatus.Completed) next.collapseWork(reply.id) else next
         }
+        // The completed screen revision already owns the full final document. Keep the last
+        // live revision until a new turn/chat replaces it, so collectors cannot see a blank handoff.
         save()
     }
 
@@ -570,7 +553,6 @@ internal class DefaultAiStudioStore(
         const val WorkspaceKey = "workspace_v1"
         const val SaveError = "Не удалось сохранить диалог"
         const val MaxTitleLength = 48
-        const val RenderInterval = 16L
         const val SaveInterval = 150L
         const val MockTime = "14:04"
     }

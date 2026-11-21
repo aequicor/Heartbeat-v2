@@ -15,22 +15,27 @@ internal val LocalDiagramPreviews = staticCompositionLocalOf<AuroraDiagramPrevie
 /** The visible row owns the rendering job. Only finished previews survive row disposal. */
 internal class AuroraDiagramPreviews(
     private val worker: CoroutineDispatcher = Dispatchers.Default,
-    private val render: suspend (String, String) -> ImageBitmap = ::renderAuroraDiagram,
+    private val render: suspend (String, String, Float) -> ImageBitmap = ::renderAuroraDiagram,
 ) {
-    private data class Source(val format: String, val text: String)
+    constructor(
+        worker: CoroutineDispatcher = Dispatchers.Default,
+        render: suspend (String, String) -> ImageBitmap,
+    ) : this(worker, { format, source, _ -> render(format, source) })
+
+    private data class Source(val format: String, val text: String, val scale: Float)
 
     private val rendering = Mutex()
     private val previews = linkedMapOf<Source, ImageBitmap>()
     private var bytes = 0L
 
-    suspend fun preview(format: String, text: String): ImageBitmap = withContext(worker) {
+    suspend fun preview(format: String, text: String, pixelScale: Float = 2f): ImageBitmap = withContext(worker) {
         rendering.withLock {
-            val key = Source(format, text)
+            val key = Source(format, text, pixelScale)
             previews.remove(key)?.let { hit ->
                 previews[key] = hit
                 return@withLock hit
             }
-            val bitmap = render(format, text)
+            val bitmap = render(format, text, pixelScale)
             val cost = sizeOf(key, bitmap)
             if (cost <= MaxBytes) {
                 while (previews.isNotEmpty() && (bytes + cost > MaxBytes || previews.size >= MaxEntries)) {

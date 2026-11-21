@@ -3,7 +3,6 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
@@ -59,7 +58,7 @@ internal actual fun AuroraStreamingPlainText(
         }
     } else {
         SelectionContainer(state = selection, modifier = modifier) {
-            BasicText(text, style = style, onTextLayout = onTextLayout)
+            AuroraReplyText(text, style = style, onTextLayout = onTextLayout)
         }
     }
 }
@@ -73,8 +72,14 @@ private fun ChunkedParagraph(text: String, style: TextStyle, selection: Selectio
     CompositionLocalProvider(LocalClipboard provides exactClipboard) {
         SelectionContainer(state = selection) {
             Column {
-                for (chunk in prefix.chunks) BasicText(chunk, Modifier.fillMaxWidth(), style = style)
-                BasicText(text.substring(prefix.end), Modifier.fillMaxWidth(), style = style, onTextLayout = { layout ->
+                for ((index, chunk) in prefix.chunks.withIndex()) {
+                    AuroraReplyText(
+                        chunk, Modifier.fillMaxWidth(), style = style,
+                        revealSource = text, revealOffset = prefix.offsets[index],
+                    )
+                }
+                AuroraReplyText(text.substring(prefix.end), Modifier.fillMaxWidth(), style = style,
+                    revealSource = text, revealOffset = prefix.end, onTextLayout = { layout ->
                     val measured = prefix.withMeasuredLines(layout)
                     if (measured != null) state.value = measured
                 })
@@ -107,6 +112,11 @@ private class StreamingParagraphSource {
 }
 
 private class ParagraphPrefix(val end: Int = 0, val chunks: List<AnnotatedString> = listOf()) {
+    val offsets = chunks.runningFold(0) { offset, chunk ->
+        val hardBreak = chunk.getStringAnnotations(HardBreakAnnotation, 0, chunk.length).isNotEmpty()
+        offset + chunk.length + if (hardBreak) 1 else 0
+    }
+
     fun withMeasuredLines(layout: TextLayoutResult): ParagraphPrefix? {
         val tail = layout.layoutInput.text.text
         var consumed = 0

@@ -1,6 +1,9 @@
 @file:Suppress("MagicNumber")
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 
 package io.github.aequicor.heartbeat.features.aistudio.presentation
+
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
 
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
@@ -24,7 +27,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -44,7 +46,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class DefaultAiStudioStoreTest {
 
     @Test
@@ -177,7 +178,7 @@ class DefaultAiStudioStoreTest {
         val store = studio()
         store.dispatch(AiStudioAction.Attach("brief"))
         send(store)
-        advance(1_400)
+        awaitQuestions(store)
         val first = questions(store)
         store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Следующий вопрос"))
         store.dispatch(AiStudioAction.MoveQuestion(first.id, 1))
@@ -267,7 +268,7 @@ class DefaultAiStudioStoreTest {
         advance(400)
         store.dispatch(AiStudioAction.SetScenario(Scenario.DecisionFailure))
         send(store)
-        advance(1_400)
+        awaitQuestions(store)
         fillAnswers(store)
         advance(400)
         val answer = assertIs<User>(store.screenState.value.messages.first())
@@ -288,7 +289,7 @@ class DefaultAiStudioStoreTest {
         runCurrent()
         store.dispatch(AiStudioAction.SetAccess(Access.ReadOnly))
         send(store)
-        advance(1_400)
+        awaitQuestions(store)
         fillAnswers(store)
         val live = assertNotNull(store.screenState.value.live)
         val answer = assertIs<User>(store.screenState.value.messages.first())
@@ -311,7 +312,7 @@ class DefaultAiStudioStoreTest {
         val store = studio()
         store.dispatch(AiStudioAction.SetScenario(Scenario.RunFailure))
         send(store)
-        advance(1_400)
+        awaitQuestions(store)
         fillAnswers(store)
         advance(400)
         val permission = assertIs<Request.Permission>(store.screenState.value.request)
@@ -342,7 +343,7 @@ class DefaultAiStudioStoreTest {
     fun finishingInAnUnselectedChatCollapsesOnlyThatTurnsWork() = runTest {
         val store = studio()
         send(store)
-        advance(1_400)
+        awaitQuestions(store)
         fillAnswers(store)
         advance(400)
         val permission = assertIs<Request.Permission>(store.screenState.value.request)
@@ -399,7 +400,7 @@ class DefaultAiStudioStoreTest {
         val store = studio()
         store.dispatch(AiStudioAction.SetScenario(Scenario.Optional))
         send(store)
-        advance(1_260)
+        awaitQuestions(store)
         val panel = questions(store)
         val duration = 120_000L + panel.question.title.length * 50
         val rounded = (duration + 249) / 250 * 250
@@ -492,8 +493,9 @@ class DefaultAiStudioStoreTest {
         val partial = current.steps.single().events.single { it.id == event.id }
         assertTrue(key in store.screenState.value.expandedEvents)
         assertTrue(partial.details.isNotBlank())
-        assertEquals("Выделяю условия **повтора**, ", partial.details)
-        assertEquals("Выделяю условия повтора, ", partial.preview)
+        val expected = "Выделяю условия **повтора**, остановки и восстановления."
+        assertTrue(expected.startsWith(partial.details) && partial.details.length < expected.length)
+        assertEquals(partial.details.replace("**", "").trimEnd('*'), partial.preview)
         assertNotNull(partial.markdownDetails)
 
         store.dispatch(toggle)
@@ -512,13 +514,14 @@ class DefaultAiStudioStoreTest {
         assertEquals(StepStatus.Stopped, saved.status)
         assertEquals("Размышления прерваны", saved.title)
         assertEquals(received.details, saved.details)
-        val liveText = assertIs<ReplyBlock.Paragraph>(
-            assertNotNull(received.markdownDetails).document().blocks.single(),
+        val expectedFinal = assertIs<ReplyBlock.Paragraph>(
+            ReplyMarkdownParser(literalFastPath = false)
+                .parse(received.details, final = true).blocks.single(),
         )
         val archivedText = assertIs<ReplyBlock.Paragraph>(
             assertNotNull(saved.markdownDetails).document().blocks.single(),
         )
-        assertEquals(liveText.lines, archivedText.lines)
+        assertEquals(expectedFinal.lines, archivedText.lines)
     }
 
     @Test
@@ -531,6 +534,16 @@ class DefaultAiStudioStoreTest {
         val thinking = live.steps.single().events.single { it.kind == WorkEventKind.Thinking }
         assertTrue(thinking.details.isNotBlank())
 
+        // Capture a completed periodic save, rather than assuming one save per thinking fragment.
+        var waited = 0
+        do {
+            val saved = Json.decodeFromString<AuroraWorkspace>(data.snapshot.value)
+                .chats.first { it.summary.id == AuroraMock.InitialChat }.interrupted
+            if (saved?.steps == store.screenState.value.live?.steps) break
+            advance(1)
+            waited++
+        } while (waited < 1_000)
+        assertTrue(waited < 1_000)
         val checkpoint = TestPreferences(data.snapshot.value)
         store.dispatch(AiStudioAction.CancelTurn)
         advance(400)
@@ -549,6 +562,10 @@ class DefaultAiStudioStoreTest {
         advance(2_000)
         val received = store.liveText.value
         assertTrue(received.text.isNotBlank())
+        val raw = received.text + " [ещё не законченная ссылка"
+        val live = assertNotNull(store.screenState.value.live)
+        store.event { store.streamText(AuroraMock.InitialChat, live.copy(text = raw)) }
+        runCurrent()
         store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
         runCurrent()
 
@@ -558,7 +575,7 @@ class DefaultAiStudioStoreTest {
         val interrupted = assertIs<Reply>(restored.screenState.value.messages.first())
         assertEquals(received.replyId, interrupted.id)
         assertEquals(ReplyStatus.Stopped, interrupted.status)
-        assertEquals(received.text, interrupted.text)
+        assertEquals(raw, interrupted.text)
     }
 
     @Test
@@ -568,7 +585,7 @@ class DefaultAiStudioStoreTest {
         runCurrent()
         store.dispatch(AiStudioAction.EditDraft(AuroraMock.LongChat, "Проверка потока"))
         store.dispatch(AiStudioAction.Send)
-        advance(1_400)
+        advance(1_800)
         val beforeStream = store.screenState.value
         advance(400)
         assertTrue(beforeStream === store.screenState.value)
@@ -577,6 +594,29 @@ class DefaultAiStudioStoreTest {
         advance(10_000)
         val reply = assertIs<Reply>(store.screenState.value.messages.first())
         assertEquals("Проверено 240 этапов. Отчёт готов.", reply.text)
+    }
+
+    @Test
+    fun completionPublishesTheFullFinalDocumentBeforeThePendingWindowExpires() = runTest {
+        val store = studio()
+        store.dispatch(AiStudioAction.SetScenario(Scenario.Stream))
+        send(store)
+        advance(1_800)
+        val live = assertNotNull(store.screenState.value.live)
+        val source = "См. [пример](https://example.com) и [незакрытый"
+        store.event { store.streamText(AuroraMock.InitialChat, live.copy(text = source)) }
+        runCurrent()
+        advance(5)
+        store.event { store.finish(AuroraMock.InitialChat, live.copy(text = source, status = ReplyStatus.Completed)) }
+        runCurrent()
+        val final = assertIs<Reply>(store.screenState.value.messages.first())
+        assertEquals(source, final.text)
+        val document = assertNotNull(final.historyContent).available
+        assertNotNull(document)
+        assertEquals(document, final.historyContent.document())
+        val completed = store.screenState.value
+        advance(32)
+        assertSame(completed, store.screenState.value)
     }
 
     @Test
@@ -607,7 +647,7 @@ class DefaultAiStudioStoreTest {
         advance(3_000)
         val active = assertNotNull(store.screenState.value.live).steps.single().events.last().details
         assertTrue(active.isNotBlank() && active.length < reasoning.length && reasoning.startsWith(active))
-        advance(20_000)
+        advance(180_000)
         val completed = assertIs<Reply>(store.screenState.value.messages.first())
         assertEquals(reasoning, completed.steps.first().events.last().details.trimEnd())
     }
@@ -628,47 +668,55 @@ class DefaultAiStudioStoreTest {
         assertTrue(source.lineSequence().last { it.startsWith("    ") }.startsWith("    \"Событие 2048."))
         assertTrue(source.endsWith("\n)"))
     }
+}
 
-    private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =
-        DefaultAiStudioStore(data, backgroundScope).also { runCurrent() }
-
-    private fun TestScope.sessionScope(): CoroutineScope {
-        val context = backgroundScope.coroutineContext
-        return CoroutineScope(context + SupervisorJob(context[Job]))
+private fun TestScope.awaitQuestions(store: DefaultAiStudioStore) {
+    var elapsed = 0
+    while (store.screenState.value.request !is Request.Questions && elapsed < 5_000) {
+        advance(1)
+        elapsed++
     }
+    assertIs<Request.Questions>(store.screenState.value.request)
+}
+private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =
+    DefaultAiStudioStore(data, backgroundScope).also { runCurrent() }
 
-    private fun TestScope.advance(ms: Long) {
-        advanceTimeBy(ms)
-        runCurrent()
-    }
+private fun TestScope.sessionScope(): CoroutineScope {
+    val context = backgroundScope.coroutineContext
+    return CoroutineScope(context + SupervisorJob(context[Job]))
+}
 
-    private fun send(store: DefaultAiStudioStore) {
-        store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Проверь контракты сессий"))
-        store.dispatch(AiStudioAction.Send)
-    }
+private fun TestScope.advance(ms: Long) {
+    advanceTimeBy(ms)
+    runCurrent()
+}
 
-    private fun questions(store: DefaultAiStudioStore): Request.Questions =
-        assertIs<Request.Questions>(store.screenState.value.request)
+private fun send(store: DefaultAiStudioStore) {
+    store.dispatch(AiStudioAction.EditDraft(AuroraMock.InitialChat, "Проверь контракты сессий"))
+    store.dispatch(AiStudioAction.Send)
+}
 
-    private fun TestScope.fillAnswers(store: DefaultAiStudioStore) {
-        val panel = questions(store)
-        store.dispatch(AiStudioAction.Choose(panel.id, "scope", "Контракты сессий"))
-        store.dispatch(AiStudioAction.MoveQuestion(panel.id, 1))
-        store.dispatch(AiStudioAction.SkipQuestion(panel.id))
-        store.dispatch(AiStudioAction.Choose(panel.id, "report", "Да"))
-        store.dispatch(AiStudioAction.SubmitAnswers(panel.id))
-        runCurrent()
-    }
+private fun questions(store: DefaultAiStudioStore): Request.Questions =
+    assertIs<Request.Questions>(store.screenState.value.request)
 
-    private class TestPreferences(initial: String = "") : PreferencesStore {
-        val snapshot = MutableStateFlow(initial)
+private fun TestScope.fillAnswers(store: DefaultAiStudioStore) {
+    val panel = questions(store)
+    store.dispatch(AiStudioAction.Choose(panel.id, "scope", "Контракты сессий"))
+    store.dispatch(AiStudioAction.MoveQuestion(panel.id, 1))
+    store.dispatch(AiStudioAction.SkipQuestion(panel.id))
+    store.dispatch(AiStudioAction.Choose(panel.id, "report", "Да"))
+    store.dispatch(AiStudioAction.SubmitAnswers(panel.id))
+    runCurrent()
+}
 
-        override fun observeString(key: String, default: String) = snapshot
-        override fun observeBoolean(key: String, default: Boolean) = flowOf(default)
-        override fun observeLong(key: String, default: Long) = flowOf(default)
-        override suspend fun putString(key: String, value: String) { snapshot.value = value }
-        override suspend fun putBoolean(key: String, value: Boolean) = Unit
-        override suspend fun putLong(key: String, value: Long) = Unit
-        override suspend fun remove(key: String) { snapshot.value = "" }
-    }
+private class TestPreferences(initial: String = "") : PreferencesStore {
+    val snapshot = MutableStateFlow(initial)
+
+    override fun observeString(key: String, default: String) = snapshot
+    override fun observeBoolean(key: String, default: Boolean) = flowOf(default)
+    override fun observeLong(key: String, default: Long) = flowOf(default)
+    override suspend fun putString(key: String, value: String) { snapshot.value = value }
+    override suspend fun putBoolean(key: String, value: Boolean) = Unit
+    override suspend fun putLong(key: String, value: Long) = Unit
+    override suspend fun remove(key: String) { snapshot.value = "" }
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
@@ -49,7 +50,8 @@ import kotlinx.coroutines.delay
  * Supplementary label or shortcut hint (HB-DS-029).
  *
  * The hint appears after the hover delay, stays while the trigger or the tooltip itself is hovered
- * or while the trigger keeps the focus, and Escape dismisses it without moving the focus. It never
+ * or while the trigger keeps keyboard navigation focus. Window deactivation hides the hint and
+ * clears stale hover. Escape dismisses it without moving the focus. It never
  * times out while being read and never contains an action that exists nowhere else: a tooltip is
  * not a place for required operations.
  *
@@ -71,20 +73,36 @@ fun HbTooltip(
     var focused by remember { mutableStateOf(false) }
     var visible by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val keyboardNavigation = HbFocusIndication.keyboardNavigation
+    val available = enabled && windowFocused
+
+    SideEffect(available) {
+        if (!available) {
+            triggerHovered.value = false
+            tooltipHovered.value = false
+            focused = false
+            visible = false
+            dismissed = false
+        }
+    }
 
     val pointerOnPair = triggerHovered.value || tooltipHovered.value
-    val active = enabled && (pointerOnPair || focused) && !dismissed
+    val keyboardFocused = focused && keyboardNavigation
+    val active = available && (pointerOnPair || keyboardFocused) && !dismissed
 
     TooltipVisibility(active, visible) { visible = it }
 
-    if (dismissed && !pointerOnPair && !focused) SideEffect { dismissed = false }
+    SideEffect(pointerOnPair, keyboardFocused) {
+        if (!pointerOnPair && !keyboardFocused) dismissed = false
+    }
 
     Box(
         modifier = modifier
             .then(TooltipHover(triggerHovered))
             .onFocusChanged { focused = it.hasFocus }
             .tooltipKeys(
-                visible = enabled && visible,
+                visible = available && visible,
                 onDismiss = {
                     visible = false
                     dismissed = true
@@ -95,7 +113,7 @@ fun HbTooltip(
             },
     ) {
         content()
-        if (enabled && visible) {
+        if (available && visible) {
             TooltipPopup(text, TooltipHover(tooltipHovered))
         }
     }
