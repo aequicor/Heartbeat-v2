@@ -18,4 +18,4 @@
 | [kotlin-incremental-classpath](environment/kotlin-incremental-classpath.md) | Сбой инкрементальной компиляции Kotlin JVM с `DirtyData.dirtyLookupSymbols` после изменения вложенного типа |
 | [windows-sandbox-temp](environment/windows-sandbox-temp.md) | Сбой JVM-процесса с `AccessDeniedException` при записи в реальный `%TEMP%` в песочнице DSH на Windows |
 | [sqldelight-schema-composition](storage/sqldelight-schema-composition.md) | Добавление или изменение SQLDelight-схемы: расположение `.sq`, композиция агрегата и зависимости `storage/database` |
-| [jpackage-runtime](desktop/jpackage-runtime.md) | Сбой упакованного desktop-приложения: `SQLITE_CANTOPEN` или `ClassNotFoundException: sun.misc.Unsafe` при `createDistributable`/`runDev` |
+| [jpackage-runtime](desktop/jpackage-runtime.md) | Сбой упаковки JCEF на Windows, `SQLITE_CANTOPEN` или `ClassNotFoundException: sun.misc.Unsafe` при `createDistributable`/`runDev` |
