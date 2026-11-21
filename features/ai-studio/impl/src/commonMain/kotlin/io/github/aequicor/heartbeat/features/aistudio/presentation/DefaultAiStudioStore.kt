@@ -21,14 +21,13 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraTurn
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.withMockNavigation
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsBloc
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.MorePrefix
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.ProjectPrefix
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.filterFiles
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.navigation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
-import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
@@ -40,12 +39,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsAction.Project as ProjectAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsAction.ProjectsSessions as PanelAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsAction.Session as SessionAction
 
 /** Workspace commands and mock events are serialized on the component's background scope. */
 internal class DefaultAiStudioStore(
     private val preferences: PreferencesStore,
     private val scope: CoroutineScope,
 ) : AiStudioStore {
+
     private val commands = Channel<() -> Unit>(Channel.UNLIMITED)
     private val saveRequests = Channel<Unit>(Channel.CONFLATED)
     private val snapshots = Channel<AuroraWorkspace>(Channel.CONFLATED)
@@ -59,6 +62,7 @@ internal class DefaultAiStudioStore(
     )
     private val fixture = mutableMapOf<String, List<Message>>()
     private val turns = mutableMapOf<String, AuroraTurn>()
+    private val projectsSessions = ProjectsSessionsBloc { turns[it]?.activity }
     private lateinit var workspace: AuroraWorkspace
     private val selected get() = chat(workspace.selectedId)
     private var allFiles = listOf<File>()
@@ -114,14 +118,12 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.EditDraft, AiStudioAction.Send -> Unit
             is AiStudioAction.ReadAt -> readAt(action)
             is AiStudioAction.OpenChat -> openChat(action.id)
-            is AiStudioAction.ArchiveChat -> archiveChat(action.id)
+            is AiStudioAction.ArchiveChat -> updateProjectsSessions(SessionAction.Archive(action.id))
             AiStudioAction.NewChat -> newChat()
-            is AiStudioAction.SearchChats -> showChats(action.text)
-            is AiStudioAction.ShowChatSearch -> showChatSearch(action.visible)
-            is AiStudioAction.ToggleNavigation -> toggleNavigation(action.id)
-            is AiStudioAction.NavigationFocusHandled -> screen.update {
-                if (it.navigationFocusId == action.id) it.copy(navigationFocusId = null) else it
-            }
+            is AiStudioAction.SearchChats -> updateProjectsSessions(PanelAction.Search(action.text))
+            is AiStudioAction.ShowChatSearch -> updateProjectsSessions(PanelAction.ShowSearch(action.visible))
+            is AiStudioAction.ToggleNavigation -> toggleNavigationRow(action.id)
+            is AiStudioAction.NavigationFocusHandled -> updateProjectsSessions(PanelAction.FocusHandled(action.id))
             is AiStudioAction.NewProjectChat -> newChat(action.project)
             is AiStudioAction.SetScenario -> updateSummary { it.copy(scenario = action.scenario) }
             is AiStudioAction.SetAccess -> updateSummary { it.copy(access = action.access) }
@@ -135,7 +137,7 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.EditAnswer, is AiStudioAction.MoveQuestion,
             is AiStudioAction.SkipQuestion, is AiStudioAction.SubmitAnswers, is AiStudioAction.AnswerPermission,
             -> turns[workspace.selectedId]?.answer(action)
-            is AiStudioAction.ToggleChats -> screen.update { it.copy(chatsVisible = action.visible) }
+            is AiStudioAction.ToggleChats -> updateProjectsSessions(PanelAction.ShowPanel(action.visible))
             is AiStudioAction.ToggleFiles -> screen.update { it.copy(filesVisible = action.visible) }
             is AiStudioAction.ShowFileSearch -> showFileSearch(action.visible)
             is AiStudioAction.SearchFiles -> showFiles(action.text)
@@ -155,8 +157,9 @@ internal class DefaultAiStudioStore(
 
     private fun openChat(id: String) {
         val target = workspace.chats.firstOrNull { it.summary.id == id } ?: return
+        projectsSessions.dispatch(SessionAction.Opened, workspace)
         if (screen.value.chat?.id == id) {
-            screen.update { it.copy(chatsVisible = false, navigationFocusId = null) }
+            screen.update(projectsSessions.state::applyTo)
             return
         }
         val before = editor.getAndUpdate { Draft(id, target.draft) }
@@ -172,28 +175,31 @@ internal class DefaultAiStudioStore(
             else -> anchorIndex + if (turn?.reply == null) 0 else 1
         }
         refreshFiles(messages)
+        projectsSessions.refresh(workspace)
         screen.update {
-            it.copy(
-                loading = false, chat = target.summary, chats = matchingChats(it.chatSearch), messages = messages,
-                navigation = sidebar(it.chatSearch), navigationFocusId = null,
-                live = turn?.reply, request = turn?.request, activity = turn?.activity ?: Activity.Idle,
-                restoreAnchor = target.anchor, restoreIndex = restoredIndex,
+            val next = it.copy(
+                loading = false,
+                chat = target.summary,
+                messages = messages,
+                live = turn?.reply,
+                request = turn?.request,
+                activity = turn?.activity ?: Activity.Idle,
+                restoreAnchor = target.anchor,
+                restoreIndex = restoredIndex,
                 fileGroups = allFileGroups.filterFiles(it.fileSearch),
-                attachments = target.attachments, chatsVisible = false, viewer = null,
+                attachments = target.attachments,
+                viewer = null,
                 subagents = subagents(id),
             )
+            projectsSessions.state.applyTo(next)
         }
         save()
     }
 
     private fun newChat(project: String = selected.summary.project) {
         val id = nextId()
-        val entries = workspace.chats.toMutableList()
-        val firstInProject = entries.indexOfFirst { it.summary.project == project }.coerceAtLeast(0)
-        entries.add(firstInProject, AuroraChat(Chat(id, "Новый диалог", project)))
-        workspace = workspace.copy(
-            chats = entries, collapsedNavigation = workspace.collapsedNavigation - (ProjectPrefix + project),
-        )
+        val session = Chat(id, "Новый диалог", project)
+        workspace = projectsSessions.dispatch(ProjectAction.CreateSession(session), workspace)
         openChat(id)
     }
 
@@ -203,57 +209,22 @@ internal class DefaultAiStudioStore(
         saveRequests.trySend(Unit)
     }
 
-    private fun showChats(query: String) {
-        screen.update {
-            it.copy(
-                chatSearch = query, chats = matchingChats(query), navigation = sidebar(query), navigationFocusId = null,
-            )
+    private fun toggleNavigationRow(id: String) {
+        val row = screen.value.navigation.firstOrNull { it.id == id } ?: return
+        val action = when (row.kind) {
+            NavigationKind.Project, NavigationKind.Section -> ProjectAction.Toggle(row.project)
+            NavigationKind.More -> ProjectAction.ShowAllSessions(row.project)
+            NavigationKind.Chat -> SessionAction.Toggle(row.id)
         }
+        updateProjectsSessions(action)
     }
 
-    private fun showChatSearch(visible: Boolean) {
-        if (!visible) showChats("")
-        screen.update { it.copy(chatSearchVisible = visible) }
+    private fun updateProjectsSessions(action: ProjectsSessionsAction) {
+        val previous = workspace
+        workspace = projectsSessions.dispatch(action, previous)
+        screen.update(projectsSessions.state::applyTo)
+        if (workspace !== previous) save()
     }
-
-    private fun toggleNavigation(id: String) {
-        val moreIndex = if (id.startsWith(MorePrefix)) screen.value.navigation.indexOfFirst { it.id == id } else -1
-        workspace = if (id.startsWith(MorePrefix)) {
-            if (moreIndex < 0) return
-            workspace.copy(expandedProjects = workspace.expandedProjects + id.removePrefix(MorePrefix))
-        } else {
-            workspace.copy(collapsedNavigation = workspace.collapsedNavigation.toggle(id))
-        }
-        screen.update {
-            val navigation = sidebar(it.chatSearch)
-            // The first revealed chat takes the place of the More row.
-            it.copy(navigation = navigation, navigationFocusId = navigation.getOrNull(moreIndex)?.id)
-        }
-        save()
-    }
-
-    private fun sidebar(query: String) = workspace.navigation(query, turns.mapValues { it.value.activity })
-
-    private fun archiveChat(id: String) {
-        if (id in workspace.archivedChats || workspace.chats.none { it.summary.id == id }) return
-        workspace = workspace.copy(archivedChats = workspace.archivedChats + id)
-        screen.update { current ->
-            val removedIndex = current.navigation.indexOfFirst { it.id == id }
-            val navigation = sidebar(current.chatSearch)
-            val focus = if (removedIndex >= 0) {
-                navigation.asSequence().drop(removedIndex).firstOrNull { it.kind != NavigationKind.More }
-                    ?: navigation.lastOrNull { it.kind != NavigationKind.More }
-            } else null
-            current.copy(
-                chats = matchingChats(current.chatSearch), navigation = navigation, navigationFocusId = focus?.id,
-            )
-        }
-        save()
-    }
-
-    private fun matchingChats(query: String): List<Chat> = workspace.activeChats().filter {
-        it.title.contains(query, ignoreCase = true) || it.project.contains(query, ignoreCase = true)
-    }.toList()
 
     private fun subagents(chatId: String): List<AiStudioScreenState.Subagent> = workspace.chats.mapNotNull {
         val child = it.summary
@@ -264,9 +235,8 @@ internal class DefaultAiStudioStore(
 
     private fun updateSummary(transform: (Chat) -> Chat) {
         updateChat(workspace.selectedId) { it.copy(summary = transform(it.summary)) }
-        screen.update {
-            it.copy(chat = selected.summary, chats = matchingChats(it.chatSearch), navigation = sidebar(it.chatSearch))
-        }
+        projectsSessions.refresh(workspace)
+        screen.update { projectsSessions.state.applyTo(it.copy(chat = selected.summary)) }
         save()
     }
 
@@ -409,21 +379,20 @@ internal class DefaultAiStudioStore(
     internal fun changed(chatId: String, structural: Boolean) {
         val turn = turns[chatId] ?: return
         rememberReply(chatId, turn.reply, deferSave = !structural)
-        if (chatId != workspace.selectedId && structural) {
-            screen.update { it.copy(navigation = sidebar(it.chatSearch)) }
-        }
+        if (structural) projectsSessions.refresh(workspace)
+        if (chatId != workspace.selectedId && structural) screen.update(projectsSessions.state::applyTo)
         if (chatId == workspace.selectedId) {
             requestRender(turn)
             val messages = if (structural) history(selected) else screen.value.messages
             if (structural) refreshFiles(messages)
             screen.update {
-                it.copy(
-                    chat = selected.summary, chats = if (structural) matchingChats(it.chatSearch) else it.chats,
-                    navigation = if (structural) sidebar(it.chatSearch) else it.navigation,
+                val next = it.copy(
+                    chat = selected.summary,
                     messages = messages, live = turn.reply, request = turn.request, activity = turn.activity,
                     fileGroups = if (structural) allFileGroups.filterFiles(it.fileSearch) else it.fileGroups,
                     attachments = selected.attachments,
                 )
+                if (structural) projectsSessions.state.applyTo(next) else next
             }
         }
         if (structural) save()
@@ -467,17 +436,16 @@ internal class DefaultAiStudioStore(
             renderOwner = null
             refreshFiles(messages)
         }
+        projectsSessions.refresh(workspace)
         screen.update {
-            val navigation = sidebar(it.chatSearch)
-            val next = if (messages == null) {
-                it.copy(navigation = navigation)
-            } else {
+            val next = if (messages == null) it else {
                 it.copy(
                     messages = messages, live = null, request = null, activity = Activity.Idle,
-                    fileGroups = allFileGroups.filterFiles(it.fileSearch), navigation = navigation,
+                    fileGroups = allFileGroups.filterFiles(it.fileSearch),
                 )
             }
-            if (reply?.status == ReplyStatus.Completed) next.collapseWork(reply.id) else next
+            val updated = projectsSessions.state.applyTo(next)
+            if (reply?.status == ReplyStatus.Completed) updated.collapseWork(reply.id) else updated
         }
         // The completed screen revision already owns the full final document. Keep the last
         // live revision until a new turn/chat replaces it, so collectors cannot see a blank handoff.

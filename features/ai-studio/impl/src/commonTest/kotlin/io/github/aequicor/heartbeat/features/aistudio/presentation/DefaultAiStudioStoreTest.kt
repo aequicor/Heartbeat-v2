@@ -50,7 +50,8 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun projectsAndSubsessionsExpandInPlaceAndSearchShowsAncestors() = runTest {
-        val store = studio()
+        val data = TestPreferences()
+        val store = studio(data)
         val initial = store.screenState.value.navigation
         assertEquals("Heartbeat", initial.first().title)
         assertEquals(1, initial.single { it.id == "contract-check" }.depth)
@@ -76,6 +77,10 @@ class DefaultAiStudioStoreTest {
         store.dispatch(AiStudioAction.NavigationFocusHandled(firstAdded.id))
         runCurrent()
         assertNull(store.screenState.value.navigationFocusId)
+
+        val restored = studio(data).screenState.value
+        assertEquals(expanded.navigation, restored.navigation)
+        assertNull(restored.navigationFocusId)
     }
 
     @Test

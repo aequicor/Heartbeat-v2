@@ -4,9 +4,9 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Quota
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Scenario
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projects_sessions.ProjectsSessionsBloc.Companion.Ungrouped
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.Ungrouped
 
 internal fun mockNavigation(): List<AuroraChat> = buildList {
     val heartbeat = "Heartbeat"
