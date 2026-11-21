@@ -8,4 +8,5 @@ internal data class StudioSessionDto(
     val createdAt: DatabaseTimestamp,
     val updatedAt: DatabaseTimestamp,
     val parentSessionId: String? = null,
+    val isExpanded: Boolean,
 )

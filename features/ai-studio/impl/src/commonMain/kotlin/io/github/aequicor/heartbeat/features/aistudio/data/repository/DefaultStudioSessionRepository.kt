@@ -62,6 +62,9 @@ internal class DefaultStudioSessionRepository(private val dao: StudioSessionDao)
     override suspend fun rename(id: StudioSessionId, title: String) =
         accessStudioRepository { dao.rename(id.value.toString(), title) }
 
+    override suspend fun setExpanded(id: StudioSessionId, isExpanded: Boolean) =
+        accessStudioRepository { dao.setExpanded(id.value.toString(), isExpanded) }
+
     override suspend fun setStatus(id: StudioSessionId, status: SessionStatus, changedAt: Instant) =
         accessStudioRepository { dao.setStatus(id.value.toString(), status.name, changedAt.toDatabaseTimestamp()) }
 }
@@ -74,6 +77,7 @@ private fun StudioSessionDto.toSession() = StudioSession(
     createdAt.toInstant(),
     updatedAt.toInstant(),
     parentSessionId?.let { StudioSessionId(Uuid.parse(it)) },
+    isExpanded = isExpanded,
 )
 
 private fun DaoPage<StudioSessionDto>.toSessionPage(): Page<StudioSession, StudioSessionId> {

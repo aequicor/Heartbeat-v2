@@ -35,5 +35,7 @@ internal interface StudioSessionRepository {
 
     suspend fun rename(id: StudioSessionId, title: String)
 
+    suspend fun setExpanded(id: StudioSessionId, isExpanded: Boolean)
+
     suspend fun setStatus(id: StudioSessionId, status: SessionStatus, changedAt: Instant)
 }

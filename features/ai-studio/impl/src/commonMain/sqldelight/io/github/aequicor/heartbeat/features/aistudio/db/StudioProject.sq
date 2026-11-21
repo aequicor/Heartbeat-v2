@@ -7,7 +7,8 @@ CREATE TABLE studio_project (
     created_at_seconds INTEGER NOT NULL,
     created_at_nanos INTEGER NOT NULL,
     updated_at_seconds INTEGER NOT NULL,
-    updated_at_nanos INTEGER NOT NULL
+    updated_at_nanos INTEGER NOT NULL,
+    is_expanded INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX studio_project_page
@@ -40,6 +41,9 @@ WHERE status = :status
   )
 ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
 LIMIT :fetch_limit;
+
+setProjectExpanded:
+UPDATE studio_project SET is_expanded = :is_expanded WHERE id = :id;
 
 renameProjectTitle:
 UPDATE studio_project

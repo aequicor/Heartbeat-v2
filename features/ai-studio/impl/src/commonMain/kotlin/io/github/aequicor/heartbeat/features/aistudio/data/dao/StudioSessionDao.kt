@@ -40,5 +40,8 @@ internal interface StudioSessionDao {
     suspend fun rename(id: String, title: String)
 
     @Throws(DaoException::class, CancellationException::class)
+    suspend fun setExpanded(id: String, isExpanded: Boolean)
+
+    @Throws(DaoException::class, CancellationException::class)
     suspend fun setStatus(id: String, status: String, changedAt: DatabaseTimestamp)
 }

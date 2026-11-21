@@ -73,6 +73,12 @@ internal class SqlDelightProjectDao(
         }
     }
 
+    override suspend fun setExpanded(id: String, isExpanded: Boolean) {
+        accessStudioDatabase("Set project expansion") {
+            queries.setProjectExpanded(if (isExpanded) 1L else 0L, id)
+        }
+    }
+
     override suspend fun setStatus(id: String, status: String) {
         accessStudioDatabase("Set project status") {
             val now = clock.now()
@@ -89,4 +95,5 @@ private fun Studio_project.toProjectDto() = ProjectDto(
     status = status,
     createdAt = DatabaseTimestamp(created_at_seconds, created_at_nanos),
     updatedAt = DatabaseTimestamp(updated_at_seconds, updated_at_nanos),
+    isExpanded = is_expanded == 1L,
 )

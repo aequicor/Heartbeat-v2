@@ -92,6 +92,12 @@ internal class SqlDelightStudioSessionDao(
         accessStudioDatabase("Rename studio session") { queries.renameSession(title, id) }
     }
 
+    override suspend fun setExpanded(id: String, isExpanded: Boolean) {
+        accessStudioDatabase("Set session expansion") {
+            queries.setStudioSessionExpanded(if (isExpanded) 1L else 0L, id)
+        }
+    }
+
     override suspend fun setStatus(id: String, status: String, changedAt: DatabaseTimestamp) {
         accessStudioDatabase("Set studio session status") {
             queries.setSessionStatus(status, changedAt.epochSeconds, changedAt.nanoseconds, id)
@@ -114,6 +120,7 @@ private fun Studio_session.toSessionDto() = StudioSessionDto(
     DatabaseTimestamp(created_at_seconds, created_at_nanos),
     DatabaseTimestamp(updated_at_seconds, updated_at_nanos),
     parent_session_id,
+    isExpanded = is_expanded == 1L,
 )
 
 private fun StudioSessionDto.toCursor() = DaoPageCursor(updatedAt, id)

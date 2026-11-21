@@ -8,4 +8,5 @@ internal data class ProjectDto(
     val status: String,
     val createdAt: DatabaseTimestamp,
     val updatedAt: DatabaseTimestamp,
+    val isExpanded: Boolean,
 )

@@ -22,5 +22,7 @@ internal interface ProjectRepository {
 
     suspend fun renameTitle(id: ProjectId, title: String)
 
+    suspend fun setExpanded(id: ProjectId, isExpanded: Boolean)
+
     suspend fun setStatus(id: ProjectId, status: ProjectStatus)
 }
