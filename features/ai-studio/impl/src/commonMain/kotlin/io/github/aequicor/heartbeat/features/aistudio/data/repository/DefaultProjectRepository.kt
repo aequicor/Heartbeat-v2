@@ -40,6 +40,9 @@ internal class DefaultProjectRepository(private val dao: ProjectDao) : ProjectRe
     override suspend fun renameTitle(id: ProjectId, title: String) =
         accessStudioRepository { dao.renameTitle(id.value.toString(), title) }
 
+    override suspend fun setExpanded(id: ProjectId, isExpanded: Boolean) =
+        accessStudioRepository { dao.setExpanded(id.value.toString(), isExpanded) }
+
     override suspend fun setStatus(id: ProjectId, status: ProjectStatus) =
         accessStudioRepository { dao.setStatus(id.value.toString(), status.name) }
 }
@@ -52,4 +55,5 @@ private fun ProjectDto.toProject() = Project(
     status = ProjectStatus.valueOf(status),
     createdAt = createdAt.toInstant(),
     updatedAt = updatedAt.toInstant(),
+    isExpanded = isExpanded,
 )

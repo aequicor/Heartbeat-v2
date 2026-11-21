@@ -60,10 +60,41 @@ class HeartbeatDatabaseTest {
         )
         val database = HeartbeatDatabase(second)
 
-        assertEquals(2L, HeartbeatDatabase.Schema.version)
+        assertEquals(3L, HeartbeatDatabase.Schema.version)
         assertEquals("Before restart", database.noteQueries.selectById("n1").executeAsOneOrNull()?.title)
         assertNull(database.noteQueries.selectById("missing").executeAsOneOrNull())
         second.close()
+    }
+
+    @Test
+    fun versionTwoTreeStartsExpandedAndKeepsChangesAfterReopen() {
+        val file = Files.createTempFile("heartbeat-expansion", ".db")
+        val url = "jdbc:sqlite:$file"
+        try {
+            JdbcSqliteDriver(url).use { driver ->
+                HeartbeatDatabase.Schema.migrate(driver, 1, 2)
+                val database = HeartbeatDatabase(driver)
+                database.studioProjectQueries.insertProject("p", "Project", "/project", 1, 0)
+                database.studioSessionQueries.insertSession("root", "p", "Root", 1, 0, null)
+                database.studioSessionQueries.insertSession("child", "p", "Child", 1, 0, "root")
+                driver.execute(null, "PRAGMA user_version = 2", 0)
+            }
+            JdbcSqliteDriver(url, Properties(), HeartbeatDatabase.Schema).use { driver ->
+                val database = HeartbeatDatabase(driver)
+                assertEquals(1L, database.studioProjectQueries.selectProjectById("p").executeAsOne().is_expanded)
+                assertEquals(1L, database.studioSessionQueries.selectSessionById("root").executeAsOne().is_expanded)
+                database.studioProjectQueries.setProjectExpanded(0L, "p")
+                database.studioSessionQueries.setStudioSessionExpanded(0L, "child")
+            }
+            JdbcSqliteDriver(url, Properties(), HeartbeatDatabase.Schema).use { driver ->
+                val database = HeartbeatDatabase(driver)
+                assertEquals(0L, database.studioProjectQueries.selectProjectById("p").executeAsOne().is_expanded)
+                assertEquals(1L, database.studioSessionQueries.selectSessionById("root").executeAsOne().is_expanded)
+                assertEquals(0L, database.studioSessionQueries.selectSessionById("child").executeAsOne().is_expanded)
+            }
+        } finally {
+            Files.deleteIfExists(file)
+        }
     }
 
     @Test

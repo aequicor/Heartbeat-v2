@@ -36,6 +36,40 @@ import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 class StudioRepositoryIntegrationTest {
+
+    @Test
+    fun changingExpansionOnlyUpdatesTheAddressedNode() = runTest {
+        driver().use { driver ->
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
+            val project = assertIs<ProjectCreationResult.Created>(
+                graph.projects.create("Alpha", "/alpha".toPath()),
+            ).project
+            val root = graph.sessions.start(project.id, "Root", Start)
+            val child = graph.sessions.start(project.id, "Child", Later, root.id)
+            val sibling = graph.sessions.start(project.id, "Sibling", Latest)
+            assertEquals(true, project.isExpanded)
+            assertEquals(true, root.isExpanded)
+            assertEquals(true, child.isExpanded)
+
+            graph.sessions.setExpanded(child.id, false)
+            graph.projects.setExpanded(project.id, false)
+            graph.sessions.setExpanded(root.id, false)
+            assertEquals(project.copy(isExpanded = false), graph.projects.list(ProjectStatus.ACTIVE, 1).items.single())
+            assertEquals(root.copy(isExpanded = false), graph.sessions.findById(root.id))
+            assertEquals(
+                listOf(sibling, root.copy(isExpanded = false)),
+                graph.sessions.listRoots(project.id, SessionStatus.ACTIVE, 2).items,
+            )
+            assertEquals(
+                listOf(child.copy(isExpanded = false)),
+                graph.sessions.listChildren(root.id, SessionStatus.ACTIVE, 1).items,
+            )
+            graph.projects.setExpanded(project.id, true)
+            assertEquals(project, graph.projects.findById(project.id))
+            assertEquals(root.copy(isExpanded = false), graph.sessions.findById(root.id))
+        }
+    }
+
     @Test
     fun projectTitlesCanRepeatWhileImmutableNamesStayUnique() = runTest {
         driver().use { driver ->

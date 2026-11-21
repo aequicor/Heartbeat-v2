@@ -11,4 +11,5 @@ internal data class Project(
     val status: ProjectStatus,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val isExpanded: Boolean = true,
 )

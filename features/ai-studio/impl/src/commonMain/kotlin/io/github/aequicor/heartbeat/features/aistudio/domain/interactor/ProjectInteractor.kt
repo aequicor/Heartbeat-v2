@@ -24,5 +24,7 @@ internal class ProjectInteractor(private val repository: ProjectRepository) {
 
     suspend fun renameTitle(id: ProjectId, title: String) = repository.renameTitle(id, title)
 
+    suspend fun setExpanded(id: ProjectId, isExpanded: Boolean) = repository.setExpanded(id, isExpanded)
+
     suspend fun setStatus(id: ProjectId, status: ProjectStatus) = repository.setStatus(id, status)
 }

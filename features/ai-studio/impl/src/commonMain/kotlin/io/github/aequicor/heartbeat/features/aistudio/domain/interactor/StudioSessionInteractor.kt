@@ -36,6 +36,8 @@ internal class StudioSessionInteractor(private val repository: StudioSessionRepo
 
     suspend fun rename(id: StudioSessionId, title: String) = repository.rename(id, title)
 
+    suspend fun setExpanded(id: StudioSessionId, isExpanded: Boolean) = repository.setExpanded(id, isExpanded)
+
     suspend fun setStatus(id: StudioSessionId, status: SessionStatus, changedAt: Instant) =
         repository.setStatus(id, status, changedAt)
 }

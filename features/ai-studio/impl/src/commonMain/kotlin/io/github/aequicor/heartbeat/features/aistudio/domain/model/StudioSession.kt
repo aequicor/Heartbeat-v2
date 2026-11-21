@@ -10,4 +10,5 @@ internal data class StudioSession(
     val createdAt: Instant,
     val updatedAt: Instant,
     val parentSessionId: StudioSessionId? = null,
+    val isExpanded: Boolean = true,
 )
