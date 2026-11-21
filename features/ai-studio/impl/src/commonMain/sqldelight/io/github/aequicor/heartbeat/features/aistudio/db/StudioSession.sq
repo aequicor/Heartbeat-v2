@@ -1,0 +1,78 @@
+CREATE TABLE studio_session (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES studio_project(id),
+    title TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    created_at_seconds INTEGER NOT NULL,
+    created_at_nanos INTEGER NOT NULL,
+    updated_at_seconds INTEGER NOT NULL,
+    updated_at_nanos INTEGER NOT NULL,
+    parent_session_id TEXT
+);
+
+CREATE INDEX studio_session_root_page
+ON studio_session(project_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC)
+WHERE parent_session_id IS NULL;
+
+CREATE INDEX studio_session_child_page
+ON studio_session(parent_session_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);
+
+insertSession:
+INSERT INTO studio_session(
+    id, project_id, title, status,
+    created_at_seconds, created_at_nanos, updated_at_seconds, updated_at_nanos, parent_session_id
+)
+VALUES (:id, :project_id, :title, 'ACTIVE', :sent_seconds, :sent_nanos, :sent_seconds, :sent_nanos, :parent_id);
+
+selectSessionProject:
+SELECT id FROM studio_project WHERE id = :project_id;
+
+selectParentProject:
+SELECT project_id FROM studio_session WHERE id = :parent_id;
+
+selectSessionById:
+SELECT * FROM studio_session WHERE id = :id;
+
+listRootSessions:
+SELECT * FROM studio_session
+WHERE project_id = :project_id AND parent_session_id IS NULL AND status = :status
+  AND (
+      :cursor_id IS NULL
+      OR updated_at_seconds < :cursor_seconds
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos < :cursor_nanos)
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos = :cursor_nanos AND id > :cursor_id)
+  )
+ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
+LIMIT :fetch_limit;
+
+listChildSessions:
+SELECT * FROM studio_session
+WHERE parent_session_id = :parent_id AND status = :status
+  AND (
+      :cursor_id IS NULL
+      OR updated_at_seconds < :cursor_seconds
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos < :cursor_nanos)
+      OR (updated_at_seconds = :cursor_seconds AND updated_at_nanos = :cursor_nanos AND id > :cursor_id)
+  )
+ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
+LIMIT :fetch_limit;
+
+renameSession:
+UPDATE studio_session SET title = :title WHERE id = :id;
+
+setSessionStatus:
+UPDATE studio_session
+SET status = :status,
+    updated_at_seconds = CASE WHEN (:event_seconds > updated_at_seconds
+    OR (:event_seconds = updated_at_seconds AND :event_nanos > updated_at_nanos))
+        THEN :event_seconds ELSE updated_at_seconds END,
+    updated_at_nanos = CASE WHEN (:event_seconds > updated_at_seconds
+    OR (:event_seconds = updated_at_seconds AND :event_nanos > updated_at_nanos))
+        THEN :event_nanos ELSE updated_at_nanos END
+WHERE id = :id AND status != :status;
+
+recordSessionActivity:
+UPDATE studio_session
+SET updated_at_seconds = :event_seconds, updated_at_nanos = :event_nanos
+WHERE id = :id AND (:event_seconds > updated_at_seconds
+    OR (:event_seconds = updated_at_seconds AND :event_nanos > updated_at_nanos));

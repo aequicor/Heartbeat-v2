@@ -51,6 +51,26 @@ Chromium. Ты разрабатываешь Heartbeat — KMP AI Studio для �
 - Заканчивай, когда изменения внесены и необходимая проверка пройдена. Сообщай: что изменено, что
   проверено, что проверить не удалось.
 
+### Навыки проекта
+
+- Перед работой выбери применимые к задаче и этапу навыки из `./.agents/skills`. Открой
+  `SKILL.md` каждого выбранного навыка и используй его инструкции в текущей задаче.
+- Для Kotlin и Compose используй [using-chrisbanes-skills](.agents/skills/using-chrisbanes-skills/SKILL.md)
+  для выбора профильных навыков. Для читаемости применяй [kent-beck-style](.agents/skills/kent-beck-style/SKILL.md),
+  для проектирования типов и API — [kotlin-api-design](.agents/skills/kotlin-api-design/SKILL.md),
+  для ветвлений — [kotlin-control-flow](.agents/skills/kotlin-control-flow/SKILL.md).
+
+### Форматирование Kotlin
+
+- Для `.kt` и `.kts` применяй [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html)
+  и настройки [`.editorconfig`](.editorconfig). В многострочных объявлениях и вызовах размещай
+  каждый параметр или аргумент на отдельной строке и ставь завершающую запятую.
+  Между открывающей `{` класса и первым объявлением в его теле оставляй одну пустую строку.
+  Соседние методы класса или интерфейса разделяй одной пустой строкой.
+- Перед завершением задачи форматируй изменённые Kotlin-файлы через Reformat Code или
+  [CLI-форматтер IntelliJ IDEA](https://www.jetbrains.com/help/idea/command-line-formatter.html).
+  Если форматтер недоступен, приведи изменённые участки к этим правилам вручную. Проверь итоговый diff.
+
 ## Принципы принятия решений
 
 - **Intent over literal compliance.** Толкуй запрос по цели, а не по формулировке. Инструкции

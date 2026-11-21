@@ -1,0 +1,33 @@
+CREATE TABLE studio_project (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    alias TEXT NOT NULL,
+    working_directory TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    created_at_seconds INTEGER NOT NULL,
+    created_at_nanos INTEGER NOT NULL,
+    updated_at_seconds INTEGER NOT NULL,
+    updated_at_nanos INTEGER NOT NULL
+);
+
+CREATE INDEX studio_project_page
+ON studio_project(status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);
+
+CREATE TABLE studio_session (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES studio_project(id),
+    title TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    created_at_seconds INTEGER NOT NULL,
+    created_at_nanos INTEGER NOT NULL,
+    updated_at_seconds INTEGER NOT NULL,
+    updated_at_nanos INTEGER NOT NULL,
+    parent_session_id TEXT
+);
+
+CREATE INDEX studio_session_root_page
+ON studio_session(project_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC)
+WHERE parent_session_id IS NULL;
+
+CREATE INDEX studio_session_child_page
+ON studio_session(parent_session_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);

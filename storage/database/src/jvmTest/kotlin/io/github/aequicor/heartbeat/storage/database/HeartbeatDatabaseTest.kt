@@ -60,7 +60,7 @@ class HeartbeatDatabaseTest {
         )
         val database = HeartbeatDatabase(second)
 
-        assertEquals(1L, HeartbeatDatabase.Schema.version)
+        assertEquals(2L, HeartbeatDatabase.Schema.version)
         assertEquals("Before restart", database.noteQueries.selectById("n1").executeAsOneOrNull()?.title)
         assertNull(database.noteQueries.selectById("missing").executeAsOneOrNull())
         second.close()
@@ -72,6 +72,8 @@ class HeartbeatDatabaseTest {
 
         assertTrue("note" in tables)
         assertTrue("chat" in tables)
+        assertTrue("studio_project" in tables)
+        assertTrue("studio_session" in tables)
         assertTrue("preference" in tables)
     }
 }
