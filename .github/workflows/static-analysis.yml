@@ -147,7 +147,31 @@ jobs:
         env:
           GRADLE_TASK: ${{ matrix.task }}
           HB_GOLDEN_MODE: ${{ matrix.golden-mode }}
-        run: ./gradlew "$GRADLE_TASK" --no-daemon
+        run: |
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          delays=(10 30)
+          for attempt in 1 2 3; do
+            if ./gradlew "$GRADLE_TASK" --no-daemon --console=plain 2>&1 | tee "$log"; then
+              exit 0
+            else
+              statuses=("${PIPESTATUS[@]}")
+            fi
+            if (( statuses[1] != 0 )); then
+              exit "${statuses[1]}"
+            fi
+
+            failure="$(sed -n '/^\* What went wrong:/,/^\* Try:/p' "$log")"
+            if (( attempt == 3 )) ||
+              ! grep -Eq 'Could not (resolve|download|get resource|GET|HEAD)|Could not find .*\.(pom|module|jar)' <<< "$failure" ||
+              ! grep -Eiq 'status code (429|502|503|504)\b|(read|connect) timed out|connection (reset|refused|timed out)|UnknownHostException|temporary failure in name resolution' <<< "$failure"; then
+              exit "${statuses[0]}"
+            fi
+
+            delay="${delays[attempt - 1]}"
+            echo "::warning::Temporary dependency download failure (attempt $attempt/3). Retrying in ${delay}s."
+            sleep "$delay"
+          done
       - name: Publish the result
         if: always()
         env:
