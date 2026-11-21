@@ -17,7 +17,7 @@ private const val SessionLimit = 5
 internal fun AuroraWorkspace.navigation(
     query: String, activity: Map<String, Activity>,
 ): List<NavigationRow> = buildList {
-    val chatsByProject = activeChats().map { chat ->
+    val chatsByProject = activeChats().map(AuroraChat::summary).map { chat ->
         if (chat.parentId in archivedChats) chat.copy(parentId = null) else chat
     }.groupBy(Chat::project)
     val ungrouped = AuroraNavigation.Ungrouped

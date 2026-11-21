@@ -21,7 +21,9 @@ kotlin {
         implementation(libs.kotlinx.coroutines.core)
     }
     sourceSets.jvmTest.dependencies {
+        implementation(project(":core:database"))
         implementation(project(":core:preferences:api"))
+        implementation(libs.sqldelight.sqlite.driver)
         implementation(libs.compose.ui)
         implementation(compose.desktop.currentOs)
         implementation(libs.kotlinx.coroutines.test)

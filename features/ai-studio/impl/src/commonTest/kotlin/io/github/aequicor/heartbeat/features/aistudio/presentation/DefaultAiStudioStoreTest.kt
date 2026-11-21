@@ -5,7 +5,7 @@ package io.github.aequicor.heartbeat.features.aistudio.presentation
 
 import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
 
-import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
+import io.github.aequicor.heartbeat.features.aistudio.domain.repository.ChatWorkspaceRepository
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
@@ -25,13 +25,13 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -80,7 +80,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun failedRestorePreservesStoredDataThroughLaterEdits() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val saved = "{unreadable workspace}"
         data.snapshot.value = saved
         val store = studio(data)
@@ -96,7 +96,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun restoringAProjectChatKeepsSidebarOrder() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val store = studio(data)
         store.dispatch(AiStudioAction.NewProjectChat("Документы"))
         runCurrent()
@@ -109,7 +109,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun missingSelectedChatKeepsTheOtherChats() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val store = studio(data)
         store.dispatch(AiStudioAction.NewChat)
         runCurrent()
@@ -123,7 +123,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun archivesOnlyTheChosenSessionAndPreservesTheActiveDraftAfterRestart() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val store = studio(data)
         val archived = AuroraMock.InitialChat
         val initialMessages = store.screenState.value.messages
@@ -283,7 +283,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun retryingAnswersAfterRestartCompletesTheInterruptedReviewStep() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val firstSession = sessionScope()
         val store = DefaultAiStudioStore(data, firstSession)
         runCurrent()
@@ -415,7 +415,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun restoresTheDraftAnchorAndAttachmentsAcrossSelectionAndRestart() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val firstScope = sessionScope()
         val store = DefaultAiStudioStore(data, firstScope)
         runCurrent()
@@ -526,7 +526,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun restartingDuringThinkingKeepsTheSameEventHistoryAsStopping() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val store = studio(data)
         send(store)
         advance(850)
@@ -544,7 +544,7 @@ class DefaultAiStudioStoreTest {
             waited++
         } while (waited < 1_000)
         assertTrue(waited < 1_000)
-        val checkpoint = TestPreferences(data.snapshot.value)
+        val checkpoint = TestWorkspaceRepository(data.snapshot.value)
         store.dispatch(AiStudioAction.CancelTurn)
         advance(400)
         val stopped = assertIs<Reply>(store.screenState.value.messages.first())
@@ -555,7 +555,7 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun restoresReceivedTextWhenAStreamingTurnIsInterrupted() = runTest {
-        val data = TestPreferences()
+        val data = TestWorkspaceRepository()
         val store = studio(data)
         store.dispatch(AiStudioAction.SetScenario(Scenario.Stream))
         send(store)
@@ -678,7 +678,7 @@ private fun TestScope.awaitQuestions(store: DefaultAiStudioStore) {
     }
     assertIs<Request.Questions>(store.screenState.value.request)
 }
-private fun TestScope.studio(data: TestPreferences = TestPreferences()): DefaultAiStudioStore =
+private fun TestScope.studio(data: TestWorkspaceRepository = TestWorkspaceRepository()): DefaultAiStudioStore =
     DefaultAiStudioStore(data, backgroundScope).also { runCurrent() }
 
 private fun TestScope.sessionScope(): CoroutineScope {
@@ -709,14 +709,13 @@ private fun TestScope.fillAnswers(store: DefaultAiStudioStore) {
     runCurrent()
 }
 
-private class TestPreferences(initial: String = "") : PreferencesStore {
+private class TestWorkspaceRepository(initial: String = "") : ChatWorkspaceRepository<AuroraChat> {
     val snapshot = MutableStateFlow(initial)
 
-    override fun observeString(key: String, default: String) = snapshot
-    override fun observeBoolean(key: String, default: Boolean) = flowOf(default)
-    override fun observeLong(key: String, default: Long) = flowOf(default)
-    override suspend fun putString(key: String, value: String) { snapshot.value = value }
-    override suspend fun putBoolean(key: String, value: Boolean) = Unit
-    override suspend fun putLong(key: String, value: Long) = Unit
-    override suspend fun remove(key: String) { snapshot.value = "" }
+    override suspend fun load(): AuroraWorkspace? =
+        snapshot.value.takeIf { it.isNotEmpty() }?.let { Json.decodeFromString<AuroraWorkspace>(it) }
+
+    override suspend fun save(workspace: AuroraWorkspace) {
+        snapshot.value = Json.encodeToString(workspace)
+    }
 }

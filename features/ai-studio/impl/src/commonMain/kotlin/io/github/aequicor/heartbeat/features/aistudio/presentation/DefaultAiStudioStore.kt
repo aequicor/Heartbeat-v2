@@ -2,7 +2,7 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.presentation
 
-import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
+import io.github.aequicor.heartbeat.features.aistudio.domain.repository.ChatWorkspaceRepository
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
@@ -34,16 +34,14 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 
 /** Workspace commands and mock events are serialized on the component's background scope. */
 internal class DefaultAiStudioStore(
-    private val preferences: PreferencesStore,
+    private val repository: ChatWorkspaceRepository<AuroraChat>,
     private val scope: CoroutineScope,
 ) : AiStudioStore {
     private val commands = Channel<() -> Unit>(Channel.UNLIMITED)
@@ -71,10 +69,6 @@ internal class DefaultAiStudioStore(
     init {
         scope.launch {
             workspace = restore()
-            if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
-                val fallback = workspace.activeChats().firstOrNull()?.id ?: workspace.chats.first().summary.id
-                workspace = workspace.copy(selectedId = fallback)
-            }
             openChat(workspace.selectedId)
             for (command in commands) command()
         }
@@ -154,14 +148,14 @@ internal class DefaultAiStudioStore(
     }
 
     private fun openChat(id: String) {
-        val target = workspace.chats.firstOrNull { it.summary.id == id } ?: return
+        val target = workspace.findChat(id) ?: return
         if (screen.value.chat?.id == id) {
             screen.update { it.copy(chatsVisible = false, navigationFocusId = null) }
             return
         }
         val before = editor.getAndUpdate { Draft(id, target.draft) }
         rememberDraft(before)
-        workspace = workspace.copy(selectedId = id)
+        workspace = workspace.select(id)
         val messages = history(target)
         val turn = turns[id]
         requestRender(turn)
@@ -188,11 +182,8 @@ internal class DefaultAiStudioStore(
 
     private fun newChat(project: String = selected.summary.project) {
         val id = nextId()
-        val entries = workspace.chats.toMutableList()
-        val firstInProject = entries.indexOfFirst { it.summary.project == project }.coerceAtLeast(0)
-        entries.add(firstInProject, AuroraChat(Chat(id, "Новый диалог", project)))
-        workspace = workspace.copy(
-            chats = entries, collapsedNavigation = workspace.collapsedNavigation - (ProjectPrefix + project),
+        workspace = workspace.addChat(AuroraChat(Chat(id, "Новый диалог", project))).copy(
+            collapsedNavigation = workspace.collapsedNavigation - (ProjectPrefix + project),
         )
         openChat(id)
     }
@@ -235,8 +226,9 @@ internal class DefaultAiStudioStore(
     private fun sidebar(query: String) = workspace.navigation(query, turns.mapValues { it.value.activity })
 
     private fun archiveChat(id: String) {
-        if (id in workspace.archivedChats || workspace.chats.none { it.summary.id == id }) return
-        workspace = workspace.copy(archivedChats = workspace.archivedChats + id)
+        val archived = workspace.archive(id)
+        if (archived === workspace) return
+        workspace = archived
         screen.update { current ->
             val removedIndex = current.navigation.indexOfFirst { it.id == id }
             val navigation = sidebar(current.chatSearch)
@@ -251,7 +243,7 @@ internal class DefaultAiStudioStore(
         save()
     }
 
-    private fun matchingChats(query: String): List<Chat> = workspace.activeChats().filter {
+    private fun matchingChats(query: String): List<Chat> = workspace.activeChats().map(AuroraChat::summary).filter {
         it.title.contains(query, ignoreCase = true) || it.project.contains(query, ignoreCase = true)
     }.toList()
 
@@ -392,8 +384,8 @@ internal class DefaultAiStudioStore(
     private fun findMessage(id: String?): Message? = screen.value.messages.firstOrNull { it.id == id }
 
     internal fun nextId(): String {
-        workspace = workspace.copy(serial = workspace.serial + 1)
-        return "aurora-${workspace.serial}"
+        workspace = workspace.advanceSerial()
+        return workspace.generatedId()
     }
 
     internal fun putMessage(chatId: String, message: Message) {
@@ -495,10 +487,10 @@ internal class DefaultAiStudioStore(
 
     internal fun event(command: () -> Unit) = enqueue(command)
 
-    private fun chat(id: String): AuroraChat = workspace.chats.first { it.summary.id == id }
+    private fun chat(id: String): AuroraChat = checkNotNull(workspace.findChat(id))
 
     private fun updateChat(id: String, transform: (AuroraChat) -> AuroraChat) {
-        workspace = workspace.copy(chats = workspace.chats.map { if (it.summary.id == id) transform(it) else it })
+        workspace = workspace.updateChat(id, transform)
     }
 
     private fun history(chat: AuroraChat): List<Message> {
@@ -518,12 +510,7 @@ internal class DefaultAiStudioStore(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun restore(): AuroraWorkspace = try {
-        val data = preferences.observeString(WorkspaceKey).first()
-        if (data.isEmpty()) {
-            AuroraMock.workspace()
-        } else {
-            Json.decodeFromString<AuroraWorkspace>(data).recover().withMockNavigation()
-        }
+        repository.load()?.withMockNavigation()?.recover(AuroraChat::recover) ?: AuroraMock.workspace()
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
@@ -538,7 +525,7 @@ internal class DefaultAiStudioStore(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun persist(snapshot: AuroraWorkspace) {
         try {
-            preferences.putString(WorkspaceKey, Json.encodeToString(snapshot))
+            repository.save(snapshot)
             screen.update { if (it.storageError == SaveError) it.copy(storageError = null) else it }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -550,7 +537,6 @@ internal class DefaultAiStudioStore(
     private fun Set<String>.toggle(id: String) = if (id in this) this - id else this + id
 
     private companion object {
-        const val WorkspaceKey = "workspace_v1"
         const val SaveError = "Не удалось сохранить диалог"
         const val MaxTitleLength = 48
         const val SaveInterval = 150L

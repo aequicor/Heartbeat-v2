@@ -49,7 +49,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
-import io.github.aequicor.heartbeat.features.aistudio.di.DefaultAiStudioStoreFactory
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAgentMessage
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
@@ -241,7 +240,7 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopFigmaParityFixture() = runBlocking<Unit> {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = auroraTestStore(this)
         try {
             val site = "project:Сайт проекта"
             withTimeout(5_000) { store.screenState.first { !it.loading } }
@@ -421,7 +420,7 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopPencilWorkAccess() = runBlocking<Unit> {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = auroraTestStore(this)
         try {
             val state = withTimeout(5_000) { store.screenState.first { !it.loading } }
             val reply = state.messages.filterIsInstance<Reply>().single { it.id == "sample-recovery" }
@@ -455,7 +454,7 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopCompletedReplyBeforeAndAfterDisclosure() = runBlocking {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = auroraTestStore(this)
         try {
             val state = withTimeout(5_000) { store.screenState.first { !it.loading } }
             val reply = state.messages.filterIsInstance<Reply>().single { it.id == "sample-draft" }
