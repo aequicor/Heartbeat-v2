@@ -2,7 +2,10 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JvmVendorSpec
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Properties
+import java.util.zip.ZipFile
 import org.gradle.api.GradleException
 
 plugins {
@@ -162,8 +165,10 @@ compose.desktop {
 
 if (hasDiagramBrowser) {
     val frameworks = packagedJavaHome.parentFile.resolve("Frameworks").takeIf { isMacos }
+    val jcefModule = packagedJavaHome.resolve("jmods/jcef.jmod")
     tasks.matching { it.name == "createDistributable" }.configureEach {
         if (frameworks != null) inputs.dir(frameworks)
+        if (isWindows) inputs.file(jcefModule)
         doLast {
             val images = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
             if (frameworks != null) {
@@ -182,6 +187,22 @@ if (hasDiagramBrowser) {
             } else {
                 val runtime = images.resolve(if (isWindows) "Heartbeat/runtime" else "Heartbeat/lib/runtime")
                 val nativeDirectory = runtime.resolve(if (isWindows) "bin" else "lib")
+                if (isWindows) {
+                    // Compose's jlink task strips the bin section of JCEF along with JVM commands.
+                    val runtimeBin = nativeDirectory.toPath()
+                    ZipFile(jcefModule).use { module ->
+                        for (entry in module.entries()) {
+                            if (!entry.isDirectory && entry.name.startsWith("bin/")) {
+                                val target = runtimeBin.resolve(entry.name.removePrefix("bin/")).normalize()
+                                check(target.startsWith(runtimeBin)) { "Invalid path in jcef.jmod: ${entry.name}" }
+                                Files.createDirectories(target.parent)
+                                module.getInputStream(entry).use { source ->
+                                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+                                }
+                            }
+                        }
+                    }
+                }
                 val requiredFiles = if (isWindows) {
                     listOf("jcef.dll", "libcef.dll", "jcef_helper.exe", "cef_server.exe", "icudtl.dat", "resources.pak")
                 } else {
