@@ -155,9 +155,11 @@ internal class AuroraScrollbar(
             Key.DirectionUp -> fromTop - item
             Key.DirectionDown -> fromTop + item
             else -> return false
+        }.coerceIn(0f, 1f)
+        if (target != fromTop) {
+            onUserScroll()
+            list.auroraScrollToProgress(target.oriented(reverse))
         }
-        onUserScroll()
-        list.auroraScrollToProgress(target.coerceIn(0f, 1f).oriented(reverse))
         true
     } ?: false
 

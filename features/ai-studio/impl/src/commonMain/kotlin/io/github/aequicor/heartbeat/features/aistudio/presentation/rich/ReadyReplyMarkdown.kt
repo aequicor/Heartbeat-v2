@@ -10,18 +10,13 @@ private class ReplyMarkdownBoundary(private val source: String) {
     private var fence: String? = null
     private var pending = source.length
 
+    @Suppress("CyclomaticComplexMethod") // Keep the character dispatch with the scanner loop.
     fun end(): Int {
         while (cursor < source.length) {
             if (cursor == 0 || source[cursor - 1] == '\n') {
                 if (line()) continue
             }
-            token()
-        }
-        return minOf(pending, delimiters.minOfOrNull { it.start } ?: source.length)
-    }
-
-    private fun token() {
-        when (source[cursor]) {
+            when (source[cursor]) {
                 '\\', '!' -> {
                     if (cursor == source.lastIndex) pending = minOf(pending, cursor)
                     cursor = minOf(cursor + if (source[cursor] == '\\') 2 else 1, source.length)
@@ -32,7 +27,9 @@ private class ReplyMarkdownBoundary(private val source: String) {
                 '<' -> angle()
                 '&' -> entity()
                 else -> cursor++
+            }
         }
+        return minOf(pending, delimiters.minOfOrNull { it.start } ?: source.length)
     }
 
     private fun line(): Boolean {
@@ -100,12 +97,26 @@ private class ReplyMarkdownBoundary(private val source: String) {
         val after = source.getOrNull(cursor)
         val intraword = marker.first() == '_' && before?.isLetterOrDigit() == true && after?.isLetterOrDigit() == true
         if (intraword) return
-        val closing = delimiters.indexOfLast { it.marker == marker }
-        if (closing >= 0 && before?.isWhitespace() == false) {
-            delimiters.subList(closing, delimiters.size).clear()
-        } else if (after == null || !after.isWhitespace()) {
-            delimiters += Delimiter(marker, start)
+        val remaining = if (before?.isWhitespace() == false) closeEmphasis(marker) else marker.length
+        if (remaining > 0 && (after == null || !after.isWhitespace())) {
+            delimiters += Delimiter(marker.take(remaining), cursor - remaining)
         }
+    }
+
+    private fun closeEmphasis(marker: String): Int {
+        var remaining = marker.length
+        while (remaining > 0) {
+            val index = delimiters.indexOfLast { it.marker.first() == marker.first() }
+            if (index < 0) break
+            val opening = delimiters[index]
+            val consumed = minOf(remaining, opening.marker.length)
+            delimiters.subList(index, delimiters.size).clear()
+            if (consumed < opening.marker.length) {
+                delimiters += opening.copy(marker = opening.marker.dropLast(consumed))
+            }
+            remaining -= consumed
+        }
+        return remaining
     }
 
     private fun run(): String {

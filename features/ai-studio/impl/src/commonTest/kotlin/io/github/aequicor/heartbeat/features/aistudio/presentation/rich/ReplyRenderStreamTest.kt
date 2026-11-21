@@ -15,6 +15,18 @@ import kotlin.test.assertTrue
 
 class ReplyRenderStreamTest {
     @Test
+    fun completedNestedEmphasisIsPublishedImmediately() {
+        val shown = mutableListOf<LiveText>()
+        val stream = ReplyRenderStream({ _, _ -> error("The first fragment needs no timer") }, shown::add)
+        val source = "Ready **bold *italic***. Next sentence."
+
+        stream.update(Any(), "a", source)
+
+        assertEquals(source, shown.single().text)
+        assertEquals(ReplyMarkdownParser().parse(source, final = true), shown.single().document)
+    }
+
+    @Test
     fun firstReadyTextIsImmediateAndBusyInputDoesNotMoveTheDeadline() = runTest {
         val shown = mutableListOf<LiveText>()
         val callbacks = mutableListOf<() -> Unit>()

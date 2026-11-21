@@ -17,10 +17,6 @@ internal class AuroraDiagramPreviews(
     private val worker: CoroutineDispatcher = Dispatchers.Default,
     private val render: suspend (String, String, Float) -> ImageBitmap = ::renderAuroraDiagram,
 ) {
-    constructor(
-        worker: CoroutineDispatcher = Dispatchers.Default,
-        render: suspend (String, String) -> ImageBitmap,
-    ) : this(worker, { format, source, _ -> render(format, source) })
 
     private data class Source(val format: String, val text: String, val scale: Float)
 

@@ -44,7 +44,7 @@ internal class ReplyRenderStream(
         val text = pending ?: return
         pending = null
         shown = text
-        publish(parser.renderLiveText(checkNotNull(replyId), text))
+        publish(parser.renderReadyText(checkNotNull(replyId), text))
     }
 
     fun finish(source: String): ReplyDocument {

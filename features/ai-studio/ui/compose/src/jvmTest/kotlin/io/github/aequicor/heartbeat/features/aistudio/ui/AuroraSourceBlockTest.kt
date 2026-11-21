@@ -104,7 +104,7 @@ class AuroraSourceBlockTest {
     @Test
     fun fullscreenDiagramCentersAndPansSmallContentWhileTheAppBarStaysFixed() {
         val source = "flowchart LR\nA --> B"
-        val cache = AuroraDiagramPreviews { _, _ -> ImageBitmap(360, 180) }
+        val cache = AuroraDiagramPreviews { _, _, _ -> ImageBitmap(360, 180) }
         val scene = blockScene(
             ReplyBlock.Diagram(0, ReplyDiagramKind.Mermaid, source, closed = true),
             touch = false, previews = cache, caption = windowsCaption(),
@@ -173,7 +173,7 @@ class AuroraSourceBlockTest {
         Canvas(bitmap).drawRect(Rect(780f, 580f, 820f, 620f), Paint().apply { color = Color(0xFF1B5875) })
         val scene = blockScene(
             ReplyBlock.Diagram(0, ReplyDiagramKind.Mermaid, "flowchart LR\nA --> B", closed = true),
-            touch = false, previews = AuroraDiagramPreviews { _, _ -> bitmap }, caption = windowsCaption(),
+            touch = false, previews = AuroraDiagramPreviews { _, _, _ -> bitmap }, caption = windowsCaption(),
         )
         try {
             scene.awaitNode { scene.action("Mermaid") }
@@ -196,7 +196,7 @@ class AuroraSourceBlockTest {
     fun mermaidTogglesSourceAndZoomsTheFullscreenPreview() {
         val source = "flowchart TD\nA[Running] --> B[Stopping]\nB --> C[Stopped]"
         val calls = AtomicInteger()
-        val cache = AuroraDiagramPreviews { format, text ->
+        val cache = AuroraDiagramPreviews { format, text, _ ->
             assertEquals("Mermaid", format)
             assertEquals(source, text)
             calls.incrementAndGet()
@@ -234,7 +234,7 @@ class AuroraSourceBlockTest {
         val source = "@startuml\nRunning --> Stopping\nStopping --> Stopped\n@enduml\n"
         val release = CompletableDeferred<Unit>()
         val calls = AtomicInteger()
-        val cache = AuroraDiagramPreviews { format, text ->
+        val cache = AuroraDiagramPreviews { format, text, _ ->
             assertEquals("PlantUML", format)
             assertEquals(source, text)
             if (calls.incrementAndGet() == 1) {
@@ -266,7 +266,7 @@ class AuroraSourceBlockTest {
     @Test
     fun emptyDiagramShowsItsStateAndNeverStartsRendering() {
         val calls = AtomicInteger()
-        val cache = AuroraDiagramPreviews { _, _ -> calls.incrementAndGet(); diagram() }
+        val cache = AuroraDiagramPreviews { _, _, _ -> calls.incrementAndGet(); diagram() }
         val scene = blockScene(ReplyBlock.Diagram(0, ReplyDiagramKind.Mermaid, "", closed = true), true, cache)
         try {
             scene.awaitNode { scene.text("Нет данных для диаграммы") }
@@ -285,7 +285,7 @@ class AuroraSourceBlockTest {
     fun controlWheelZoomsAroundThePointerAndCenterRestoresTheInitialView() {
         val scene = blockScene(
             ReplyBlock.Diagram(0, ReplyDiagramKind.Mermaid, "flowchart LR\nA --> B", closed = true),
-            touch = false, previews = AuroraDiagramPreviews { _, _ -> ImageBitmap(360, 180) },
+            touch = false, previews = AuroraDiagramPreviews { _, _, _ -> ImageBitmap(360, 180) },
             caption = windowsCaption(),
         )
         try {
@@ -368,7 +368,7 @@ class AuroraSourceBlockTest {
         for ((bitmap, horizontal, vertical) in cases) {
             val scene = blockScene(
                 ReplyBlock.Diagram(0, ReplyDiagramKind.Mermaid, "flowchart LR\nA --> B", closed = true),
-                touch = false, previews = AuroraDiagramPreviews { _, _ -> bitmap }, caption = windowsCaption(),
+                touch = false, previews = AuroraDiagramPreviews { _, _, _ -> bitmap }, caption = windowsCaption(),
             )
             try {
                 scene.awaitNode { scene.action("Mermaid") }

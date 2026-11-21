@@ -26,14 +26,14 @@ class ReplyMarkdownParserTest {
             val parser = ReplyMarkdownParser()
             for (length in 1 until syntax.length) {
                 val input = "См. " + syntax.take(length)
-                assertEquals("См. ", parser.renderLiveText("reply", input).text, input)
+                assertEquals("См. ", readyReplyMarkdown(input), input)
                 assertEquals(ReplyMarkdownParser().parse(input, final = true), parser.parse(input, final = true))
             }
             val complete = "См. $syntax "
-            assertEquals(complete, parser.renderLiveText("reply", complete).text)
+            assertEquals(complete, parser.renderReadyText("reply", complete).text)
         }
         val parser = ReplyMarkdownParser()
-        val ready = parser.renderLiveText("reply", "См. [пример](https://example.com)")
+        val ready = parser.renderReadyText("reply", "См. [пример](https://example.com)")
         assertEquals("https://example.com", assertIs<ReplyBlock.Paragraph>(ready.document?.blocks?.single())
             .lines.single().last().url)
         assertEquals("literal \\* and snake_case ", readyReplyMarkdown("literal \\* and snake_case "))
@@ -42,20 +42,34 @@ class ReplyMarkdownParserTest {
     }
 
     @Test
+    fun nestedEmphasisDoesNotHoldACompletedParagraph() {
+        val examples = listOf(
+            "**bold *italic***", "*italic **bold***", "__bold _italic___", "_italic __bold___",
+            "***both***", "**bold _italic_**", "*italic __bold__*",
+        )
+        for (syntax in examples) {
+            val source = "Ready $syntax. Next paragraph."
+            assertEquals(source, readyReplyMarkdown(source), syntax)
+        }
+        assertEquals("Ready ", readyReplyMarkdown("Ready **bold *unfinished"))
+        assertEquals("Ready ", readyReplyMarkdown("Ready **bold *italic*"))
+    }
+
+    @Test
     fun liveTextDistinguishesLiteralSourceFromMarkdownAndParserFallback() {
         val parser = ReplyMarkdownParser()
-        val plain = parser.renderLiveText("reply", "Review")
+        val plain = parser.renderReadyText("reply", "Review")
         assertEquals("reply", plain.replyId)
         assertEquals("Review", plain.text)
         assertNull(plain.document)
 
-        val markdown = parser.renderLiveText("reply", "Review **complete**")
+        val markdown = parser.renderReadyText("reply", "Review **complete**")
         val paragraph = assertIs<ReplyBlock.Paragraph>(markdown.document?.blocks?.single())
         assertTrue(paragraph.lines.single().last().bold)
-        assertNull(parser.renderLiveText("reply", "Replacement").document)
+        assertNull(parser.renderReadyText("reply", "Replacement").document)
 
         val rejected = "> ".repeat(129) + "Review"
-        assertEquals(rejected, parser.renderLiveText("reply", rejected).document?.plainText)
+        assertEquals(rejected, parser.renderReadyText("reply", rejected).document?.plainText)
     }
 
     @Test

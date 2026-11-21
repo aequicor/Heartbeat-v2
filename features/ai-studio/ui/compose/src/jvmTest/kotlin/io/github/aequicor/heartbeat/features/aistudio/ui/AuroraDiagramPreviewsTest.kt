@@ -33,7 +33,7 @@ class AuroraDiagramPreviewsTest {
     fun inlineAndFullscreenShareIdenticalImagesAndRetryFailedLayouts() = runTest {
         val requests = mutableListOf<String>()
         var fail = true
-        val previews = AuroraDiagramPreviews(StandardTestDispatcher(testScheduler)) { kind, source ->
+        val previews = AuroraDiagramPreviews(StandardTestDispatcher(testScheduler)) { kind, source, _ ->
             requests += "$kind/$source"
             yield()
             if (fail) error("Invalid diagram")
