@@ -112,7 +112,11 @@ class StudioCatalogTest {
         val scope = CoroutineScope(backgroundScope.coroutineContext + Job())
         try {
             val preferences = FakePreferencesStore()
-            preferences.putString("workspace_v1", """{"selectedId":"saved","chats":[{"summary":{"id":"saved","title":"Прежний чат","project":"Heartbeat"},"draft":"черновик"}]}""")
+            preferences.putString("workspace_v1", """
+                {"selectedId":"saved","chats":[
+                  {"summary":{"id":"saved","title":"Прежний чат","project":"Heartbeat"},"draft":"черновик"}
+                ]}
+            """.trimIndent())
             val catalog = StudioCatalog(object : DatabaseConnection { override val driver = driver })
             val engines = Engines()
             val store = DefaultAiStudioStore(preferences, scope, catalog, StudioEngineSessions(engines, catalog))
@@ -153,7 +157,7 @@ class StudioCatalogTest {
         val opened = mutableListOf<String?>()
         var interruptList = false
         override val state = MutableStateFlow<AiEngineState>(AiEngineState.NotInitialized)
-        override val sessions = MutableStateFlow<Map<SessionKey, SessionStatus>>(emptyMap())
+        override val sessions = MutableStateFlow<Map<SessionKey, SessionStatus>>(mapOf())
         override fun dispatch(event: AiEngineEvent) {
             check(event == AiEngineEvent.Connect)
             state.value = AiEngineState.Ready
@@ -164,7 +168,7 @@ class StudioCatalogTest {
             return object : Session {
                 override val key = SessionKey(owner, existing?.id ?: "42", workingDirectory = config.workingDirectory)
                 override val state = MutableStateFlow(SessionState(SessionStatus.Idle,
-                    MessageWindow(emptyList(), MessageWindowCursor(), HistorySyncStatus.AVAILABLE)))
+                    MessageWindow(listOf(), MessageWindowCursor(), HistorySyncStatus.AVAILABLE)))
                 override fun dispatch(event: SessionEvent) = Unit
             }
         }

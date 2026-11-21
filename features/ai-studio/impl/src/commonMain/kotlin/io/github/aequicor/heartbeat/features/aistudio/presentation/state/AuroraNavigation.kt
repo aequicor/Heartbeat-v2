@@ -80,5 +80,7 @@ private fun Chat.row(
         Activity.Running, Activity.Sending, Activity.Stopping -> NavigationStatus.Working
         else -> navigationStatus
     }
-    return NavigationRow(id, title, NavigationKind.Chat, project, depth, expanded, id == selectedId, badge, lastChild, engineId)
+    return NavigationRow(
+        id, title, NavigationKind.Chat, project, depth, expanded, id == selectedId, badge, lastChild, engineId,
+    )
 }

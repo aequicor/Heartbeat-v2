@@ -37,7 +37,7 @@ public data class AiStudioScreenState(
     val storageError: String? = null,
     val subagents: List<Subagent> = listOf(),
     val navigationFocusId: String? = null,
-    val availableEngines: Map<String, String> = emptyMap(),
+    val availableEngines: Map<String, String> = mapOf(),
 ) {
     public data class Draft(val chatId: String? = null, val text: String = "")
     public data class LiveText(

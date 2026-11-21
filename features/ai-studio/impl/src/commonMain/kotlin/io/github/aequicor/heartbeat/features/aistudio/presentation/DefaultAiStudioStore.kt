@@ -24,7 +24,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraTurn
-import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.withMockNavigation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.MorePrefix
@@ -36,29 +35,24 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 /** Workspace commands and mock events are serialized on the component's background scope. */
 internal class DefaultAiStudioStore(
-    private val preferences: PreferencesStore,
+    preferences: PreferencesStore,
     private val scope: CoroutineScope,
     private val catalog: StudioCatalog? = null,
     private val engineSessions: StudioEngineSessions? = null,
 ) : AiStudioStore {
     private val commands = Channel<suspend () -> Unit>(Channel.UNLIMITED)
-    private var selectedSession: Session? = null
-    private var sessionObserver: Job? = null
-    private val imports = mutableMapOf<Pair<String, String>, Job>()
-    private var persistedDetails = emptyMap<String, AuroraChat>()
+    private val selectedSession: Session? get() = engineSessions?.selected
+    private val storage = StudioWorkspaceStorage(preferences, catalog)
     private val loadedChats = mutableSetOf<String>()
     private val saveRequests = Channel<Unit>(Channel.CONFLATED)
     private val snapshots = Channel<AuroraWorkspace>(Channel.CONFLATED)
@@ -111,20 +105,11 @@ internal class DefaultAiStudioStore(
                 val fallback = workspace.activeChats().firstOrNull()?.id.orEmpty()
                 workspace = workspace.copy(selectedId = fallback)
             }
-            persistedDetails = workspace.chats.associateBy { it.summary.id }
             if (workspace.selectedId.isEmpty()) publishCatalog() else openChat(workspace.selectedId)
             if (catalog != null && screen.value.storageError == null) {
-                scope.launch { catalog.changes().collect { enqueue(::refreshCatalog) } }
+                scope.launch { catalog.changes.collect { enqueue(::refreshCatalog) } }
             }
-            for (command in commands) {
-                try {
-                    command()
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Exception) {
-                    screen.update { it.copy(storageError = error.message ?: SaveError) }
-                }
-            }
+            processCommands()
         }
         scope.launch {
             while (saveRequests.receiveCatching().isSuccess) {
@@ -137,6 +122,19 @@ internal class DefaultAiStudioStore(
         }
     }
 
+    @Suppress("TooGenericExceptionCaught") // A failed engine or database operation must not stop the command loop.
+    private suspend fun processCommands() {
+        for (command in commands) {
+            try {
+                command()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                screen.update { it.copy(storageError = error.message ?: SaveError) }
+            }
+        }
+    }
+
     override fun dispatch(action: AiStudioAction) {
         when (action) {
             is AiStudioAction.EditDraft -> {
@@ -146,7 +144,11 @@ internal class DefaultAiStudioStore(
             }
             AiStudioAction.Send -> {
                 val submitted = editor.value
-                enqueue { send(submitted) }
+                enqueue {
+                    if (submitted.chatId != null && submitted.chatId == workspace.selectedId) {
+                        if (selected.summary.nativeId == null) send(submitted) else sendNative(submitted)
+                    }
+                }
             }
             else -> enqueue { handle(action) }
         }
@@ -258,49 +260,32 @@ internal class DefaultAiStudioStore(
     private suspend fun selectChat(id: String) {
         val chat = workspace.chats.find { it.summary.id == id }?.summary ?: return
         if (screen.value.chat?.id != id) {
-            sessionObserver?.cancel()
-            selectedSession = null
+            engineSessions?.clearSelection()
         }
         openChat(id)
         if (chat.engineId != null && selectedSession == null) {
-            val opened = requireNotNull(engineSessions).open(requireNotNull(chat.projectId), chat.engineId, chat.nativeId)
+            val sessions = requireNotNull(engineSessions)
+            val opened = sessions.open(requireNotNull(chat.projectId), chat.engineId, chat.nativeId)
             attachSession(opened)
         }
     }
 
     private fun attachSession(opened: StudioEngineSessions.Opened) {
-        sessionObserver?.cancel()
-        selectedSession = opened.session
-        sessionObserver = scope.launch {
-            opened.session.state.collect { state ->
-                enqueue {
-                    if (selectedSession === opened.session) {
-                        screen.update { it.withSession(state) }
-                    }
-                }
-            }
-        }
-        val key = opened.projectId to opened.engine.key.id
-        if (imports[key]?.isActive == true) return
-        imports[key] = scope.launch {
-            try {
-                engineSessions?.importSessions(opened)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                // Listing is optional. A failed page never invalidates known sessions.
-            }
+        requireNotNull(engineSessions).select(opened, scope) { session, state ->
+            enqueue { if (selectedSession === session) screen.update { it.withSession(state) } }
         }
     }
 
     private fun refreshCatalog() {
-        catalog?.let { workspace = it.load(workspace) }
+        if (catalog != null) workspace = catalog.load(workspace)
         publishCatalog()
     }
 
     private fun publishCatalog() {
         screen.update {
-            it.copy(loading = false, chat = workspace.chats.find { chat -> chat.summary.id == workspace.selectedId }?.summary,
+            it.copy(
+                loading = false, chat = workspace.chats.find { chat -> chat.summary.id == workspace.selectedId }
+                    ?.summary,
                 chats = matchingChats(it.chatSearch), navigation = sidebar(it.chatSearch))
         }
     }
@@ -321,8 +306,7 @@ internal class DefaultAiStudioStore(
                 sessions.open(requireNotNull(projectId), owner, null)
             } else null
             val id = opened?.localId ?: catalog.createLocal(projectId)
-            sessionObserver?.cancel()
-            selectedSession = null
+            engineSessions?.clearSelection()
             workspace = catalog.load(workspace).copy(
                 collapsedNavigation = workspace.collapsedNavigation - (ProjectPrefix + project),
             )
@@ -349,7 +333,8 @@ internal class DefaultAiStudioStore(
     private fun showChats(query: String) {
         screen.update {
             it.copy(
-                chatSearch = query, chats = matchingChats(query), navigation = sidebar(query), navigationFocusId = null,
+                chatSearch = query, chats = matchingChats(query),
+                navigation = sidebar(query), navigationFocusId = null,
             )
         }
     }
@@ -425,26 +410,28 @@ internal class DefaultAiStudioStore(
         save()
     }
 
-    private suspend fun send(draft: Draft) {
-        if (draft.chatId == null || draft.chatId != workspace.selectedId) return
+    private suspend fun sendNative(draft: Draft) {
+        val chat = selected
+        check(chat.attachments.isEmpty()) { "Этот движок принимает только текстовые сообщения" }
+        val text = draft.text.trim()
+        if (text.isEmpty()) return
+        if (selectedSession == null) selectChat(chat.summary.id)
+        val session = requireNotNull(selectedSession)
+        if (session.acceptsPrompt()) {
+            session.dispatch(SessionEvent.SendPrompt(text))
+            val title = if (chat.summary.title == "Новый диалог") text.lineSequence().first().take(MaxTitleLength)
+                else chat.summary.title
+            catalog?.recordActivity(chat.summary.id, title)
+            editor.compareAndSet(draft, draft.copy(text = ""))
+            save()
+        }
+    }
+
+    private fun send(draft: Draft) {
         val chat = selected
         val chatId = chat.summary.id
         if (draft.chatId != chatId || turns.containsKey(chatId)) return
         val text = draft.text.trim()
-        if (chat.summary.nativeId != null) {
-            check(chat.attachments.isEmpty()) { "Этот движок принимает только текстовые сообщения" }
-            if (text.isEmpty()) return
-            if (selectedSession == null) selectChat(chatId)
-            val session = requireNotNull(selectedSession)
-            if (!session.acceptsPrompt()) return
-            session.dispatch(SessionEvent.SendPrompt(text))
-            val title = if (chat.summary.title == "Новый диалог") text.lineSequence().first().take(MaxTitleLength)
-                else chat.summary.title
-            catalog?.recordActivity(chatId, title)
-            editor.compareAndSet(draft, draft.copy(text = ""))
-            save()
-            return
-        }
         if (text.isEmpty() && chat.attachments.isEmpty()) return
         editor.compareAndSet(draft, draft.copy(text = ""))
         updateChat(chat.summary.id) { record ->
@@ -680,12 +667,9 @@ internal class DefaultAiStudioStore(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun restore(): AuroraWorkspace = try {
-        if (catalog == null) {
-            val data = preferences.observeString(WorkspaceKey).first()
-            if (data.isEmpty()) AuroraMock.workspace()
-            else Json.decodeFromString<AuroraWorkspace>(data).recover().withMockNavigation()
-        } else {
-            catalog.load(restoreNavigation(catalog))
+        storage.restore {
+            screen.update { it.copy(storageError = "Не удалось перенести прежние диалоги") }
+            snapshots.close()
         }
     } catch (cancelled: CancellationException) {
         throw cancelled
@@ -695,48 +679,13 @@ internal class DefaultAiStudioStore(
         screen.update {
             it.copy(storageError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются.")
         }
-        if (catalog == null) AuroraMock.workspace() else AuroraWorkspace("", emptyList())
-    }
-
-    private suspend fun restoreNavigation(catalog: StudioCatalog): AuroraWorkspace {
-        val empty = AuroraWorkspace("", emptyList())
-        val saved = preferences.observeString(CatalogWorkspaceKey).first()
-        if (saved.isNotEmpty()) {
-            return try {
-                Json.decodeFromString<AuroraWorkspace>(saved)
-            } catch (_: SerializationException) {
-                empty
-            }
-        }
-        val legacy = preferences.observeString(WorkspaceKey).first()
-        if (legacy.isEmpty()) return empty
-        val previous = try {
-            Json.decodeFromString<AuroraWorkspace>(legacy).recover()
-        } catch (_: SerializationException) {
-            screen.update { it.copy(storageError = "Не удалось перенести прежние диалоги") }
-            snapshots.close()
-            return empty
-        }
-        catalog.importWorkspace(previous)
-        val navigation = previous.navigationSettings()
-        preferences.putString(CatalogWorkspaceKey, Json.encodeToString(navigation))
-        preferences.remove(WorkspaceKey)
-        return navigation
+        if (catalog == null) AuroraMock.workspace() else AuroraWorkspace("", listOf())
     }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun persist(snapshot: AuroraWorkspace) {
         try {
-            if (catalog == null) {
-                preferences.putString(WorkspaceKey, Json.encodeToString(snapshot))
-            } else {
-                val changed = snapshot.chats.filter { it != persistedDetails[it.summary.id] }
-                catalog.transaction {
-                    changed.forEach { catalog.saveDetails(it.summary.id, Json.encodeToString(it)) }
-                }
-                preferences.putString(CatalogWorkspaceKey, Json.encodeToString(snapshot.navigationSettings()))
-                persistedDetails = snapshot.chats.associateBy { it.summary.id }
-            }
+            storage.save(snapshot)
             screen.update { if (it.storageError == SaveError) it.copy(storageError = null) else it }
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -747,12 +696,7 @@ internal class DefaultAiStudioStore(
 
     private fun Set<String>.toggle(id: String) = if (id in this) this - id else this + id
 
-    private fun AuroraWorkspace.navigationSettings() =
-        copy(chats = emptyList(), projects = emptyMap(), archivedChats = emptySet())
-
     private companion object {
-        const val WorkspaceKey = "workspace_v1"
-        const val CatalogWorkspaceKey = "navigation_v2"
         const val SaveError = "Не удалось сохранить диалог"
         const val MaxTitleLength = 48
         const val RenderInterval = 16L

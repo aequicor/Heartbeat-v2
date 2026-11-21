@@ -12,7 +12,7 @@ import okio.Path.Companion.toPath
 
 internal class StudioCatalog(connection: DatabaseConnection) {
     private val queries by lazy { ChatQueries(connection.driver) }
-    fun changes() = queries.catalogChanges().asFlow()
+    val changes get() = queries.catalogChanges().asFlow()
 
     fun openProject(directory: String, name: String): String = queries.transactionWithResult {
         val path = directory.toPath(normalize = true)
@@ -29,7 +29,8 @@ internal class StudioCatalog(connection: DatabaseConnection) {
         Rows(projects, queries.allSessions().executeAsList())
     }
 
-    fun directory(projectId: String): String? = queries.projectDirectory(projectId).executeAsOneOrNull()?.working_directory
+    fun directory(projectId: String): String? =
+        queries.projectDirectory(projectId).executeAsOneOrNull()?.working_directory
 
     fun transaction(block: () -> Unit) = queries.transaction { block() }
 
@@ -42,29 +43,27 @@ internal class StudioCatalog(connection: DatabaseConnection) {
     fun createLocal(projectId: String?): String {
         val id = Uuid.random().toString()
         require(projectId == null || queries.projectDirectory(projectId).executeAsOneOrNull() != null)
-        queries.addSession(id, "Новый диалог", projectId, null, null, now(), null, null)
+        queries.addSession(id, "Новый диалог", projectId, null, null, now, null, null)
         return id
     }
 
     fun recordNative(projectId: String, key: SessionKey, created: Boolean = false): String =
         queries.transactionWithResult {
-            val activity = key.updatedAt?.let(Instant::parseOrNull)?.toEpochMilliseconds() ?: if (created) now() else 0
+            val activity = key.updatedAt?.let(Instant::parseOrNull)?.toEpochMilliseconds() ?: if (created) now else 0
             val local = queries.findNative(key.engine.id, key.id).executeAsOneOrNull()
             if (local != null) {
                 queries.updateNative(activity, key.title, key.engine.id, key.id)
                 local
             } else {
                 val id = Uuid.random().toString()
-                queries.addSession(id, key.title ?: "Новый диалог", projectId, key.engine.id, key.id, activity, null, null)
+                queries.addSession(
+                    id, key.title ?: "Новый диалог", projectId, key.engine.id, key.id, activity, null, null,
+                )
                 id
             }
         }
 
-    fun recordPage(projectId: String, keys: List<SessionKey>) = queries.transaction {
-        keys.forEach { recordNative(projectId, it) }
-    }
-
-    fun recordActivity(id: String, title: String) = queries.updateActivity(title, now(), id)
+    fun recordActivity(id: String, title: String) = queries.updateActivity(title, now, id)
 
     fun archive(id: String) = queries.archive(id)
 
@@ -72,5 +71,5 @@ internal class StudioCatalog(connection: DatabaseConnection) {
 
     fun saveDetails(id: String, details: String) = queries.updateDetails(details, id)
 
-    private fun now() = Clock.System.now().toEpochMilliseconds()
+    private val now get() = Clock.System.now().toEpochMilliseconds()
 }

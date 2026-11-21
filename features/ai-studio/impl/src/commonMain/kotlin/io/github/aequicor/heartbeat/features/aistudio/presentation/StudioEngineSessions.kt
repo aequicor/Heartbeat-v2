@@ -7,13 +7,45 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
 import io.github.aequicor.heartbeat.features.aistudio.data.StudioCatalog
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 internal class StudioEngineSessions(private val facade: AiEngineFacade, private val catalog: StudioCatalog) {
+    private var observer: Job? = null
+    private val imports = mutableMapOf<Pair<String, String>, Job>()
+    var selected: Session? = null
+        private set
+
+    fun clearSelection() {
+        observer?.cancel()
+        selected = null
+    }
+
+    fun select(opened: Opened, scope: CoroutineScope, onState: (Session, SessionState) -> Unit) {
+        observer?.cancel()
+        selected = opened.session
+        observer = scope.launch { opened.session.state.collect { onState(opened.session, it) } }
+        val key = opened.projectId to opened.engine.key.id
+        if (imports[key]?.isActive == true) return
+        imports[key] = scope.launch {
+            try {
+                importSessions(opened)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Listing is optional. A failed page never invalidates known sessions.
+            }
+        }
+    }
+
     val availableEngines get() = facade.availableEngines
 
     fun defaultEngineId(): String? = facade.availableEngines.value.singleOrNull()?.id
@@ -46,13 +78,15 @@ internal class StudioEngineSessions(private val facade: AiEngineFacade, private 
     }
 
     /** Import only through the engine that has already opened a working session. */
-    suspend fun importSessions(opened: Opened) {
+    private suspend fun importSessions(opened: Opened) {
         val seen = mutableSetOf<String>()
         var cursor: String? = null
         do {
             val config = SessionListConfig.ByProject(opened.projectId, cursor, opened.directory)
             val page = opened.engine.getListSessions(config)
-            catalog.recordPage(opened.projectId, page.sessions)
+            catalog.transaction {
+                page.sessions.forEach { catalog.recordNative(opened.projectId, it) }
+            }
             cursor = page.nextCursor
         } while (cursor != null && seen.add(cursor))
     }
