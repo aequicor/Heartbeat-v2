@@ -64,7 +64,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aienginefacade.presentation.engines.EngineSettingsScreenAction as Action
 import io.github.aequicor.heartbeat.features.aienginefacade.presentation.engines.EngineSettingsScreenState as State
 import io.github.aequicor.heartbeat.features.aienginefacade.ui.resources.ic_acp_agent
-import io.github.aequicor.heartbeat.features.aienginefacade.ui.resources.ic_settings_back
+import io.github.aequicor.heartbeat.designsystem.resources.Res as DesignRes
+import io.github.aequicor.heartbeat.designsystem.resources.ic_settings_back
 import io.github.aequicor.heartbeat.features.aienginefacade.ui.resources.ic_settings_chat
 import io.github.aequicor.heartbeat.features.aienginefacade.ui.resources.ic_settings_trash
 import io.github.aequicor.heartbeat.features.aienginefacade.ui.resources.Res
@@ -190,7 +191,7 @@ private fun EngineListToolbar(
                 SettingsButton(
                     "", closeSearch, Modifier.width(Layout.fieldHeight), description = "Закрыть поиск движков",
                 ) {
-                    SettingsIcon(Res.drawable.ic_settings_back, it)
+                    SettingsIcon(DesignRes.drawable.ic_settings_back, it)
                 }
                 val focus = remember { FocusRequester() }
                 SettingsInput(

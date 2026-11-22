@@ -14,6 +14,6 @@ public class EngineSettingsComponentFactoryImpl(
     @Named("engine-settings-ui") private val dispatcher: CoroutineDispatcher,
 ) : EngineSettingsComponentFactory {
 
-    override fun create(context: ComponentContext, onClose: () -> Unit): EngineSettingsComponent =
-        context.instanceKeeper.getOrCreate { EngineSettingsComponentImpl(factory, dispatcher, onClose) }
+    override fun getOrCreate(context: ComponentContext): EngineSettingsComponent =
+        context.instanceKeeper.getOrCreate { EngineSettingsComponentImpl(factory, dispatcher) }
 }

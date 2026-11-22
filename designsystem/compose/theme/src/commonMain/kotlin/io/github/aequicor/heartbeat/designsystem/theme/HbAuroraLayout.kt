@@ -47,6 +47,9 @@ object HbAuroraLayout {
     val ComposerMaxText = 160.dp
     val ParameterMaxWidth = 220.dp
     val SidebarWithGap = 288.dp
+    val SettingsRowHeight = 40.dp
+    val SettingsSearchWidth = 484.dp
+    val SettingsNavigationWidth = 244.dp
     val NavigationWidth = 272.dp
     val NavigationHeading = 36.dp
     val NavigationRow = 28.dp

@@ -4,9 +4,8 @@ import androidx.compose.ui.unit.dp
 
 object HbEngineSettingsLayout {
 
-    val navigationWidth = 244.dp
     val listWidth = 312.dp
-    val threePaneBreakpoint = 1040.dp
+    val twoPaneBreakpoint = 796.dp
     val editorInset = 48.dp
     val fieldHeight = 36.dp
     val actionHeight = 40.dp
@@ -21,7 +20,6 @@ object HbEngineSettingsLayout {
     val browseWidth = 144.dp
     val separatorWidth = 154.dp
     val addVariableWidth = 169.dp
-    val searchWidth = 484.dp
     val cancelWidth = 90.dp
     val deleteWidth = 96.dp
     val decisionWidth = 432.dp

@@ -4,5 +4,5 @@ import com.arkivanov.decompose.ComponentContext
 
 public fun interface EngineSettingsComponentFactory {
 
-    public fun create(context: ComponentContext, onClose: () -> Unit): EngineSettingsComponent
+    public fun getOrCreate(context: ComponentContext): EngineSettingsComponent
 }
