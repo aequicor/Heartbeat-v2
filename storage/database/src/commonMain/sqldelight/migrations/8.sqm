@@ -1,0 +1,133 @@
+-- Version 1 had a standalone chat(id, title). Version 8 stores the screen history in
+-- studio_session.workspace_payload. Its Kotlin serializer imports the payload on first open.
+CREATE TABLE IF NOT EXISTS chat (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL);
+ALTER TABLE chat RENAME TO old_chat;
+CREATE TABLE message_revision (
+    revision_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    parent_revision_id INTEGER REFERENCES message_revision(revision_id),
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    status TEXT NOT NULL CHECK (status IN ('draft', 'completed', 'stopped', 'error')),
+    created_at INTEGER NOT NULL,
+    display_id TEXT NOT NULL,
+    presentation TEXT NOT NULL,
+    UNIQUE (message_id, revision_id)
+);
+
+CREATE INDEX revision_display_id ON message_revision(display_id);
+
+CREATE TABLE chat (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL UNIQUE REFERENCES studio_session(id) ON DELETE CASCADE,
+    engine_id TEXT,
+    model_name TEXT,
+    reasoning_level TEXT,
+    engine_session_id TEXT,
+    engine_context_stale INTEGER NOT NULL DEFAULT 0 CHECK (engine_context_stale IN (0, 1)),
+    source_chat_id TEXT REFERENCES chat(id) ON DELETE SET NULL,
+    source_revision_id INTEGER REFERENCES message_revision(revision_id)
+);
+
+CREATE TABLE chat_entry (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    revision_id INTEGER NOT NULL,
+    predates_edit INTEGER NOT NULL DEFAULT 0 CHECK (predates_edit IN (0, 1)),
+    PRIMARY KEY (chat_id, position),
+    UNIQUE (chat_id, message_id),
+    FOREIGN KEY (message_id, revision_id) REFERENCES message_revision(message_id, revision_id)
+);
+
+CREATE INDEX chat_entry_revision ON chat_entry(revision_id);
+
+CREATE TABLE attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    mime_type TEXT,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    storage_ref TEXT NOT NULL,
+    presentation TEXT,
+    inline_text TEXT
+);
+
+CREATE INDEX attachment_presentation ON attachment(presentation);
+
+CREATE TABLE message_part (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    revision_id INTEGER NOT NULL REFERENCES message_revision(revision_id) ON DELETE CASCADE,
+    parent_part_id INTEGER REFERENCES message_part(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('text', 'step', 'reasoning', 'tool_call', 'attachment')),
+    title TEXT,
+    status TEXT,
+    body TEXT,
+    tool_call_id TEXT,
+    attachment_id TEXT REFERENCES attachment(id),
+    presentation TEXT,
+    UNIQUE (revision_id, position)
+);
+
+CREATE TRIGGER check_message_revision_parent AFTER INSERT ON message_revision
+WHEN EXISTS (
+    SELECT 1 FROM message_revision child JOIN message_revision parent ON parent.revision_id = child.parent_revision_id
+    WHERE child.revision_id = last_insert_rowid()
+      AND (child.message_id != parent.message_id OR child.revision_id = parent.revision_id)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid message_revision parent');
+END;
+
+CREATE TRIGGER keep_message_revision_identity BEFORE UPDATE OF revision_id, message_id, parent_revision_id ON message_revision
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable message_revision identity');
+END;
+
+CREATE TRIGGER check_message_part_parent AFTER INSERT ON message_part
+WHEN EXISTS (
+    SELECT 1 FROM message_part child JOIN message_part parent ON parent.id = child.parent_part_id
+    WHERE child.id = last_insert_rowid()
+      AND (child.revision_id != parent.revision_id OR child.id = parent.id)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid message_part parent');
+END;
+
+CREATE TRIGGER keep_message_part_identity BEFORE UPDATE OF id, revision_id, parent_part_id ON message_part
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable message_part identity');
+END;
+
+CREATE TABLE last_chat_config (
+    user_id TEXT NOT NULL PRIMARY KEY,
+    engine_id TEXT NOT NULL,
+    model_name TEXT,
+    reasoning_level TEXT
+);
+
+-- Standalone chats may have non-UUID IDs. Keep their chat IDs and give their studio sessions
+-- valid UUIDs so the existing project/session navigation can open them.
+CREATE TEMPORARY TABLE chat_session_mapping AS
+SELECT old_chat.id AS chat_id, old_chat.title,
+       coalesce(studio_session.id, lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) ||
+           '-4' || substr(lower(hex(randomblob(2))), 2) || '-8' || substr(lower(hex(randomblob(2))), 2) ||
+           '-' || lower(hex(randomblob(6)))) AS session_id
+FROM old_chat LEFT JOIN studio_session ON studio_session.id = old_chat.id;
+
+INSERT INTO studio_session(id, project_id, title, status, created_at_seconds, created_at_nanos,
+                           updated_at_seconds, updated_at_nanos)
+SELECT session_id, '00000000-0000-0000-0000-000000000000', title, 'ACTIVE', 0, 0, 0, 0
+FROM chat_session_mapping
+WHERE NOT EXISTS (SELECT 1 FROM studio_session WHERE id = chat_session_mapping.session_id);
+
+INSERT INTO chat(id, session_id)
+SELECT coalesce(m.chat_id, s.id), s.id FROM studio_session s
+LEFT JOIN chat_session_mapping m ON m.session_id = s.id;
+
+DROP TABLE chat_session_mapping;
+DROP TABLE old_chat;
+
+CREATE TRIGGER create_session_chat AFTER INSERT ON studio_session
+BEGIN
+    INSERT INTO chat(id, session_id) SELECT id, id FROM studio_session WHERE rowid = last_insert_rowid();
+END;

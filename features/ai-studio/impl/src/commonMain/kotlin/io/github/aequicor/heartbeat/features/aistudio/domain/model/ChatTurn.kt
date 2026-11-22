@@ -1,0 +1,13 @@
+package io.github.aequicor.heartbeat.features.aistudio.domain.model
+
+internal data class ChatTurn(
+    val user: ChatHistoryEntry.User,
+    val reply: ChatHistoryEntry.Reply? = null,
+    val permission: Permission? = null,
+    val running: Boolean = true,
+) {
+
+    data class Permission(val id: String, val title: String, val options: List<Option>)
+
+    data class Option(val id: String, val label: String, val kind: String)
+}

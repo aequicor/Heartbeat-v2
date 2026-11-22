@@ -56,8 +56,8 @@ import androidx.compose.ui.unit.offset
 import io.github.aequicor.heartbeat.designsystem.components.HbAuroraOutline
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
 
 internal class AuroraWorkAccess(startedLive: Boolean) {
     val requester = FocusRequester()

@@ -41,9 +41,9 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
 import kotlinx.coroutines.CoroutineScope
 import kotlin.math.roundToInt
 

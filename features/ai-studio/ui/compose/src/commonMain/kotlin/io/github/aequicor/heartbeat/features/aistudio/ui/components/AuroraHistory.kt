@@ -51,14 +51,14 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Delivery
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
@@ -205,7 +205,7 @@ internal fun AuroraUserBubble(
         Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
             user.files.forEach { file ->
                 AuroraControl(
-                    { onAction(AiStudioAction.OpenFile(file.id)) }, touch = touch,
+                    { onAction(AiStudioAction.OpenFile(file.openId)) }, touch = touch,
                     background = Color.Transparent, round = false,
                 ) {
                     AuroraFileLabel(file, Modifier.padding(vertical = AuroraLayout.SmallGap))

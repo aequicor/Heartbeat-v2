@@ -68,7 +68,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyAlignment
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyAlignment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

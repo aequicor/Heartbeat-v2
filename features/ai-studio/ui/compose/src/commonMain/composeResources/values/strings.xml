@@ -57,4 +57,6 @@
     <string name="session_in_project">%1$s, %2$s</string>
     <string name="session_menu_in_project">Меню диалога «%1$s», проект %2$s</string>
     <string name="settings">Настройки</string>
+    <string name="chat_attachment_loading">Читаем файл…</string>
+    <string name="chat_attachment_error">Не удалось прикрепить файл. Выберите текстовый файл UTF-8 размером до 1 МБ.</string>
 </resources>

@@ -55,8 +55,8 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Request
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Request
 
 @Composable
 internal fun AuroraRequestNavigation(panel: Request.Questions, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
@@ -218,8 +218,10 @@ internal fun AuroraPermissionActions(
             verticalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
         ) {
             val button = if (stacked) Modifier.fillMaxWidth() else Modifier
-            AuroraRequestButton("Разрешить один раз", { onAction(AiStudioAction.AnswerPermission(request.id, true)) },
-                touch, button, primary = true, centered = stacked)
+            if (request.allowOnce) {
+                AuroraRequestButton("Разрешить один раз", { onAction(AiStudioAction.AnswerPermission(request.id, true)) },
+                    touch, button, primary = true, centered = stacked)
+            }
             AuroraRequestButton("Отклонить", { onAction(AiStudioAction.AnswerPermission(request.id, false)) },
                 touch, button, centered = stacked)
         }

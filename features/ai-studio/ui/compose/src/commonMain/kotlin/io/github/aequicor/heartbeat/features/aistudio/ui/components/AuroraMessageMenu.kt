@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -69,12 +69,12 @@ import io.github.aequicor.heartbeat.designsystem.components.HbMenuPresentation
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Delivery
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
 import kotlin.math.roundToInt
 
 @Composable
@@ -448,7 +448,11 @@ private fun auroraMessageActions(
                 add(HbMenuAction("Редактировать", { onAction(AiStudioAction.EditMessage(message.id)) },
                     glyph = HbIconGlyph.Pencil))
             }
-            if (message.failed) {
+            val retryAllowed = when (message) {
+                is User -> message.retryAllowed
+                is Reply -> message.retryAllowed
+            }
+            if (message.failed && retryAllowed) {
                 add(HbMenuAction("Повторить отправку", { onAction(AiStudioAction.Retry(message.id)) },
                     glyph = HbIconGlyph.Retry, destructive = true))
             }

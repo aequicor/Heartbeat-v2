@@ -15,11 +15,12 @@ internal class AcpAiEngineProvider(
     private val scope: CoroutineScope,
     private val projectDirectory: suspend (projectId: String) -> Path?,
     private val currentKey: () -> AiEngineKey = { key },
+    private val ungroupedDirectory: (() -> Path)? = null,
 ) : AiEngineProvider {
 
     init {
         require(key.connection == AiEngineConnection.ACP) { "An ACP engine key is required" }
     }
 
-    override fun create(): AiEngine = AcpAiEngine(currentKey, launch, scope, projectDirectory)
+    override fun create(): AiEngine = AcpAiEngine(currentKey, launch, scope, projectDirectory, ungroupedDirectory)
 }

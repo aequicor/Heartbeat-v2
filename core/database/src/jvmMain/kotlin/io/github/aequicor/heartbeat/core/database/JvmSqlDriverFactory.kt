@@ -20,7 +20,7 @@ public class JvmSqlDriverFactory(
         databaseFile.parentFile?.mkdirs()
         return JdbcSqliteDriver(
             "jdbc:sqlite:${databaseFile.absolutePath}",
-            Properties(),
+            Properties().apply { setProperty("foreign_keys", "true") },
             schema,
         )
     }

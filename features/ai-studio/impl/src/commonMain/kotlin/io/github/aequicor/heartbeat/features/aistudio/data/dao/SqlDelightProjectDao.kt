@@ -6,13 +6,17 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ProjectDto
+import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioProjectQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Studio_project
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 internal class SqlDelightProjectDao(
     private val connection: DatabaseConnection,
+    private val ioDispatcher: CoroutineDispatcher,
     private val clock: Clock = Clock.System,
 ) : ProjectDao {
 
@@ -94,12 +98,13 @@ internal class SqlDelightProjectDao(
         }
     }
 
-    override suspend fun delete(id: String) {
+    override suspend fun delete(id: String): Unit = withContext(ioDispatcher) {
         accessStudioDatabase("Delete project") {
             val projectQueries = queries
             projectQueries.transaction {
                 projectQueries.deleteProjectSessions(id)
                 projectQueries.deleteProject(id)
+                ChatQueries(connection.driver).clearUnreferencedHistory()
             }
         }
     }

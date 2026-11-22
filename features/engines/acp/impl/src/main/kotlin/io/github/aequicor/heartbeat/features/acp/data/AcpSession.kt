@@ -25,6 +25,8 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTurn
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSettings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +35,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(UnstableApi::class)
 internal class AcpSession(
@@ -43,6 +46,7 @@ internal class AcpSession(
     private val replay: Boolean,
     private val onStatus: (SessionStatus) -> Unit,
 ) : Session {
+
     private data class Permission(
         val request: PendingPermission,
         val answer: CompletableDeferred<RequestPermissionOutcome> = CompletableDeferred(),
@@ -52,12 +56,13 @@ internal class AcpSession(
     private val id = SessionId(initialKey.id)
     private val timeline = AcpTimeline()
     private val permissions = linkedMapOf<String, Permission>()
-    private var permissionId = 0L
     private var status: SessionStatus = SessionStatus.Unavailable
     private var history = if (replay) HistorySyncStatus.LOADING else HistorySyncStatus.LOCAL_ONLY
     private var prompt: Job? = null
     private var cancelling = false
+    private var turn: SessionTurn? = null
     private var terminated = false
+    val configuration = AcpSessionSettings(id, protocol, lock, ::publish)
 
     @Volatile
     private var sessionKey = initialKey
@@ -70,19 +75,22 @@ internal class AcpSession(
             return SessionKey(engine, current.id, current.title, current.workingDirectory, current.updatedAt)
         }
 
-    private val sessionState = MutableStateFlow(snapshot())
+    private val sessionState = MutableStateFlow(snapshot)
     override val state = sessionState.asStateFlow()
 
     override fun dispatch(event: SessionEvent) {
         synchronized(lock) {
             when (event) {
-                is SessionEvent.SendPrompt -> sendPrompt(event.text)
+                is SessionEvent.SendPrompt -> sendPrompt(event)
                 SessionEvent.Cancel -> cancel()
                 is SessionEvent.AnswerPermission -> answerPermission(event)
                 SessionEvent.LoadPreviousPartition, SessionEvent.LoadNextPartition -> Unit
             }
         }
     }
+
+    override suspend fun selectSetting(id: String, value: String): SessionSettings =
+        configuration.select(id, value) { check(!terminated && status == SessionStatus.Idle) }
 
     fun opened() = synchronized(lock) {
         if (replay) history = HistorySyncStatus.AVAILABLE
@@ -98,7 +106,11 @@ internal class AcpSession(
                     // Live user prompts are recorded when sent. User chunks supply replay history.
                     if (status != SessionStatus.Running) timeline.userChunk(update)
                 }
-                is SessionUpdate.AgentMessageChunk -> timeline.agentChunk(update)
+                is SessionUpdate.ConfigOptionUpdate -> return@synchronized configuration.update(update.configOptions)
+                is SessionUpdate.AgentMessageChunk -> timeline.agentChunk(update.content, update.messageId?.value)
+                is SessionUpdate.AgentThoughtChunk -> timeline.agentChunk(
+                    update.content, update.messageId?.value, reasoning = true,
+                )
                 is SessionUpdate.ToolCall -> timeline.toolCall(update)
                 is SessionUpdate.ToolCallUpdate -> timeline.toolCallUpdate(update)
                 is SessionUpdate.SessionInfoUpdate -> {
@@ -123,7 +135,7 @@ internal class AcpSession(
                 return RequestPermissionResponse(RequestPermissionOutcome.Cancelled)
             }
             val tool = timeline.toolCallUpdate(request.toolCall)
-            val requestId = (++permissionId).toString()
+            val requestId = UUID.randomUUID().toString()
             Permission(
                 PendingPermission(
                     requestId,
@@ -149,6 +161,10 @@ internal class AcpSession(
     fun terminate(finalStatus: SessionStatus, cancelTurn: Boolean = false) = synchronized(lock) {
         if (cancelTurn) cancel()
         terminated = true
+        val currentTurn = turn
+        if (currentTurn?.status == SessionTurn.Status.Running) {
+            turn = currentTurn.copy(status = SessionTurn.Status.Failed)
+        }
         status = finalStatus
         clearPermissions()
         prompt?.cancel()
@@ -156,17 +172,21 @@ internal class AcpSession(
     }
 
     @Suppress("TooGenericExceptionCaught") // The session reports RPC and transport failures through its state.
-    private fun sendPrompt(text: String) {
-        if (text.isBlank() || (status != SessionStatus.Idle && status !is SessionStatus.Failed)) return
+    private fun sendPrompt(event: SessionEvent.SendPrompt) {
+        if (status != SessionStatus.Idle && status !is SessionStatus.Failed) return
+        val fragments = listOf(event.text).filter(String::isNotBlank) + event.attachments
+        if (fragments.isEmpty()) return
         status = SessionStatus.Running
         cancelling = false
-        timeline.userPrompt(text)
+        timeline.userPrompt(event.text)
+        turn = event.turnId?.let { SessionTurn(it, SessionTurn.Status.Running) }
         publish()
         prompt = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             var finalStatus: SessionStatus = SessionStatus.Idle
             var cancelled = false
             try {
-                val response = V1.SessionPrompt(protocol, PromptRequest(id, listOf(ContentBlock.Text(text))))
+                val content = fragments.map { ContentBlock.Text(it) }
+                val response = V1.SessionPrompt(protocol, PromptRequest(id, content))
                 cancelled = response.stopReason == StopReason.CANCELLED
             } catch (error: CancellationException) {
                 finalStatus = SessionStatus.Unavailable
@@ -179,6 +199,12 @@ internal class AcpSession(
                         if (cancelled) timeline.cancelTools()
                         timeline.breakMessage()
                         status = finalStatus
+                        val outcome = when {
+                            cancelled -> SessionTurn.Status.Stopped
+                            finalStatus == SessionStatus.Idle -> SessionTurn.Status.Completed
+                            else -> SessionTurn.Status.Failed
+                        }
+                        turn = turn?.copy(status = outcome)
                         clearPermissions()
                         publish()
                     }
@@ -195,6 +221,7 @@ internal class AcpSession(
                 V1.SessionCancel(protocol, CancelNotification(id))
             } catch (error: Exception) {
                 status = SessionStatus.Failed(error.failureReason())
+                turn = turn?.copy(status = SessionTurn.Status.Failed)
                 prompt?.cancel()
             } finally {
                 clearPermissions()
@@ -217,14 +244,20 @@ internal class AcpSession(
         pending.forEach { it.answer.complete(RequestPermissionOutcome.Cancelled) }
     }
 
-    private fun snapshot(): SessionState {
-        val pending = permissions.values.map(Permission::request)
-        val effectiveStatus = if (pending.isEmpty()) status else SessionStatus.AwaitingPermission(pending)
-        return SessionState(effectiveStatus, MessageWindow(timeline.items, MessageWindowCursor(), history))
-    }
+    private val snapshot: SessionState
+        get() {
+            val pending = permissions.values.map(Permission::request)
+            val effectiveStatus = if (pending.isEmpty()) status else SessionStatus.AwaitingPermission(pending)
+            return SessionState(
+                status = effectiveStatus,
+                messages = MessageWindow(timeline.items, MessageWindowCursor(), history),
+                settings = configuration.current,
+                turn = turn,
+            )
+        }
 
     private fun publish() {
-        val current = snapshot()
+        val current = snapshot
         sessionState.value = current
         onStatus(current.status)
     }

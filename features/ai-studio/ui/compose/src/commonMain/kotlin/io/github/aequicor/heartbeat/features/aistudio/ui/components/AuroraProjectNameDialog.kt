@@ -29,8 +29,8 @@ import io.github.aequicor.heartbeat.designsystem.components.HbDialog
 import io.github.aequicor.heartbeat.designsystem.components.HbTextField
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.cancel_project_registration
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.create_project

@@ -19,6 +19,11 @@ public interface DesktopDispatcherBindings {
         public fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
 
         @Provides
+        @Named("studio-default")
+        @Suppress("InjectDispatcher")
+        public fun provideStudioDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+        @Provides
         @Named("engine-settings-default")
         @Suppress("InjectDispatcher")
         public fun provideEngineSettingsDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default

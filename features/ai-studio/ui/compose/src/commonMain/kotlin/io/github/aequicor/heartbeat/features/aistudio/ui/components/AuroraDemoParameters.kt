@@ -3,8 +3,8 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuEntry
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuSeparator
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Scenario
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Scenario
 
 internal object AuroraDemoParameters {
     const val Engine = "Claude Code"

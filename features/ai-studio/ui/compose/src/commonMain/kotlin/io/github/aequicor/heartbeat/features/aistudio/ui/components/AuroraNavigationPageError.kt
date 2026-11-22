@@ -27,9 +27,9 @@ import androidx.compose.ui.unit.Dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationLoadError
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationRow
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationLoadError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationRow
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.navigation_copy_failed
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.navigation_copy_logs

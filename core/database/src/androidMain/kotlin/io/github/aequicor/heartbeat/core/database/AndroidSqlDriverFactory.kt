@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.core.database
 
 import android.content.Context
+import androidx.sqlite.db.SupportSQLiteDatabase
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.db.SqlSchema
@@ -19,5 +20,14 @@ public class AndroidSqlDriverFactory(
     override fun create(
         databaseName: String,
         schema: SqlSchema<QueryResult.Value<Unit>>,
-    ): SqlDriver = AndroidSqliteDriver(schema, context, databaseName)
+    ): SqlDriver = AndroidSqliteDriver(
+        schema, context, databaseName,
+        callback = object : AndroidSqliteDriver.Callback(schema) {
+
+            override fun onConfigure(db: SupportSQLiteDatabase) {
+                super.onConfigure(db)
+                db.setForeignKeyConstraintsEnabled(true)
+            }
+        },
+    )
 }

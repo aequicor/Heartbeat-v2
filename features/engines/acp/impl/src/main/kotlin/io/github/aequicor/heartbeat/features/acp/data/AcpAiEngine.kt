@@ -45,6 +45,7 @@ internal class AcpAiEngine(
     private val launch: suspend () -> AcpProviderFactory.Launch,
     parentScope: CoroutineScope,
     private val projectDirectory: suspend (String) -> Path?,
+    private val ungroupedDirectory: (() -> Path)? = null,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : AiEngine {
     private val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
@@ -169,9 +170,10 @@ internal class AcpAiEngine(
     }
 
     private suspend fun openSession(active: AcpConnection, config: SessionConfig, existing: SessionKey?): AcpSession {
-        val directory = requireNotNull(config.workingDirectory ?: existing?.workingDirectory) {
-            "A working directory is required to open an ACP session"
-        }.let { Path.of(it).absolute() }
+        val requested = config.workingDirectory ?: existing?.workingDirectory
+        val directory = requested?.let { Path.of(it).absolute() } ?: withContext(ioDispatcher) {
+            requireNotNull(ungroupedDirectory).invoke().absolute()
+        }
         val session = if (existing == null) {
             active.create(directory) { id ->
                 newSession(active, SessionKey(key, id.value, workingDirectory = directory), replay = false)

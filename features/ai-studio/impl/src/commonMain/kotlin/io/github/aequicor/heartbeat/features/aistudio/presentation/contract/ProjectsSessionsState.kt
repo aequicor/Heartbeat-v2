@@ -3,13 +3,14 @@ package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DeletionError
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationLoadError
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationRow
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.RenameError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.DeletionError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationLoadError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationRow
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.RenameError
 import io.github.aequicor.heartbeat.features.aistudio.presentation.projectssessions.ProjectsSessionsPages
 
 @ConsistentCopyVisibility

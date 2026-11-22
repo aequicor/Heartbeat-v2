@@ -5,12 +5,16 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import kotlin.coroutines.cancellation.CancellationException
 
 internal interface SessionDao {
 
     @Throws(DaoException::class, CancellationException::class)
     suspend fun <T> transaction(block: suspend () -> T): T
+
+    @Throws(DaoException::class, CancellationException::class)
+    suspend fun lastConfiguration(): ChatConfigRecord?
 
     /** Joins an existing SQLDelight transaction on the same connection. */
     @Throws(DaoException::class, CancellationException::class)
@@ -19,6 +23,7 @@ internal interface SessionDao {
         title: String,
         sentAt: DatabaseTimestamp,
         parentSessionId: String? = null,
+        conversation: ChatConfigRecord.Conversation? = null,
     ): SessionDto
 
     @Throws(DaoException::class, CancellationException::class)

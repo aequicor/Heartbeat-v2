@@ -1,11 +1,12 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.Named
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.accessStudioDatabase
-import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
+import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.SelectWorkspaceSessions
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioProjectQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioWorkspaceQueries
@@ -13,70 +14,117 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRep
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.StudioWorkspaceStorage
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.toNavigationStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.workState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraChat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWorkspaceMetadata
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.toNavigationStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.workState
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.SerializationException
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Choice
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Selection
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.uuid.Uuid
 
 @Inject
 @SingleIn(AppScope::class)
-internal class StudioWorkspacePersistence(private val connection: DatabaseConnection) : StudioWorkspaceStorage {
+internal class StudioWorkspacePersistence(
+    private val connection: DatabaseConnection,
+    @Named("io") private val ioDispatcher: CoroutineDispatcher,
+    @Named("studio-chat-writes") private val writeLock: Mutex = Mutex(),
+) : StudioWorkspaceMetadata {
 
     private val restoreLock = Mutex()
     private var recoveredWork = false
+
     private val queries get() = StudioWorkspaceQueries(connection.driver)
 
-    override suspend fun restore(legacy: suspend () -> AuroraWorkspace): AuroraWorkspace = restoreLock.withLock {
-        val stored = read(resetInterruptedWork = !recoveredWork) ?: run {
-            import(legacy())
-            checkNotNull(read())
-        }
-        recoveredWork = true
-        stored
-    }
-
-    override fun save(workspace: AuroraWorkspace, previousWorkStates: Map<String, SessionWorkState>) {
-        val metadata = Json.encodeToString(workspace.copy(chats = listOf()))
-        accessStudioDatabase("Save studio workspace") {
-            val workspaceQueries = queries
-            workspaceQueries.transaction {
-                for (chat in workspace.chats.filter(AuroraChat::payloadLoaded)) {
-                    val id = chat.summary.id
-                    workspaceQueries.updateWorkspaceSession(
-                        payload = Json.encodeToString(chat),
-                        summary = Json.encodeToString(chat.summary),
-                        id = id,
-                    )
-                    val workState = chat.summary.workState
-                    val previousState = previousWorkStates[id] ?: SessionWorkState.Idle
-                    if (workState != previousState) {
-                        workspaceQueries.updateWorkspaceSessionWorkState(workState.name, id, previousState.name)
-                    }
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun restore(legacy: suspend () -> AuroraWorkspace): AuroraWorkspace = withContext(ioDispatcher) {
+        workspaceOperation("Restore studio workspace") {
+            restoreLock.withLock {
+                val stored = read(resetInterruptedWork = !recoveredWork) ?: run {
+                    import(legacy())
+                    checkNotNull(read())
                 }
-                workspaceQueries.upsertWorkspaceMetadata(metadata)
+                recoveredWork = true
+                stored
             }
         }
     }
 
-    override fun load(chat: AuroraChat): AuroraChat {
-        if (chat.payloadLoaded) return chat
-        return try {
-            val payload = accessStudioDatabase("Read studio session content") {
-                queries.selectWorkspacePayload(chat.summary.id).executeAsOneOrNull()?.workspace_payload
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun save(
+        workspace: AuroraWorkspace,
+        previousWorkStates: Map<String, SessionWorkState>,
+        previousChats: Map<String, AuroraChat>,
+    ): Unit = withContext(ioDispatcher) {
+        val metadata = Json.encodeToString(workspace.copy(chats = listOf()))
+        writeLock.withLock {
+            workspaceOperation("Save studio workspace") {
+                val workspaceQueries = queries
+                val history = ChatQueries(connection.driver)
+                workspaceQueries.transaction {
+                    for (chat in workspace.chats.filter(AuroraChat::payloadLoaded)) {
+                        val id = chat.summary.id
+                        val chatId = history.chatForSession(id).executeAsOneOrNull() ?: continue
+                        if (!chat.persistedThroughDomain) history.saveHistory(chatId, chat, previousChats[id])
+                        workspaceQueries.updateWorkspaceSession(
+                            payload = Json.encodeToString(chat.copy(messages = listOf(), interrupted = null)),
+                            summary = Json.encodeToString(chat.summary),
+                            id = id,
+                        )
+                        val workState = chat.summary.workState
+                        val previousState = previousWorkStates[id] ?: SessionWorkState.Idle
+                        if (workState != previousState) {
+                            workspaceQueries.updateWorkspaceSessionWorkState(workState.name, id, previousState.name)
+                        }
+                    }
+                    workspaceQueries.upsertWorkspaceMetadata(metadata)
+                }
             }
-            val saved = payload?.let { Json.decodeFromString<AuroraChat>(it) } ?: chat
-            saved.copy(summary = chat.summary, payloadLoaded = true).recover()
-        } catch (failure: DaoException) {
-            throw StudioRepositoryException("Cannot read session content", failure)
-        } catch (failure: SerializationException) {
-            throw StudioRepositoryException("Cannot decode session content", failure)
+        }
+    }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun loadMetadata(chat: AuroraChat): AuroraChat {
+        if (chat.payloadLoaded) return chat
+        return readStored("Read studio session content") { history ->
+            val sessionId = chat.summary.id
+            val record = queries.selectWorkspacePayload(sessionId).executeAsOne()
+            val saved = record.workspace_payload?.let { Json.decodeFromString<AuroraChat>(it) } ?: chat
+            val labels = saved.summary.configuration
+            val configuration = record.engine_id?.let { engine ->
+                Selection(
+                    engine.asChoice(labels?.engine),
+                    record.model_name?.asChoice(labels?.model),
+                    record.reasoning_level?.asChoice(labels?.level),
+                )
+            }
+            val summary = chat.summary.copy(configuration = configuration)
+            val chatId = history.chatForSession(sessionId).executeAsOne()
+            if (saved.messages.isNotEmpty() || saved.interrupted != null) {
+                history.saveHistory(chatId, saved, previous = null)
+                val metadata = saved.copy(messages = listOf(), interrupted = null)
+                queries.updateWorkspaceSession(
+                    Json.encodeToString(metadata), Json.encodeToString(chat.summary), sessionId,
+                )
+            }
+            saved.copy(summary = summary, messages = emptyList(), interrupted = null, payloadLoaded = true)
+        }
+    }
+
+    private suspend fun <T> readStored(operation: String, block: (ChatQueries) -> T): T = withContext(ioDispatcher) {
+        writeLock.withLock {
+            workspaceOperation(operation) {
+                val history = ChatQueries(connection.driver)
+                history.transactionWithResult { block(history) }
+            }
         }
     }
 
@@ -165,4 +213,15 @@ internal class StudioWorkspacePersistence(private val connection: DatabaseConnec
             },
         )
     }
+}
+
+private fun String.asChoice(previous: Choice?): Choice = previous?.takeIf { it.id == this } ?: Choice(this, this)
+
+@Suppress("TooGenericExceptionCaught") // Driver and legacy serializer exceptions cross the same storage boundary.
+private inline fun <T> workspaceOperation(operation: String, block: () -> T): T = try {
+    block()
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (failure: Exception) {
+    throw StudioRepositoryException(operation, failure)
 }

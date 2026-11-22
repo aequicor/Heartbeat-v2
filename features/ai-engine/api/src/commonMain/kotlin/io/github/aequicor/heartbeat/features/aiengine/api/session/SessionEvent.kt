@@ -1,7 +1,11 @@
 package io.github.aequicor.heartbeat.features.aiengine.api.session
 
 public sealed interface SessionEvent {
-    public data class SendPrompt(val text: String) : SessionEvent
+    public data class SendPrompt(
+        val text: String,
+        val turnId: String? = null,
+        val attachments: List<String> = listOf(),
+    ) : SessionEvent
     public data object Cancel : SessionEvent
     public data class AnswerPermission(val requestId: String, val optionId: String) : SessionEvent
 

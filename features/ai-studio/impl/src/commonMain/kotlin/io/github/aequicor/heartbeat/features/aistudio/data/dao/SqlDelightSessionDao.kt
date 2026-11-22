@@ -6,18 +6,31 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
+import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioSessionQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Studio_session
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 import kotlin.uuid.Uuid
 
 internal class SqlDelightSessionDao(
     private val connection: DatabaseConnection,
+    private val ioDispatcher: CoroutineDispatcher,
 ) : SessionDao {
     private val queries get() = StudioSessionQueries(connection.driver)
 
-    override suspend fun <T> transaction(block: suspend () -> T): T = accessStudioDatabase("Save studio session") {
-        val transacter = object : SuspendingTransacterImpl(connection.driver) {}
-        transacter.transactionWithResult { block() }
+    override suspend fun <T> transaction(block: suspend () -> T): T = withContext(ioDispatcher) {
+        accessStudioDatabase("Save studio session") {
+            val transacter = object : SuspendingTransacterImpl(connection.driver) {}
+            transacter.transactionWithResult { block() }
+        }
+    }
+
+    override suspend fun lastConfiguration(): ChatConfigRecord? = withContext(ioDispatcher) {
+        accessStudioDatabase("Read last chat configuration") {
+            ChatQueries(connection.driver).lastChatConfiguration(::ChatConfigRecord).executeAsOneOrNull()
+        }
     }
 
     override suspend fun insert(
@@ -25,6 +38,7 @@ internal class SqlDelightSessionDao(
         title: String,
         sentAt: DatabaseTimestamp,
         parentSessionId: String?,
+        conversation: ChatConfigRecord.Conversation?,
     ): SessionDto = accessStudioDatabase("Insert studio session") {
         val id = Uuid.random().toString()
         val sessionQueries = queries
@@ -45,6 +59,12 @@ internal class SqlDelightSessionDao(
                 sentAt.nanoseconds,
                 parentSessionId,
             )
+            if (conversation != null) {
+                val config = conversation.configuration
+                val chats = ChatQueries(connection.driver)
+                chats.configureNewChat(config.engineId, config.model, config.reasoning, conversation.engineSessionId, id)
+                chats.rememberChatConfiguration(config.engineId, config.model, config.reasoning)
+            }
             sessionQueries.selectSessionById(id).executeAsOne().toSessionDto()
         }
     }
@@ -110,8 +130,13 @@ internal class SqlDelightSessionDao(
         }
     }
 
-    override suspend fun delete(id: String) {
-        accessStudioDatabase("Delete studio session tree") { queries.deleteSessionTree(id) }
+    override suspend fun delete(id: String): Unit = withContext(ioDispatcher) {
+        accessStudioDatabase("Delete studio session tree") {
+            queries.transaction {
+                queries.deleteSessionTree(id)
+                ChatQueries(connection.driver).clearUnreferencedHistory()
+            }
+        }
     }
 
     /** Updates the session's activity timestamp if newer, joining the current transaction when present. */

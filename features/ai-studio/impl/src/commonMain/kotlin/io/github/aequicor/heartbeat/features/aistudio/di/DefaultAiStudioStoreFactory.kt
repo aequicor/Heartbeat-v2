@@ -2,13 +2,17 @@ package io.github.aequicor.heartbeat.features.aistudio.di
 
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
-import io.github.aequicor.heartbeat.features.aistudio.data.workspace.StudioWorkspacePersistence
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWorkspaceStorage
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ObserveProjectsSessionsUseCase
-import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.DefaultAiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStoreFactory
+import dev.zacsweers.metro.Named
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 
 internal class DefaultAiStudioStoreFactory @Inject constructor(
@@ -16,7 +20,10 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
     private val projectsSessions: ProjectsSessionsInteractor,
     private val observeProjectsSessions: ObserveProjectsSessionsUseCase,
     private val sessionBootstrap: SessionBootstrapInteractor,
-    private val persistence: StudioWorkspacePersistence,
+    private val persistence: StudioWorkspaceStorage,
+    @Named("studio-default") private val defaultDispatcher: CoroutineDispatcher,
+    private val chatTurn: ChatTurnInteractor,
+    private val importAttachment: ImportChatAttachmentUseCase,
 ) : AiStudioStoreFactory {
 
     override fun create(scope: CoroutineScope): AiStudioStore =
@@ -27,5 +34,8 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
             persistence,
             observeProjectsSessions(),
             sessionBootstrap,
+            defaultDispatcher,
+            chatTurn,
+            importAttachment,
         )
 }

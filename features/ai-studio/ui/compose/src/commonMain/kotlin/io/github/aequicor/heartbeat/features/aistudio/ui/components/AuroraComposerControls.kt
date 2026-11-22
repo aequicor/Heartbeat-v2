@@ -26,8 +26,8 @@ import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 
 internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
     val shape = RoundedCornerShape(AuroraLayout.DesktopComposerRadius)
@@ -101,11 +101,17 @@ internal fun AuroraAttachMenu(
 }
 
 @Composable
-private fun AuroraAttachButton(touch: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun AuroraAttachButton(
+    touch: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    demo: Boolean = true,
+) {
     AuroraControl(
         onClick, if (touch) modifier else modifier.size(AuroraLayout.DesktopTarget),
-        label = if (touch) "Добавить демонстрационное вложение" else "Прикрепить файл",
-        touch = touch, background = Color.Transparent,
+        label = if (touch && demo) "Добавить демонстрационное вложение" else "Прикрепить файл",
+        touch = touch, enabled = enabled, background = Color.Transparent,
         round = touch, horizontalPadding = AuroraLayout.Space,
     ) {
         HbIcon(

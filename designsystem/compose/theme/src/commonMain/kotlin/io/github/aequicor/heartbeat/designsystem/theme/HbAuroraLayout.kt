@@ -66,6 +66,10 @@ object HbAuroraLayout {
     val NavigationSymbol = 18.dp
     val NavigationTrack = 12.dp
     val NavigationCaptionGap = 10.dp
+    val EngineMenuWidth = 320.dp
+    val EngineMenuMaxHeight = 420.dp
+    val EngineMenuHeader = 56.dp
+    val EngineMenuRow = 40.dp
     val ProjectPickerWidth = 260.dp
     val ProjectOptionHeight = 36.dp
     val ProjectListMaxHeight = 240.dp

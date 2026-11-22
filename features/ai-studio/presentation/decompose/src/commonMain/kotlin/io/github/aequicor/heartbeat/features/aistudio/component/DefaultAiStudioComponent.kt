@@ -2,7 +2,7 @@ package io.github.aequicor.heartbeat.features.aistudio.component
 
 import com.arkivanov.decompose.ComponentContext
 import com.arkivanov.decompose.childContext
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStore
 import io.github.aequicor.heartbeat.features.settings.api.SettingsRoutes
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
 import kotlinx.coroutines.CoroutineScope

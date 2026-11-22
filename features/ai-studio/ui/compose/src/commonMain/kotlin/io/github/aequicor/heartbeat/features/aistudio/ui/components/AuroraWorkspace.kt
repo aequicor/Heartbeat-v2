@@ -54,11 +54,11 @@ import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Anchor
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Draft
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
@@ -95,8 +95,11 @@ internal fun AuroraWorkspace(
             }
         } else if (chatId != null) {
             AuroraChatHost(chatId) {
+                val chatAction: (AiStudioAction) -> Unit = { action ->
+                    onAction(if (action == AiStudioAction.CancelTurn) AiStudioAction.CancelChatTurn(chatId) else action)
+                }
                 AuroraChatViewport(
-                    state, draft, liveText, touch, onAction, showNavigation, Dp(preferredWidth),
+                    state, draft, liveText, touch, chatAction, showNavigation, Dp(preferredWidth),
                     onWidthChange = { preferredWidth = it.value },
                     captionClearance = clearance,
                     caption = caption,
@@ -360,6 +363,17 @@ private fun TrackAuroraReading(
     onAction: (AiStudioAction) -> Unit,
 ) {
     val dispatchReading by rememberUpdatedState(onAction)
+    val before = state.olderMessagesBefore
+    if (before != null) {
+        LaunchedEffect(chatId, list, before) {
+            snapshotFlow {
+                val layout = list.layoutInfo
+                layout.visibleItemsInfo.any { it.index >= layout.totalItemsCount - 3 }
+            }.collect { nearStart ->
+                if (nearStart) dispatchReading(AiStudioAction.LoadOlderMessages(chatId, before))
+            }
+        }
+    }
     val newestId = state.live?.id ?: state.messages.firstOrNull()?.id
     SideEffect(newestId, list) {
         if (tail.following && newestId != null) tail.returnToTail()

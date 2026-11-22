@@ -32,11 +32,11 @@ import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyHistoryContent
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Step
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.StepStatus
 
 @Composable
 internal fun AuroraWorkTimeline(

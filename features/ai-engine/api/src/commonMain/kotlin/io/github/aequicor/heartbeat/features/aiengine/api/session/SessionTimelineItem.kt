@@ -12,6 +12,7 @@ public sealed interface SessionTimelineItem {
     public data class AgentMessage(
         override val id: String,
         val content: List<SessionContent>,
+        val reasoning: Boolean = false,
     ) : SessionTimelineItem
 
     public data class ToolCall(

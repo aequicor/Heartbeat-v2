@@ -22,10 +22,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Draft
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDiagramPreviews
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.BindAuroraDiagramContext

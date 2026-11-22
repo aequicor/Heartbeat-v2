@@ -31,7 +31,7 @@ import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Quota
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Quota
 
 @Composable
 internal fun AuroraHeaderMetrics(

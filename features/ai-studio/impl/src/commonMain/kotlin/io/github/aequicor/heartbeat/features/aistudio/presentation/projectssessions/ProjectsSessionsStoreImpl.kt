@@ -8,8 +8,8 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DeletionError
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.RenameError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.DeletionError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.RenameError
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction.Panel
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction.Project

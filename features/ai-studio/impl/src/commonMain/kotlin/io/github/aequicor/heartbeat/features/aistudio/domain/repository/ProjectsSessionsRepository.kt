@@ -7,6 +7,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectD
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
@@ -58,12 +59,13 @@ internal class ProjectsSessionsRepository(
         projectId: ProjectId,
         title: String,
         createdAt: Instant,
+        conversation: ChatConfiguration.Conversation? = null,
     ): ProjectsSessionsChange.SessionAdded? {
         val change = sessionsDataSource.transaction {
             val project = projectDataSource.findById(projectId) ?: return@transaction null
             if (project.status != ProjectStatus.ACTIVE) return@transaction null
 
-            val session = sessionsDataSource.create(projectId, title, createdAt, parentSessionId = null)
+            val session = sessionsDataSource.create(projectId, title, createdAt, conversation = conversation)
             ProjectsSessionsChange.SessionAdded(session, project)
         } ?: return null
 

@@ -2,6 +2,7 @@ package io.github.aequicor.heartbeat.di
 
 import android.content.Context
 import dev.zacsweers.metro.DependencyGraph
+import dev.zacsweers.metro.Named
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.core.database.AndroidSqlDriverFactory
@@ -11,6 +12,7 @@ import io.github.aequicor.heartbeat.core.preferences.datastore.DataStorePreferen
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.shell.ShellComponentFactory
 import io.github.aequicor.heartbeat.storage.database.DatabaseInitializer
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +42,16 @@ interface AndroidGraph {
 
         fun create(@Provides applicationContext: Context): AndroidGraph
     }
+
+    @Provides
+    @Named("studio-default")
+    @Suppress("InjectDispatcher")
+    fun provideStudioDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
+
+    @Provides
+    @Named("io")
+    @Suppress("InjectDispatcher")
+    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
 
     @Provides
     fun provideDataDirectory(applicationContext: Context): String =

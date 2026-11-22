@@ -39,6 +39,7 @@ kotlin {
         implementation(libs.kotlinx.serialization.json)
         api(libs.kotlinx.coroutines.core)
         implementation(project(":di:api"))
+        implementation(project(":features:ai-engine-facade:api"))
         implementation(project(":core:preferences:api"))
         implementation(project(":core:database"))
     }

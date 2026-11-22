@@ -28,11 +28,11 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Subagent
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
@@ -82,7 +82,12 @@ private fun AuroraTouchHeader(
             horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AuroraTouchParameters(chat, onAction, Modifier.weight(1f))
+            if (state.sessionBootstrap != null || chat.configuration != null) {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                    AuroraChatEngineParameters(state.sessionBootstrap?.picker, chat.configuration, true, onAction)
+                    AuroraAccessMenu(chat.access, onAction, touch = true)
+                }
+            } else AuroraTouchParameters(chat, onAction, Modifier.weight(1f))
             AuroraTouchMetrics(chat.contextPercent, chat.quota, Modifier.padding(end = AuroraLayout.ContentInset))
         }
         AuroraHeaderStorageError(state.navigationErrorText(), inset)

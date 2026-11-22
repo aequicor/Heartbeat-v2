@@ -11,13 +11,19 @@ import java.nio.file.Path
 
 /** Creates an engine provider for an installed ACP agent and its project directory resolver. */
 @ContributesBinding(AppScope::class)
-public class AcpAgentDataSource(private val scope: AppCoroutineScope) : AcpProviderFactory {
+public class AcpAgentDataSource(
+    private val scope: AppCoroutineScope,
+    private val dataDirectory: String,
+) : AcpProviderFactory {
 
     override fun create(
         key: AiEngineKey,
         currentKey: () -> AiEngineKey,
         launch: suspend () -> AcpProviderFactory.Launch,
-    ): AiEngineProvider = AcpAiEngineProvider(key, launch, scope, projectDirectory = { null }, currentKey = currentKey)
+    ): AiEngineProvider = AcpAiEngineProvider(
+        key, launch, scope, projectDirectory = { null }, currentKey = currentKey,
+        ungroupedDirectory = { java.nio.file.Files.createDirectories(Path.of(dataDirectory, "chats")) },
+    )
 
     public fun provider(
         key: AiEngineKey,

@@ -3,17 +3,14 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.interactor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootstrapResult
-import kotlin.time.Clock
-import kotlin.time.Instant
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 
 internal interface SessionBootstrapInteractor {
 
-    suspend fun registerProject(directory: ProjectDirectory, name: String? = null): ProjectCreationResult
+    @Throwable(CancellationException::class)
+    suspend fun withDraft(projectId: ProjectId, use: suspend (ChatCreationDraft) -> Unit): Result<Unit>
 
-    suspend fun createSession(
-        projectId: ProjectId,
-        title: String,
-        createdAt: Instant = Clock.System.now(),
-    ): SessionBootstrapResult
+    @Throwable(CancellationException::class)
+    suspend fun registerProject(directory: ProjectDirectory, name: String? = null): Result<ProjectCreationResult>
 }

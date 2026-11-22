@@ -38,15 +38,14 @@ internal class AcpTimeline {
         }
     }
 
-    fun agentChunk(update: SessionUpdate.AgentMessageChunk) {
+    fun agentChunk(content: ContentBlock, remoteId: String?, reasoning: Boolean = false) {
         val last = items.lastOrNull() as? SessionTimelineItem.AgentMessage
-        val remoteId = update.messageId?.value
-        val value = update.content.toSessionContent()
-        if (last != null && continues(last.id, remoteId)) {
+        val value = content.toSessionContent()
+        if (last != null && last.reasoning == reasoning && continues(last.id, remoteId)) {
             items = items.dropLast(1) + last.copy(content = last.content.append(value))
         } else {
             val id = nextId()
-            items = items + SessionTimelineItem.AgentMessage(id, listOf(value))
+            items = items + SessionTimelineItem.AgentMessage(id, listOf(value), reasoning)
             rememberMessage(id, remoteId)
         }
     }

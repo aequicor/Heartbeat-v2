@@ -6,7 +6,7 @@ import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyHistoryContent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
 
 @Composable
 internal fun AuroraWorkResult(

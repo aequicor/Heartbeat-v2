@@ -45,14 +45,16 @@ import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Activity
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Draft
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_error
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_loading
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_creation_failed
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_project_unavailable
 import kotlinx.coroutines.flow.StateFlow
@@ -112,8 +114,16 @@ internal fun AuroraLowerControls(
                 },
                 activity = state.activity,
                 files = state.attachments,
-                choices = state.fileChoices,
                 touch = touch,
+                importingAttachment = chatId in state.importingAttachmentsFor,
+                attachmentError = state.attachmentErrorFor == chatId,
+                attach = {
+                    if (state.allowsFileImport) {
+                        AuroraAttachmentPickerButton(chatId, chatId in state.importingAttachmentsFor, touch, onAction)
+                    } else {
+                        AuroraAttachMenu(state.fileChoices, state.attachments, touch, onAction)
+                    }
+                },
                 maxTextHeight = (maxPanelHeight / 2).coerceAtLeast(AuroraLayout.DesktopTarget),
                 onAction = onAction,
                 modifier = measuredPanel,
@@ -135,6 +145,7 @@ internal fun AuroraTailControl(
 
 @Composable
 internal fun AuroraBootstrapComposer(
+    state: AiStudioScreenState,
     bootstrap: SessionBootstrapState,
     chat: Chat,
     touch: Boolean,
@@ -156,16 +167,25 @@ internal fun AuroraBootstrapComposer(
     ) {
         error?.let { AuroraHeaderStorageError(stringResource(it)) }
         AuroraComposer(
-            field, { field = it }, Activity.Idle, listOf(), listOf(), touch, maxTextHeight,
+            field, { field = it }, Activity.Idle, bootstrap.attachments, touch, maxTextHeight,
             onAction = { action ->
                 if (action == AiStudioAction.Send) {
                     onAction(AiStudioAction.SubmitSessionBootstrap(
                         bootstrap.project, field.text, chat.scenario, chat.access, chat.effort,
                     ))
+                } else {
+                    onAction(action)
                 }
             },
-            sendBlocked = bootstrap.operation != null,
-            attachmentEnabled = false,
+            sendBlocked = field.text.isBlank() || bootstrap.operation != null ||
+                bootstrap.picker.confirmed == null || bootstrap.picker.step != null,
+            importingAttachment = bootstrap.id in state.importingAttachmentsFor,
+            attachmentError = state.attachmentErrorFor == bootstrap.id,
+            attach = {
+                if (state.allowsFileImport && bootstrap.operation == null) {
+                    AuroraAttachmentPickerButton(bootstrap.id, bootstrap.id in state.importingAttachmentsFor, touch, onAction)
+                }
+            },
         )
     }
 }
@@ -176,17 +196,18 @@ private fun AuroraComposer(
     onEdit: (TextFieldValue) -> Unit,
     activity: Activity,
     files: List<File>,
-    choices: List<File>,
     touch: Boolean,
     maxTextHeight: Dp,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
     sendBlocked: Boolean = false,
-    attachmentEnabled: Boolean = true,
+    importingAttachment: Boolean = false,
+    attachmentError: Boolean = false,
+    attach: @Composable () -> Unit,
 ) {
     val working = activity != Activity.Idle
     val stopping = activity == Activity.Stopping
-    val sendEnabled = !sendBlocked && (field.text.isNotBlank() || files.isNotEmpty())
+    val sendEnabled = !sendBlocked && !importingAttachment && (field.text.isNotBlank() || files.isNotEmpty())
     val onSend = { onAction(AiStudioAction.Send) }
     var focused by remember { mutableStateOf(false) }
     val surface = if (touch) {
@@ -202,6 +223,14 @@ private fun AuroraComposer(
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
     ) {
         if (files.isNotEmpty()) AuroraDraftAttachments(files, touch, onAction)
+        if (attachmentError) AuroraHeaderStorageError(stringResource(Res.string.chat_attachment_error))
+        if (importingAttachment) {
+            AuroraText(
+                stringResource(Res.string.chat_attachment_loading),
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                small = true, color = AuroraColors.Muted,
+            )
+        }
         AuroraComposerActivity(activity)
         Row(
             Modifier.fillMaxWidth()
@@ -209,7 +238,7 @@ private fun AuroraComposer(
             verticalAlignment = if (touch) Alignment.CenterVertically else Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(if (touch) AuroraLayout.SmallGap else AuroraLayout.Space),
         ) {
-            if (attachmentEnabled) AuroraAttachMenu(choices, files, touch, onAction)
+            attach()
             AuroraComposerField(
                 field, onEdit, onSend, touch, sendEnabled && !working, maxTextHeight,
                 Modifier.weight(1f).onFocusChanged { focused = it.isFocused },

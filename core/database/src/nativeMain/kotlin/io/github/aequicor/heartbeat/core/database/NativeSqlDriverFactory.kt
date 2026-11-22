@@ -28,7 +28,7 @@ public class NativeSqlDriverFactory(
         name = databaseName,
         onConfiguration = { configuration ->
             configuration.copy(
-                extendedConfig = configuration.extendedConfig.copy(basePath = directory),
+                extendedConfig = configuration.extendedConfig.copy(basePath = directory, foreignKeyConstraints = true),
             )
         },
     )

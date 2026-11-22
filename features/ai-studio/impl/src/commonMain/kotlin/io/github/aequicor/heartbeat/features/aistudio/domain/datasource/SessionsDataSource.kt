@@ -2,6 +2,7 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
@@ -12,11 +13,14 @@ internal interface SessionsDataSource {
 
     suspend fun <T> transaction(block: suspend () -> T): T
 
+    suspend fun lastConfiguration(): ChatConfiguration?
+
     suspend fun create(
         projectId: ProjectId,
         title: String,
         createdAt: Instant,
         parentSessionId: SessionId? = null,
+        conversation: ChatConfiguration.Conversation? = null,
     ): Session
 
     suspend fun findById(id: SessionId): Session?

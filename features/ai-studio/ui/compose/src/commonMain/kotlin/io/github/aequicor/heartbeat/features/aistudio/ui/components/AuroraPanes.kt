@@ -55,11 +55,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
 import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileGroup
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileRow
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileGroup
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileRow
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.return_to_session

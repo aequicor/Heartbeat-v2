@@ -1,12 +1,12 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.runtime.Composable
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DeletionError
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationRow
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.RenameError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.DeletionError
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationRow
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.RenameError
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.more_sessions
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.more_projects

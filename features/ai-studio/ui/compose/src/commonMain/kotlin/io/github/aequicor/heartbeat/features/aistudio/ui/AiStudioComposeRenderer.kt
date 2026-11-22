@@ -8,9 +8,9 @@ import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.loadAuroraBackdrop
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer

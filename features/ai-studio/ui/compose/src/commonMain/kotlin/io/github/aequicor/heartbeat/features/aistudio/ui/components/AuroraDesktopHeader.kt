@@ -41,12 +41,12 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Access
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Subagent
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
@@ -107,7 +107,9 @@ internal fun AuroraDesktopHeader(
                 horizontalArrangement = Arrangement.spacedBy(AuroraLayout.HeaderClusterGap),
                 verticalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
             ) {
-                AuroraExecutionParameters(chat, onAction)
+                if (state.sessionBootstrap != null || chat.configuration != null) {
+                    AuroraChatEngineParameters(state.sessionBootstrap?.picker, chat.configuration, false, onAction)
+                } else AuroraExecutionParameters(chat, onAction)
                 AuroraAccessMenu(chat.access, onAction)
                 if (chat.contextPercent != null || chat.quota != null) {
                     Spacer(Modifier.weight(1f))

@@ -5,7 +5,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.toNavigationStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.toNavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project as StudioProject
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session as StudioSession
 

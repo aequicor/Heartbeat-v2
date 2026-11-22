@@ -13,10 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.ungrouped_sessions
@@ -35,7 +35,7 @@ internal fun AuroraBootstrapWorkspace(
 ) {
     val title = stringResource(Res.string.new_session)
     val project = bootstrap.projectTitle ?: stringResource(Res.string.ungrouped_sessions)
-    var chat by remember { mutableStateOf(Chat(bootstrap.id, title, "")) }
+    var chat by remember(bootstrap.id) { mutableStateOf(Chat(bootstrap.id, title, "")) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val corridor = preferredWidth.coerceAtMost(maxWidth)
         val gutter = (maxWidth - corridor) / 2f
@@ -56,7 +56,7 @@ internal fun AuroraBootstrapWorkspace(
             edgeInset = edgeInset,
         )
         AuroraBootstrapComposer(
-            bootstrap, chat, touch, maxHeight * BootstrapComposerHeightFraction, onAction,
+            state, bootstrap, chat, touch, maxHeight * BootstrapComposerHeightFraction, onAction,
             Modifier.align(Alignment.BottomCenter).auroraLowerLayout(touch, corridor),
         )
     }

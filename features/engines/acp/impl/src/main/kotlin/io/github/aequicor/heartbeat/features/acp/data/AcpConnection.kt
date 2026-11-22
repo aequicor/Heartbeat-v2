@@ -93,6 +93,7 @@ internal class AcpConnection(
             synchronized(routingLock) {
                 check(response.sessionId !in sessions) { "Agent returned an already open session ID" }
                 createSession(response.sessionId).also { session ->
+                    session.configuration.initialize(response)
                     sessions[response.sessionId] = session
                     earlyUpdates[response.sessionId]?.forEach(session::update)
                 }
@@ -112,11 +113,12 @@ internal class AcpConnection(
         }
         val id = SessionId(session.key.id)
         synchronized(routingLock) { sessions[id] = session }
-        if (replay) {
+        val response = if (replay) {
             V1.SessionLoad(protocol, LoadSessionRequest(id, directory, listOf()))
         } else {
             V1.SessionResume(protocol, ResumeSessionRequest(id, directory))
         }
+        session.configuration.initialize(response)
     }
 
     fun forget(session: AcpSession) {

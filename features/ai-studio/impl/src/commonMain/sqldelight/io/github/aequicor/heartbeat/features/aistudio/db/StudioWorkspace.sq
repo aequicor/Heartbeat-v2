@@ -18,7 +18,9 @@ JOIN studio_project AS project ON project.id = session.project_id
 ORDER BY session.updated_at_seconds DESC, session.updated_at_nanos DESC, session.id ASC;
 
 selectWorkspacePayload:
-SELECT workspace_payload FROM studio_session WHERE id = :id;
+SELECT session.workspace_payload, chat.engine_id, chat.model_name, chat.reasoning_level
+FROM studio_session AS session LEFT JOIN chat ON chat.session_id = session.id
+WHERE session.id = :id;
 
 importWorkspaceSession:
 INSERT INTO studio_session(

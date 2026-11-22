@@ -1,22 +1,274 @@
-CREATE TABLE chat (
-    id TEXT NOT NULL PRIMARY KEY,
-    title TEXT NOT NULL
+lastChatConfiguration:
+SELECT engine_id, model_name, reasoning_level FROM last_chat_config WHERE user_id = 'local';
+
+rememberChatConfiguration:
+INSERT OR REPLACE INTO last_chat_config(user_id, engine_id, model_name, reasoning_level)
+VALUES ('local', ?, ?, ?);
+
+chatConversation:
+SELECT c.engine_id, c.model_name, c.reasoning_level, c.engine_session_id, c.engine_context_stale
+FROM chat c JOIN studio_session s ON s.id = c.session_id
+WHERE c.session_id = :session_id AND s.status = 'ACTIVE';
+
+configureNewChat:
+UPDATE chat SET engine_id = ?, model_name = ?, reasoning_level = ?, engine_session_id = ? WHERE session_id = ?;
+
+CREATE TABLE message_revision (
+    revision_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    parent_revision_id INTEGER REFERENCES message_revision(revision_id),
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    status TEXT NOT NULL CHECK (status IN ('draft', 'completed', 'stopped', 'error')),
+    created_at INTEGER NOT NULL,
+    display_id TEXT NOT NULL,
+    presentation TEXT NOT NULL,
+    UNIQUE (message_id, revision_id)
 );
 
-selectById:
-SELECT id, title
-FROM chat
-WHERE id = ?;
+CREATE INDEX revision_display_id ON message_revision(display_id);
 
-selectAll:
-SELECT id, title
-FROM chat
-ORDER BY title ASC;
+CREATE TABLE chat (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL UNIQUE REFERENCES studio_session(id) ON DELETE CASCADE,
+    engine_id TEXT,
+    model_name TEXT,
+    reasoning_level TEXT,
+    engine_session_id TEXT,
+    engine_context_stale INTEGER NOT NULL DEFAULT 0 CHECK (engine_context_stale IN (0, 1)),
+    source_chat_id TEXT REFERENCES chat(id) ON DELETE SET NULL,
+    source_revision_id INTEGER REFERENCES message_revision(revision_id)
+);
 
-insert:
-INSERT OR REPLACE INTO chat(id, title)
-VALUES (?, ?);
+CREATE TABLE chat_entry (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    revision_id INTEGER NOT NULL,
+    predates_edit INTEGER NOT NULL DEFAULT 0 CHECK (predates_edit IN (0, 1)),
+    PRIMARY KEY (chat_id, position),
+    UNIQUE (chat_id, message_id),
+    FOREIGN KEY (message_id, revision_id) REFERENCES message_revision(message_id, revision_id)
+);
 
-deleteById:
-DELETE FROM chat
-WHERE id = ?;
+CREATE INDEX chat_entry_revision ON chat_entry(revision_id);
+
+CREATE TABLE attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    mime_type TEXT,
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    storage_ref TEXT NOT NULL,
+    presentation TEXT,
+    inline_text TEXT
+);
+
+CREATE INDEX attachment_presentation ON attachment(presentation);
+
+CREATE TABLE message_part (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    revision_id INTEGER NOT NULL REFERENCES message_revision(revision_id) ON DELETE CASCADE,
+    parent_part_id INTEGER REFERENCES message_part(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('text', 'step', 'reasoning', 'tool_call', 'attachment')),
+    title TEXT,
+    status TEXT,
+    body TEXT,
+    tool_call_id TEXT,
+    attachment_id TEXT REFERENCES attachment(id),
+    presentation TEXT,
+    UNIQUE (revision_id, position)
+);
+
+CREATE TRIGGER check_message_revision_parent AFTER INSERT ON message_revision
+WHEN EXISTS (
+    SELECT 1 FROM message_revision child JOIN message_revision parent ON parent.revision_id = child.parent_revision_id
+    WHERE child.revision_id = last_insert_rowid()
+      AND (child.message_id != parent.message_id OR child.revision_id = parent.revision_id)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid message_revision parent');
+END;
+
+CREATE TRIGGER keep_message_revision_identity BEFORE UPDATE OF revision_id, message_id, parent_revision_id ON message_revision
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable message_revision identity');
+END;
+
+CREATE TRIGGER check_message_part_parent AFTER INSERT ON message_part
+WHEN EXISTS (
+    SELECT 1 FROM message_part child JOIN message_part parent ON parent.id = child.parent_part_id
+    WHERE child.id = last_insert_rowid()
+      AND (child.revision_id != parent.revision_id OR child.id = parent.id)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid message_part parent');
+END;
+
+CREATE TRIGGER keep_message_part_identity BEFORE UPDATE OF id, revision_id, parent_part_id ON message_part
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable message_part identity');
+END;
+
+CREATE TABLE last_chat_config (
+    user_id TEXT NOT NULL PRIMARY KEY,
+    engine_id TEXT NOT NULL,
+    model_name TEXT,
+    reasoning_level TEXT
+);
+
+CREATE TRIGGER create_session_chat AFTER INSERT ON studio_session
+BEGIN
+    INSERT INTO chat(id, session_id) SELECT id, id FROM studio_session WHERE rowid = last_insert_rowid();
+END;
+
+chatForSession:
+SELECT id FROM chat WHERE session_id = :session_id;
+
+selectHistoryPage:
+SELECT e.position, e.predates_edit, r.*
+FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
+WHERE e.chat_id = :chat_id AND (:before_position IS NULL OR e.position < :before_position)
+ORDER BY e.position DESC LIMIT :page_size;
+
+selectMessage:
+SELECT e.position, e.message_id, e.revision_id, r.status, r.presentation
+FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
+WHERE e.chat_id = :chat_id AND r.display_id = :display_id;
+
+insertFirstRevision:
+INSERT INTO message_revision(message_id, role, status, created_at, display_id, presentation)
+SELECT coalesce(max(message_id), 0) + 1, :role, :status, :created_at, :display_id, :presentation
+FROM message_revision;
+
+appendEntry:
+INSERT INTO chat_entry(chat_id, position, message_id, revision_id)
+SELECT :chat_id, (SELECT coalesce(max(position), -1) + 1 FROM chat_entry WHERE chat_id = :chat_id),
+       message_id, revision_id
+FROM message_revision WHERE revision_id = :revision_id;
+
+insertEditedRevision:
+INSERT INTO message_revision(message_id, parent_revision_id, role, status, created_at, display_id, presentation)
+SELECT message_id, revision_id, role, :status, :created_at, display_id, :presentation
+FROM message_revision WHERE revision_id = :parent_revision_id;
+
+selectRevision:
+UPDATE chat_entry SET revision_id = :revision_id, predates_edit = 0
+WHERE chat_id = :chat_id AND position = :position;
+
+markLaterReplies:
+UPDATE chat_entry SET predates_edit = 1
+WHERE chat_id = :chat_id AND position > :position
+  AND revision_id IN (SELECT revision_id FROM message_revision WHERE role = 'assistant');
+
+truncateAfter:
+DELETE FROM chat_entry WHERE chat_id = :chat_id AND position > :position;
+
+markContextStale:
+UPDATE chat SET engine_context_stale = 1 WHERE id = :chat_id;
+
+copyUserAttachments:
+INSERT INTO message_part(revision_id, position, kind, title, status, attachment_id, presentation)
+SELECT :revision_id, position - (SELECT min(position) FROM message_part
+    WHERE revision_id = :parent_revision AND kind = 'attachment') + :first_position,
+    kind, title, status, attachment_id, presentation
+FROM message_part WHERE revision_id = :parent_revision AND kind = 'attachment';
+
+sharedRevision:
+SELECT EXISTS(SELECT 1 FROM chat_entry WHERE revision_id = :revision_id AND chat_id != :chat_id)
+    OR EXISTS(SELECT 1 FROM chat WHERE source_revision_id = :revision_id);
+
+updateDraft:
+UPDATE message_revision SET presentation = :presentation, status = :status
+WHERE revision_id = :revision_id AND status = 'draft';
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+deletePartsFrom:
+DELETE FROM message_part WHERE revision_id = :revision_id AND position >= :position;
+
+updatePart:
+UPDATE message_part SET title = :title, status = :status, body = :body, attachment_id = :attachment_id,
+                        presentation = :presentation
+WHERE id = :id;
+
+insertPart:
+INSERT INTO message_part(revision_id, parent_part_id, position, kind, title, status, body, tool_call_id,
+                         attachment_id, presentation)
+VALUES (:revision_id, :parent_part_id, :position, :kind, :title, :status, :body, :tool_call_id,
+        :attachment_id, :presentation);
+
+selectParts:
+SELECT * FROM message_part WHERE revision_id = :revision_id ORDER BY position;
+
+selectPreviewParts:
+SELECT id, revision_id, parent_part_id, position, kind, title, status,
+       CASE WHEN kind NOT IN ('reasoning', 'tool_call') THEN body ELSE NULL END AS body,
+       tool_call_id, attachment_id, presentation
+FROM message_part WHERE revision_id = :revision_id ORDER BY position;
+
+selectPartBody:
+SELECT body FROM message_part WHERE id = :id;
+
+findInlineAttachment:
+SELECT id FROM attachment
+WHERE presentation = :presentation AND inline_text = :content LIMIT 1;
+
+insertInlineAttachment:
+INSERT INTO attachment(id, name, mime_type, size_bytes, storage_ref, presentation, inline_text)
+VALUES (:id, :name, :mime_type, :size_bytes, :storage_ref, :presentation, :content);
+
+attachmentHeader:
+SELECT id, size_bytes, presentation FROM attachment WHERE id = :id;
+
+chatFileHeaders:
+SELECT a.id, a.size_bytes, a.presentation
+FROM chat_entry e
+JOIN message_part p ON p.revision_id = e.revision_id
+JOIN attachment a ON a.id = p.attachment_id
+WHERE e.chat_id = :chat_id
+ORDER BY e.position DESC, p.position;
+
+selectAttachment:
+SELECT * FROM attachment WHERE id = :id;
+
+revisionForEdit:
+SELECT r.role, r.status, EXISTS (
+    SELECT 1 FROM message_part p WHERE p.revision_id = r.revision_id AND p.kind = 'attachment'
+) AS has_attachments
+FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
+WHERE e.chat_id = :chat_id AND e.revision_id = :revision_id;
+
+committedEntry:
+SELECT e.position, s.project_id, r.role, r.status, r.presentation
+FROM chat_entry e JOIN chat c ON c.id = e.chat_id
+JOIN message_revision r ON r.revision_id = e.revision_id
+JOIN studio_session s ON s.id = c.session_id
+WHERE e.chat_id = :chat_id AND e.revision_id = :revision_id AND r.status != 'draft';
+
+inheritChat:
+UPDATE chat SET source_chat_id = :source_id, source_revision_id = :revision_id,
+    engine_id = (SELECT engine_id FROM chat WHERE id = :source_id),
+    model_name = (SELECT model_name FROM chat WHERE id = :source_id),
+    reasoning_level = (SELECT reasoning_level FROM chat WHERE id = :source_id),
+    engine_context_stale = 1
+WHERE id = :fork_id;
+
+copyEntriesThrough:
+INSERT INTO chat_entry(chat_id, position, message_id, revision_id, predates_edit)
+SELECT :fork_id, position, message_id, revision_id, predates_edit
+FROM chat_entry WHERE chat_id = :source_id AND position <= :position;
+
+deleteUnreferencedRevisions:
+WITH RECURSIVE retained(id) AS (
+    SELECT revision_id FROM chat_entry
+    UNION
+    SELECT source_revision_id FROM chat WHERE source_revision_id IS NOT NULL
+    UNION
+    SELECT r.parent_revision_id FROM message_revision r JOIN retained ON retained.id = r.revision_id
+    WHERE r.parent_revision_id IS NOT NULL
+)
+DELETE FROM message_revision WHERE revision_id NOT IN (SELECT id FROM retained);
+
+deleteUnreferencedAttachments:
+DELETE FROM attachment WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE attachment_id = attachment.id);

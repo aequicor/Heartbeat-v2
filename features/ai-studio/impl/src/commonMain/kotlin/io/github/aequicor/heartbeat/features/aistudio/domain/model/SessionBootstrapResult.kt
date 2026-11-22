@@ -6,6 +6,8 @@ internal sealed interface SessionBootstrapResult {
         val project: Project,
     ) : SessionBootstrapResult
 
+    data object EmptyPrompt : SessionBootstrapResult
+
     data object ProjectUnavailable : SessionBootstrapResult
 }
 

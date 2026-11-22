@@ -3,10 +3,12 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SessionDao
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
@@ -20,17 +22,26 @@ internal class DefaultSessionsDataSource(private val dao: SessionDao) : Sessions
     override suspend fun <T> transaction(block: suspend () -> T): T =
         accessStudioRepository { dao.transaction(block) }
 
+    override suspend fun lastConfiguration(): ChatConfiguration? = accessStudioRepository {
+        dao.lastConfiguration()?.let { ChatConfiguration(it.engineId, it.model, it.reasoning) }
+    }
+
     override suspend fun create(
         projectId: ProjectId,
         title: String,
         createdAt: Instant,
         parentSessionId: SessionId?,
+        conversation: ChatConfiguration.Conversation?,
     ): Session = accessStudioRepository {
         dao.insert(
             projectId = projectId.value.toString(),
             title = title,
             sentAt = createdAt.toDatabaseTimestamp(),
             parentSessionId = parentSessionId?.value?.toString(),
+            conversation = conversation?.let {
+                val config = it.configuration
+                ChatConfigRecord.Conversation(ChatConfigRecord(config.engineId, config.model, config.reasoning), it.engineSessionId)
+            },
         ).toSession()
     }
 

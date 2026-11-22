@@ -4,34 +4,50 @@ import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootstrapResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.repository.ProjectsSessionsRepository
-import kotlin.time.Instant
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.util.rethrowCancellation
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineDataSource
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.Throws as Throwable
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Inject
 internal class SessionBootstrapInteractorImpl(
     private val repository: ProjectsSessionsRepository,
+    private val projects: ProjectDataSource,
+    private val sessions: SessionsDataSource,
+    private val runtime: ChatEngineDataSource,
 ) : SessionBootstrapInteractor {
 
-    override suspend fun registerProject(directory: ProjectDirectory, name: String?): ProjectCreationResult {
+    @Throwable(CancellationException::class)
+    override suspend fun registerProject(directory: ProjectDirectory, name: String?): Result<ProjectCreationResult> = runCatching {
         val path = (directory as? ProjectDirectory.Local)?.path
         val projectName = (name ?: path?.name).orEmpty().trim()
-        return when {
+        when {
             path != null && !isValidName(path.name) -> ProjectCreationResult.InvalidWorkingDirectory
             !isValidName(projectName) -> ProjectCreationResult.InvalidName
             else -> repository.registerProject(projectName, directory)
         }
-    }
+    }.rethrowCancellation()
 
-    override suspend fun createSession(
-        projectId: ProjectId,
-        title: String,
-        createdAt: Instant,
-    ): SessionBootstrapResult {
-        val created = repository.createSessionInActiveProject(projectId, title, createdAt)
-            ?: return SessionBootstrapResult.ProjectUnavailable
-        return SessionBootstrapResult.Created(created.session, created.project)
-    }
+    @Throwable(CancellationException::class)
+    override suspend fun withDraft(projectId: ProjectId, use: suspend (ChatCreationDraft) -> Unit): Result<Unit> =
+        runCatching {
+            val draft = ChatCreationDraftImpl(projectId, projects, sessions, runtime, repository)
+            try {
+                coroutineScope {
+                    val catalog = launch { draft.observeCatalog() }
+                    try { use(draft) } finally { catalog.cancel() }
+                }
+            } finally {
+                withContext(NonCancellable) { draft.close() }
+            }
+        }.rethrowCancellation()
 
     private fun isValidName(name: String) = name.isNotBlank() && name != "." && name != ".."
 }

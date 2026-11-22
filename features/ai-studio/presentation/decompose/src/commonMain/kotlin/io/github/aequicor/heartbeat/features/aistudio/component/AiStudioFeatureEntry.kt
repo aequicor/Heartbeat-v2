@@ -7,7 +7,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStoreFactory
 import io.github.aequicor.heartbeat.navigation.api.AppRoute
 import io.github.aequicor.heartbeat.navigation.decompose.DecomposeFeatureEntry
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
