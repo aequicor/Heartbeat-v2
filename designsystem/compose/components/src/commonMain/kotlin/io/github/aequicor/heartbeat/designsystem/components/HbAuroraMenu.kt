@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,18 +38,25 @@ import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbEngineSettingsLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 @Composable
 internal fun HbAuroraMenuSurface(presentation: HbMenuPresentation, content: @Composable (Dp) -> Unit) {
     val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
-    val messageActions = presentation == HbMenuPresentation.AuroraDesktopMessageActions
-    val surface = if (messageActions) AuroraColors.MessageActionSurface else AuroraColors.Pearl
-    val outline = if (messageActions) AuroraColors.MessageActionOutline else AuroraColors.Line
+    val settings = presentation == HbMenuPresentation.AuroraSettings
+    val (surface, outline) = when (presentation) {
+        HbMenuPresentation.AuroraSettings -> HbTheme.colors.surface.raised to HbTheme.colors.border.control
+        HbMenuPresentation.AuroraDesktopMessageActions ->
+            AuroraColors.MessageActionSurface to AuroraColors.MessageActionOutline
+        else -> AuroraColors.Pearl to AuroraColors.Line
+    }
+    val width = if (settings) Modifier.width(SettingsMenuWidth) else Modifier.compactMenuWidth()
     BoxWithConstraints {
         val height = minOf(maxHeight, AuroraPopupMaxHeight)
         Box(
-            Modifier.compactMenuWidth().shadow(AuroraLayout.Space, shape, clip = false)
+            width.shadow(AuroraLayout.Space, shape, clip = false)
                 .then(HbAuroraOutline(surface, outline, AuroraLayout.SmallRadius)),
         ) { content(height) }
     }
@@ -65,13 +74,19 @@ internal fun HbAuroraMenuItem(
     val focused by interaction.collectIsFocusedAsState()
     val hovered by interaction.collectIsHoveredAsState()
     val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
-    val messageActions = presentation == HbMenuPresentation.AuroraDesktopMessageActions
-    val error = if (messageActions) AuroraColors.MessageActionError else AuroraColors.Error
-    val color = if (action.destructive) error else AuroraColors.Ink
-    val hover = if (messageActions) AuroraColors.MessageActionHover else AuroraColors.WorkHover
+    val settings = presentation == HbMenuPresentation.AuroraSettings
+    val color = menuItemInk(presentation, action.destructive)
+    val hover = when (presentation) {
+        HbMenuPresentation.AuroraSettings -> HbTheme.colors.surface.subtle
+        HbMenuPresentation.AuroraDesktopMessageActions -> AuroraColors.MessageActionHover
+        else -> AuroraColors.WorkHover
+    }
     val surface = if (hovered || active) hover else Color.Transparent
-    val minHeight = if (presentation == HbMenuPresentation.AuroraTouchMessage) AuroraLayout.TouchTarget
-    else AuroraLayout.DesktopTarget
+    val minHeight = when (presentation) {
+        HbMenuPresentation.AuroraTouchMessage -> AuroraLayout.TouchTarget
+        HbMenuPresentation.AuroraSettings -> HbEngineSettingsLayout.actionHeight
+        else -> AuroraLayout.DesktopTarget
+    }
     val selected = action.selected
     Row(
         modifier
@@ -83,11 +98,14 @@ internal fun HbAuroraMenuItem(
                 role = Role.Button, onClick = onClick,
             )
             .then(if (selected == null) Modifier else Modifier.semantics { this.selected = selected })
-            .padding(horizontal = AuroraLayout.Space, vertical = AuroraLayout.ControlGap),
+            .padding(
+                horizontal = if (settings) AuroraLayout.ContentInset else AuroraLayout.Space,
+                vertical = AuroraLayout.ControlGap,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
     ) {
-        action.glyph?.let { HbIcon(it, tint = color, size = AuroraLayout.Glyph) }
+        MenuActionIcon(action, color, settings)
         BasicText(
             action.label,
             modifier = Modifier.weight(1f),
@@ -98,6 +116,27 @@ internal fun HbAuroraMenuItem(
             false -> Spacer(Modifier.size(AuroraLayout.Glyph))
             null -> Unit
         }
+    }
+}
+
+@Composable
+@ReadOnlyComposable
+private fun menuItemInk(presentation: HbMenuPresentation, destructive: Boolean): Color =
+    when (presentation) {
+        HbMenuPresentation.AuroraSettings ->
+            if (destructive) HbTheme.colors.status.error.foreground else HbTheme.colors.text.primary
+        HbMenuPresentation.AuroraDesktopMessageActions ->
+            if (destructive) AuroraColors.MessageActionError else AuroraColors.Ink
+        else -> if (destructive) AuroraColors.Error else AuroraColors.Ink
+    }
+
+@Composable
+private fun MenuActionIcon(action: HbMenuAction, color: Color, settings: Boolean) {
+    val glyph = action.glyph
+    if (glyph != null) {
+        HbIcon(glyph, tint = color, size = if (settings) AuroraLayout.LargeGlyph else AuroraLayout.Glyph)
+    } else {
+        action.leadingIcon(color)
     }
 }
 
@@ -112,3 +151,5 @@ private fun Modifier.compactMenuWidth() = layout { measurable, constraints ->
 
 private val AuroraPopupMinWidth = 112.dp
 private val AuroraPopupMaxHeight = 280.dp
+
+private val SettingsMenuWidth = 202.dp

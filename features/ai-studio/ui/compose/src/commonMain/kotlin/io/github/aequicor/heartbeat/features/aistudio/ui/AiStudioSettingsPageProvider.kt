@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui
 
 import androidx.compose.runtime.Composable
+import com.arkivanov.decompose.ComponentContext
 import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
@@ -18,7 +19,7 @@ class AiStudioSettingsPageProvider(
     override val pageIds: Set<String> = setOf(AiStudioSettingsContributor.PAGE_ID)
 
     @Composable
-    override fun Content(pageId: String) {
+    override fun Content(pageId: String, context: ComponentContext, onBack: () -> Unit) {
         when (pageId) {
             AiStudioSettingsContributor.PAGE_ID -> AiStudioSettingsPage(settings, appScope)
             else -> error("Unknown settings page: $pageId")

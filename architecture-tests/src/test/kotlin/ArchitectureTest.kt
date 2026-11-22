@@ -187,9 +187,10 @@ class ArchitectureTest {
 
     @Test
     fun featureLayersFollowImportDirection() {
-        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:engines:acp..")
         val studio = Konsist.scopeFromProduction(moduleName = ":features:ai-studio..")
-        (featureScope - adapter - studio).assertArchitecture {
+        val engineSettings = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-facade:settings..")
+        (featureScope - adapter - studio - engineSettings).assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domain = Layer("Domain", rolePattern("domain"))
             val data = Layer("Data", rolePattern("data"))
@@ -209,10 +210,13 @@ class ArchitectureTest {
     }
 
     @Test
-    fun aiStudioAdaptersUseImplContracts() {
-        Konsist.scopeFromProduction(moduleName = ":features:ai-studio..").assertArchitecture {
+    fun featureAdaptersUseTheirOwnImplContracts() {
+        val studio = Konsist.scopeFromProduction(moduleName = ":features:ai-studio..")
+        val engineSettings = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-facade:settings..")
+        (studio + engineSettings).assertArchitecture {
             val api = Layer("API", rolePattern("api"))
             val domainModel = Layer("Domain model", rolePattern("domain.model"))
+            val domainUtilities = Layer("Domain utilities", rolePattern("domain.util"))
             val domainException = Layer("Domain exception", rolePattern("domain.exception"))
             val dataSourceContract = Layer("Data source contract", rolePattern("domain.datasource"))
             val repositoryContract = Layer("Repository", rolePattern("domain.repository"))
@@ -220,6 +224,7 @@ class ArchitectureTest {
             val useCase = Layer("Use case", rolePattern("domain.usecase"))
             val dao = Layer("DAO", rolePattern("data.dao"))
             val dataModel = Layer("Data model", rolePattern("data.model"))
+            val entity = Layer("Entity", rolePattern("data.entity"))
             val dataException = Layer("Data exception", rolePattern("data.exception"))
             val dataSource = Layer("Data source", rolePattern("data.datasource"))
             val workspaceStorage = Layer("Workspace storage", rolePattern("data.workspace"))
@@ -231,14 +236,18 @@ class ArchitectureTest {
             api.dependsOnNothing()
             domainModel.dependsOnNothing()
             domainException.dependsOnNothing()
-            dataSourceContract.dependsOn(domainModel)
+            domainUtilities.dependsOnNothing()
+            dataSourceContract.dependsOn(domainModel, domainException)
             repositoryContract.dependsOn(domainModel, dataSourceContract)
-            interactor.dependsOn(domainModel, repositoryContract, dataSourceContract)
+            interactor.dependsOn(domainModel, repositoryContract, dataSourceContract, domainUtilities)
             useCase.dependsOn(domainModel, repositoryContract)
             dataModel.dependsOnNothing()
             dataException.dependsOnNothing()
             dao.dependsOn(dataModel, dataException)
-            dataSource.dependsOn(dao, dataModel, dataException, domainModel, domainException, dataSourceContract)
+            entity.dependsOn(domainModel)
+            dataSource.dependsOn(
+                api, dao, entity, dataModel, dataException, domainModel, domainException, dataSourceContract,
+            )
             workspaceStorage.dependsOn(dao, dataException, domainModel, domainException, presentation)
             presentation.dependsOn(api, domainModel, domainException, interactor, useCase)
             di.dependsOn(
@@ -265,13 +274,15 @@ class ArchitectureTest {
 
     @Test
     fun acpAdapterImplementsEngineApiInDataLayer() {
-        val adapter = Konsist.scopeFromProduction(moduleName = ":features:ai-engine-acp-adapter:impl")
+        val adapter = Konsist.scopeFromProduction(moduleName = ":features:engines:acp..")
         val engine = Konsist.scopeFromProduction(moduleName = ":features:ai-engine:api")
         (adapter + engine).assertArchitecture {
             val api = Layer("AI Engine API", "$featurePrefix.aiengine.api..")
-            val data = Layer("ACP adapter", "$featurePrefix.aiengineacpadapter.data..")
+            val acpApi = Layer("ACP API", "$featurePrefix.acp.api..")
+            val data = Layer("ACP adapter", "$featurePrefix.acp.data..")
             api.dependsOnNothing()
-            data.dependsOn(api)
+            acpApi.dependsOn(api)
+            data.dependsOn(api, acpApi)
         }
     }
 

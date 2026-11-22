@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.navigation.compose
 
 import androidx.compose.runtime.Composable
+import com.arkivanov.decompose.ComponentContext
 
 /**
  * Renders the settings pages a feature owns. It is the Compose adapter of the settings metadata a
@@ -16,7 +17,9 @@ interface ComposeSettingsPageProvider {
     /** Page ids this provider can render. */
     val pageIds: Set<String>
 
+    val providesNavigation: Boolean get() = false
+
     /** Renders the content of [pageId], which is always one of [pageIds]. */
     @Composable
-    fun Content(pageId: String)
+    fun Content(pageId: String, context: ComponentContext, onBack: () -> Unit)
 }

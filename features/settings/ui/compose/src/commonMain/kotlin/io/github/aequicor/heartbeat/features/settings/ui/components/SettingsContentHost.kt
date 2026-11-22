@@ -15,6 +15,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageId
+import io.github.aequicor.heartbeat.features.settings.component.SettingsComponent
 import io.github.aequicor.heartbeat.features.settings.ui.ComposeSettingsPageRegistry
 
 /**
@@ -26,6 +27,7 @@ internal fun SettingsContentHost(
     title: String?,
     pageId: SettingsPageId?,
     registry: ComposeSettingsPageRegistry,
+    component: SettingsComponent,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
@@ -56,7 +58,7 @@ internal fun SettingsContentHost(
                     text = "Раздел недоступен: ${pageId.value}", style = HbTypography.Detail,
                     modifier = Modifier.padding(HbSpacing.L),
                 )
-                else -> provider.Content(pageId.value)
+                else -> provider.Content(pageId.value, component, component::back)
             }
         }
     }

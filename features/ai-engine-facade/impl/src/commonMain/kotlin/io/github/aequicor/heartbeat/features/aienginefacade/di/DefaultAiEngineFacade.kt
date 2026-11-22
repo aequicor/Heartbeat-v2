@@ -16,9 +16,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,20 +31,16 @@ import kotlinx.coroutines.withContext
 class DefaultAiEngineFacade(
     providers: Set<AiEngineProvider>,
     private val appScope: AppCoroutineScope,
+    catalogs: Set<Flow<List<AiEngineProvider>>> = setOf(),
 ) : AiEngineFacade {
 
-    private val providersById = buildMap {
-        for (provider in providers) {
-            val id = provider.key.id
-            require(put(id, provider) == null) { "Duplicate AI engine ID: $id" }
-        }
-    }
-    private val keys = providersById.values.map(AiEngineProvider::key)
-    private val initialStates: Map<AiEngineKey, AiEngineState> =
-        keys.associateWith { AiEngineState.NotInitialized }
-    private val engineStates = MutableStateFlow(initialStates)
+    private var providersById = index(providers)
+    private val keys = MutableStateFlow(providersById.values.map(AiEngineProvider::key))
+    private val engineStates = MutableStateFlow<Map<AiEngineKey, AiEngineState>>(
+        keys.value.associateWith { AiEngineState.NotInitialized },
+    )
 
-    override val availableEngines: StateFlow<List<AiEngineKey>> = MutableStateFlow(keys).asStateFlow()
+    override val availableEngines: StateFlow<List<AiEngineKey>> = keys.asStateFlow()
     override val engines: StateFlow<Map<AiEngineKey, AiEngineState>> =
         engineStates.asStateFlow()
 
@@ -57,9 +55,38 @@ class DefaultAiEngineFacade(
             delay(STATE_WINDOW_MILLIS)
             changes.tryReceive()
             // Read current states so a removed instance cannot publish a stale update.
-            engineStates.value = registryLock.withLock {
-                keys.associateWith { active[it.id]?.state?.value ?: AiEngineState.NotInitialized }
+            registryLock.withLock {
+                engineStates.value = snapshot()
             }
+        }
+    }
+
+    private val catalogObserver = appScope.launch {
+        if (catalogs.isEmpty()) return@launch
+        combine(catalogs) { lists -> index(providers + lists.flatMap { it }) }.collect { latest ->
+            disposalLock.withLock {
+                val removed = registryLock.withLock {
+                    if (closed) return@collect
+                    providersById = latest
+                    active.forEach { (id, entry) -> latest[id]?.let { entry.catalogKey = it.key } }
+                    keys.value = latest.values.map(AiEngineProvider::key)
+                    engineStates.value = snapshot()
+                    active.filterKeys { it !in latest }.values.toList()
+                }
+                withContext(NonCancellable) {
+                    for (entry in removed) entry.release()
+                }
+            }
+        }
+    }
+
+    private fun snapshot(): Map<AiEngineKey, AiEngineState> =
+        keys.value.associateWith { active[it.id]?.state?.value ?: AiEngineState.NotInitialized }
+
+    private fun index(candidates: Iterable<AiEngineProvider>): Map<String, AiEngineProvider> = buildMap {
+        for (provider in candidates) {
+            val id = provider.key.id
+            require(put(id, provider) == null) { "Duplicate AI engine ID: $id" }
         }
     }
 
@@ -71,13 +98,14 @@ class DefaultAiEngineFacade(
             val engine = provider.create()
             val observer = appScope.launch { engine.state.collect { changes.trySend(Unit) } }
             changes.trySend(Unit)
-            ActiveEngine(id, engine, observer)
+            ActiveEngine(provider.key, engine, observer)
         }
         check(!entry.disposing) { "AI engine $id is pending disposal" }
         entry
     }
 
     override suspend fun dispose() {
+        catalogObserver.cancelAndJoin()
         disposalLock.withLock {
             withContext(NonCancellable) {
                 val entries = registryLock.withLock {
@@ -91,17 +119,18 @@ class DefaultAiEngineFacade(
                 }
                 publisher.cancelAndJoin()
                 changes.close()
-                engineStates.value = initialStates
+                engineStates.value = keys.value.associateWith { AiEngineState.NotInitialized }
             }
         }
     }
 
     private inner class ActiveEngine(
-        private val id: String,
+        var catalogKey: AiEngineKey,
         private val runtime: AiEngine,
         private val observer: Job,
     ) : AiEngine by runtime {
         var disposing = false
+        override val key: AiEngineKey get() = registryLock.withLock { catalogKey }
 
         override suspend fun dispose() {
             disposalLock.withLock {
@@ -110,6 +139,7 @@ class DefaultAiEngineFacade(
         }
 
         suspend fun release() {
+            val id = key.id
             registryLock.withLock {
                 if (active[id] !== this) return
                 disposing = true

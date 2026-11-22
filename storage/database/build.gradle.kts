@@ -24,6 +24,7 @@ configure<SqlDelightExtension> {
 
             dependency(project(":features:editor:impl"))
             dependency(project(":features:ai-studio:impl"))
+            dependency(project(":features:ai-engine-facade:settings:impl"))
             dependency(project(":core:preferences:sqlite"))
         }
     }
@@ -39,6 +40,7 @@ kotlin {
             // schema it composes, so the schema modules are also compile dependencies.
             implementation(project(":features:editor:impl"))
             implementation(project(":features:ai-studio:impl"))
+            implementation(project(":features:ai-engine-facade:settings:impl"))
         }
         getByName("jvmTest").dependencies {
             implementation(libs.sqldelight.sqlite.driver)

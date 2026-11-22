@@ -39,10 +39,13 @@ include(
 )
 include(
     ":features:ai-engine:api",
-    ":features:ai-engine-acp-adapter:impl",
     ":features:ai-engine-facade:api",
     ":features:ai-engine-facade:impl",
-    ":features:engines:dsh",
+    ":features:ai-engine-facade:settings:impl",
+    ":features:ai-engine-facade:settings:presentation:decompose",
+    ":features:ai-engine-facade:settings:ui:compose",
+    ":features:engines:acp:api",
+    ":features:engines:acp:impl",
     ":features:ai-studio:api",
     ":features:ai-studio:impl",
     ":features:ai-studio:presentation:decompose",

@@ -15,6 +15,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assume
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
+import java.sql.DriverManager
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -23,6 +26,10 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class DesktopDshGraphTest {
+
+    @get:Rule
+    val directory = TemporaryFolder()
+
     @Test
     fun registersDshInDesktopEngineCatalog() = withGraph { graph ->
         val facade = graph.aiEngineFacade
@@ -83,12 +90,25 @@ class DesktopDshGraphTest {
         ProcessHandle.current().descendants().use { it.toList() }
 
     private fun withGraph(test: suspend (DesktopGraph) -> Unit) = runBlocking {
-        val graph = createGraphFactory<DesktopGraph.Factory>().create("")
+        val graph = createGraphFactory<DesktopGraph.Factory>().create(directory.root.absolutePath)
+        graph.databaseInitializer.initialize()
+        // An installed CLI becomes an available engine after the user saves its settings.
+        DriverManager.getConnection("jdbc:sqlite:" + directory.root.resolve("heartbeat.db")).use { db ->
+            db.createStatement().use { sql ->
+                sql.executeUpdate(
+                    "INSERT INTO acp_connection VALUES ('dsh','DeepSeek Harness','DeepSeek','dsh'," +
+                        "'--profile acp',' ','{}')",
+                )
+                sql.executeUpdate("INSERT INTO chat_engine VALUES ('dsh','DeepSeek Harness','dsh','{}','')")
+            }
+        }
         val facade = graph.aiEngineFacade
         try {
+            withTimeout(10.seconds) { facade.availableEngines.first { engines -> engines.any { it.id == "dsh" } } }
             test(graph)
         } finally {
             facade.dispose()
+            graph.databaseInitializer.close()
             graph.appCoroutineScope.cancel()
         }
     }

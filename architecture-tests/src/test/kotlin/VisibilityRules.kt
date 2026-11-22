@@ -14,8 +14,8 @@
  * feature module is an implementation detail and must be `internal`.
  *
  * This rule minimises the internal API; it does not replace the module boundary. The dependency
- * graph in `architectureCheck` forbids dependencies between feature implementations. AI Studio
- * adapters may use the listed contracts in their own `impl`. Mutable state and paging data
+ * graph in `architectureCheck` forbids dependencies between feature implementations. AI Studio and
+ * engine settings adapters may use the listed contracts in their own `impl`. Mutable state and paging data
  * stay within that module.
  */
 internal object VisibilityRules {
@@ -41,6 +41,9 @@ internal object VisibilityRules {
         listOf("presentation"),
         listOf("di"),
         listOf("component"),
+        listOf("component", "engines"),
+        listOf("data", "api"),
+        listOf("ui", "settings"),
         listOf("ui"),
     )
 
@@ -75,7 +78,7 @@ internal object VisibilityRules {
             role == null -> null
             // The api role is the feature's public surface, checked by `apiContractsArePublic`.
             NamingRules.isApiPackage(packageName) -> null
-            isAiStudioAdapterContract(packageName, declarationName, declarationKind) -> null
+            isFeatureAdapterContract(packageName, declarationName, declarationKind) -> null
             role in metroRoles && metroAnnotations.any(annotations::contains) -> null
             role == listOf("domain", "repository") ->
                 repositoryContractViolation(declarationKind, declarationName)
@@ -100,13 +103,28 @@ internal object VisibilityRules {
         }
     }
 
-    private fun isAiStudioAdapterContract(
+    private fun isFeatureAdapterContract(
         packageName: String,
         declarationName: String,
         declarationKind: DeclarationKind,
     ): Boolean = when (packageName) {
         "io.github.aequicor.heartbeat.features.aistudio.presentation.contract" ->
             declarationName in aiStudioAdapterContracts
+        "io.github.aequicor.heartbeat.features.aienginefacade.presentation.engines" ->
+            declarationName in setOf(
+                "AcpCheckState",
+                "AcpConnectionForm",
+                "AcpConnectionFormChange",
+                "EngineOperationFailure",
+                "EngineSettingField",
+                "EngineSettingsScreenAction",
+                "EngineSettingsScreenState",
+                "EngineSettingsStore",
+                "EngineSettingsStoreFactory",
+            )
+        "io.github.aequicor.heartbeat.features.aienginefacade.component.engines" ->
+            declarationKind == DeclarationKind.INTERFACE &&
+                declarationName in setOf("EngineSettingsComponent", "EngineSettingsComponentFactory")
         "io.github.aequicor.heartbeat.features.aistudio.component" ->
             declarationName == "ProjectsSessionsComponent" && declarationKind == DeclarationKind.INTERFACE
         else -> false

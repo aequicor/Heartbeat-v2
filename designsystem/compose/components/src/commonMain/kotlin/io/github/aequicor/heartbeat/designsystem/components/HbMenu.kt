@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,7 +112,10 @@ fun HbMenu(
 }
 
 /** Aurora menus share compact geometry. Desktop message actions have their own surface. */
-enum class HbMenuPresentation { Standard, AuroraMessage, AuroraTouchMessage, AuroraDesktopMessageActions }
+enum class HbMenuPresentation {
+
+    Standard, AuroraMessage, AuroraTouchMessage, AuroraDesktopMessageActions, AuroraSettings,
+}
 
 /** One entry of an [HbMenu]: an action or a decorative separator. */
 sealed interface HbMenuEntry
@@ -125,6 +129,7 @@ data class HbMenuAction(
     val selected: Boolean? = null,
     val glyph: HbIconGlyph? = null,
     val destructive: Boolean = false,
+    val leadingIcon: @Composable (Color) -> Unit = {},
 ) : HbMenuEntry
 
 /** Decorative boundary between groups of actions; it is never focusable or activatable. */

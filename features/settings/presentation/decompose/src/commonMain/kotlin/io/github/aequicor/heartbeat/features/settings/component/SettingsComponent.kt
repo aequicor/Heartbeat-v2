@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.settings.component
 
+import com.arkivanov.decompose.ComponentContext
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageDescriptor
 import io.github.aequicor.heartbeat.features.settings.api.SettingsPageId
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
@@ -10,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * query. Page selection is local navigation inside the settings feature; the shell layout and the
  * page content are owned by the Compose UI layer.
  */
-interface SettingsComponent : FeatureRoot {
+interface SettingsComponent : FeatureRoot, ComponentContext {
 
     val pages: List<SettingsPageDescriptor>
 
