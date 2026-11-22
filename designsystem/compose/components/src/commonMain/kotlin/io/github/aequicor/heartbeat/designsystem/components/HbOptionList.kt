@@ -242,8 +242,8 @@ internal fun HbOptionSurface(
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = maxWidth
         val availableHeight = maxHeight
-        val minWidth = minOf(POPUP_MIN_WIDTH, availableWidth)
-        val maxWidth = minOf(POPUP_MAX_WIDTH, availableWidth)
+        val minWidth = maxOf(this.minWidth, minOf(POPUP_MIN_WIDTH, availableWidth))
+        val maxWidth = maxOf(this.minWidth, minOf(POPUP_MAX_WIDTH, availableWidth))
         val height = if (availableHeight.value.isFinite()) {
             minOf(POPUP_MAX_HEIGHT, availableHeight)
         } else {

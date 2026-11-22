@@ -35,6 +35,14 @@ fun SettingsScreen(
     val selectedDescriptor = component.pages.firstOrNull { it.id == selectedPageId }
 
     val caption = HbWindowCaption.current
+    val pageId = selectedPageId?.value
+    val provider = pageId?.let(registry::find)
+    if (pageId != null && provider?.providesNavigation == true) {
+        Row(modifier.fillMaxSize()) {
+            provider.Content(pageId, component, component::back)
+        }
+        return
+    }
     val top = if (caption.leftInset > Dp.Hairline) Dp.Hairline else caption.height
     Row(modifier = modifier.fillMaxSize().padding(top = top)) {
         SettingsSidebar(
@@ -51,6 +59,7 @@ fun SettingsScreen(
             title = selectedDescriptor?.title,
             pageId = selectedPageId,
             registry = registry,
+            component = component,
             modifier = Modifier.weight(1f),
         )
     }

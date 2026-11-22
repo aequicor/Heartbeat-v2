@@ -1,0 +1,19 @@
+CREATE TABLE acp_connection (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    command TEXT NOT NULL,
+    argument_text TEXT NOT NULL,
+    argument_separator TEXT NOT NULL,
+    environment_json TEXT NOT NULL
+);
+
+CREATE TABLE chat_engine (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    connection_id TEXT NOT NULL REFERENCES acp_connection(id),
+    local_settings_json TEXT NOT NULL,
+    chat_rules TEXT NOT NULL
+);
+
+CREATE INDEX chat_engine_connection ON chat_engine(connection_id);

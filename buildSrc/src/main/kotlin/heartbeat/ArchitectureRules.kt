@@ -197,8 +197,7 @@ object ArchitectureRules {
 
     fun isImpl(path: String): Boolean =
         path == ":shell:impl" ||
-            (isFeature(path) && pathSegments(path).last() == "impl") ||
-            path == ":features:engines:dsh"
+            (isFeature(path) && pathSegments(path).last() == "impl")
 
     fun role(path: String): Role = when {
         path.startsWith(":platform:") -> Role.Platform
@@ -234,9 +233,9 @@ object ArchitectureRules {
     fun allowedTargets(from: String): Set<Role> = allowedTargetsByRole.getValue(role(from))
 
     fun isAllowedDependency(fromPath: String, toPath: String): Boolean {
-        if (toPath == ":features:ai-studio:impl" &&
-            (fromPath == ":features:ai-studio:presentation:decompose" ||
-                fromPath == ":features:ai-studio:ui:compose")
+        val owner = toPath.removeSuffix(":impl")
+        if (toPath.endsWith(":impl") && owner in setOf(":features:ai-studio", ":features:ai-engine-facade:settings") &&
+            fromPath in setOf("$owner:presentation:decompose", "$owner:ui:compose")
         ) {
             return true
         }

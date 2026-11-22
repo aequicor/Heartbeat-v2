@@ -103,8 +103,10 @@ dependencies {
     implementation(project(":shell:ui:compose"))
     implementation(project(":features:ai-engine-facade:api"))
     implementation(project(":features:ai-engine-facade:impl"))
-    implementation(project(":features:ai-engine-acp-adapter:impl"))
-    implementation(project(":features:engines:dsh"))
+    implementation(project(":features:ai-engine-facade:settings:impl"))
+    implementation(project(":features:ai-engine-facade:settings:presentation:decompose"))
+    implementation(project(":features:ai-engine-facade:settings:ui:compose"))
+    implementation(project(":features:engines:acp:impl"))
     implementation(project(":features:ai-studio:api"))
     implementation(project(":features:ai-studio:impl"))
     implementation(project(":features:ai-studio:presentation:decompose"))
@@ -119,6 +121,7 @@ dependencies {
     implementation(project(":core:preferences:datastore"))
     implementation(project(":storage:database"))
     implementation(libs.metro.runtime)
+    runtimeOnly(libs.kotlinx.coroutines.swing)
 
     // Test-only: the composition root graph must see the feature bindings the platform
     // wires together. The application itself composes the AI studio screen only.

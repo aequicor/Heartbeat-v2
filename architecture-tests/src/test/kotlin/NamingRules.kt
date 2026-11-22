@@ -173,6 +173,7 @@ internal object NamingRules {
     ): String? = when {
         !declarationKind.isType() -> null
         declarationName.endsWith("DataSource") || declarationName.endsWith("Dto") -> null
+        declarationKind == DeclarationKind.CLASS && declarationName.endsWith("DataSourceImpl") -> null
         else -> "data source must end with DataSource and its DTO with Dto: $declarationName"
     }
 
@@ -275,7 +276,7 @@ internal object NamingRules {
             ?.takeIf { it.isNotEmpty() }
 
     /** Matches the feature directory in an absolute or repo-relative source path. */
-    private val featureDirectory = Regex("""(^|/)features/([^/]+)/""")
+    private val featureDirectory = Regex("""(^|/)features/(?:engines/)?([^/]+)/""")
 
     /** Segments of `...heartbeat.features.<feature>.<role>`; `null` outside a feature. */
     internal fun featurePath(packageName: String): List<String>? {

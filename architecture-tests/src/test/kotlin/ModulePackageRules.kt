@@ -58,8 +58,10 @@ internal object ModulePackageRules {
     }
 
     private fun featureViolation(module: List<String>, packageName: String): String? {
-        val (feature, rest) = if (module == listOf("features", "engines", "dsh")) {
-            "dsh" to listOf("impl")
+        val (feature, rest) = if (module.getOrNull(1) == "engines" && module.size >= 4) {
+            module[2] to module.drop(3)
+        } else if (module.take(3) == listOf("features", "ai-engine-facade", "settings")) {
+            module[1] to module.drop(3)
         } else {
             module[1] to module.drop(2)
         }

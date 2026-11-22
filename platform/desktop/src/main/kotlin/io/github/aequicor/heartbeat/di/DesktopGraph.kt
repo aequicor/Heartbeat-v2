@@ -1,19 +1,13 @@
 package io.github.aequicor.heartbeat.di
 
 import dev.zacsweers.metro.DependencyGraph
-import dev.zacsweers.metro.IntoSet
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.core.database.JvmSqlDriverFactory
 import io.github.aequicor.heartbeat.core.database.SqlDriverFactory
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
 import io.github.aequicor.heartbeat.core.preferences.datastore.DataStorePreferencesStoreFactory
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
-import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineProvider
-import io.github.aequicor.heartbeat.features.aiengineacpadapter.data.datasource.AcpAgentDataSource
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
-import io.github.aequicor.heartbeat.features.dsh.domain.model.DshEngineSpec
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.shell.ShellComponentFactory
 import io.github.aequicor.heartbeat.storage.database.DatabaseInitializer
@@ -67,15 +61,4 @@ interface DesktopGraph {
     fun provideSqlDriverFactory(dataDirectory: String): SqlDriverFactory =
         JvmSqlDriverFactory(dataDirectory)
 
-    @Provides
-    @IntoSet
-    fun provideDshEngine(spec: DshEngineSpec, acp: AcpAgentDataSource): AiEngineProvider {
-        val key = object : AiEngineKey {
-            override val id = spec.id
-            override val name = spec.name
-            override val description = spec.description
-            override val connection = AiEngineConnection.ACP
-        }
-        return acp.provider(key, spec.command)
-    }
 }

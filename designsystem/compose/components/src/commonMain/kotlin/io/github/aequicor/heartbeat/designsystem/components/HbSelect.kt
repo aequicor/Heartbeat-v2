@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -24,6 +26,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
@@ -76,6 +81,41 @@ fun <T> HbSelect(
     enabled: Boolean = true,
     optionKey: (T) -> Any? = { it },
 ) {
+    SelectField(
+        options, selected, onSelect, label, placeholder, optionLabel, enabled, optionKey, Dp.Unspecified, modifier,
+    )
+}
+
+/** Aurora desktop field with a menu the width of the anchor and a full-size chevron. */
+@Composable
+fun <T> HbAuroraFieldSelect(
+    options: List<T>,
+    selected: T?,
+    onSelect: (T) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    optionLabel: (T) -> String,
+) {
+    var width by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    val anchor = modifier.onSizeChanged { width = with(density) { it.width.toDp() } }
+    SelectField(options, selected, onSelect, label, placeholder, optionLabel, true, { it }, width, anchor)
+}
+
+@Composable
+private fun <T> SelectField(
+    options: List<T>,
+    selected: T?,
+    onSelect: (T) -> Unit,
+    label: String,
+    placeholder: String,
+    optionLabel: (T) -> String,
+    enabled: Boolean,
+    optionKey: (T) -> Any?,
+    anchorWidth: Dp,
+    modifier: Modifier = Modifier,
+) {
     var expanded by remember { mutableStateOf(false) }
     var activeKey by remember { mutableStateOf<HbOptionIdentity?>(null) }
     val triggerRequester = remember { FocusRequester() }
@@ -95,8 +135,7 @@ fun <T> HbSelect(
 
     fun open() {
         if (!enabled || expanded) return
-        activeKey = selected?.let { optionIdentityOf(it, optionKey) }
-            ?: options.firstOrNull()?.let { optionIdentityOf(it, optionKey) }
+        activeKey = (selected ?: options.firstOrNull())?.let { optionIdentityOf(it, optionKey) }
         expanded = true
     }
 
@@ -105,14 +144,16 @@ fun <T> HbSelect(
         triggerRequester.requestFocus()
     }
 
+    val valueLabel = selected?.let(optionLabel)
     Box(modifier = modifier) {
         SelectTrigger(
-            text = selected?.let(optionLabel) ?: placeholder,
+            aurora = anchorWidth != Dp.Unspecified,
+            text = valueLabel ?: placeholder,
             isPlaceholder = selected == null,
             expanded = expanded,
             enabled = enabled,
             label = effectiveLabel,
-            value = selected?.let(optionLabel),
+            value = valueLabel,
             error = formError,
             focusRequester = triggerRequester,
             onClick = {
@@ -132,6 +173,7 @@ fun <T> HbSelect(
                 noOptionsText = noOptionsText,
                 optionKey = optionKey,
                 offset = popupOffset,
+                anchorWidth = anchorWidth,
                 onSelect = { option ->
                     onSelect(option)
                     close()
@@ -154,6 +196,7 @@ private fun <T> SelectPopup(
     noOptionsText: String,
     optionKey: (T) -> Any?,
     offset: Int,
+    anchorWidth: Dp,
     onSelect: (T) -> Unit,
     onActiveChange: (Int) -> Unit,
     onClose: () -> Unit,
@@ -164,6 +207,7 @@ private fun <T> SelectPopup(
         properties = PopupProperties(focusable = true),
     ) {
         HbOptionList(
+            modifier = if (anchorWidth != Dp.Unspecified) Modifier.width(anchorWidth) else Modifier,
             options = options,
             selected = selected,
             activeIndex = activeIndex,
@@ -179,6 +223,7 @@ private fun <T> SelectPopup(
 
 @Composable
 private fun SelectTrigger(
+    aurora: Boolean,
     text: String,
     isPlaceholder: Boolean,
     expanded: Boolean,
@@ -196,6 +241,7 @@ private fun SelectTrigger(
     val border = when {
         !enabled -> colors.border.subtle
         error != null -> colors.status.error.foreground
+        aurora -> colors.border.subtle
         else -> colors.border.control
     }
     val contentColor = when {
@@ -228,7 +274,7 @@ private fun SelectTrigger(
                 error = error,
                 onExpandedChange = onExpandedChange,
             )
-            .padding(horizontal = HbSpacing.S, vertical = HbSpacing.Xs),
+            .padding(horizontal = if (aurora) HbAuroraLayout.ContentInset else HbSpacing.S, vertical = HbSpacing.Xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicText(
@@ -237,7 +283,8 @@ private fun SelectTrigger(
             color = { contentColor },
             modifier = Modifier.weight(1f),
         )
-        HbChevronGlyph(color = chevronColor, expanded = expanded)
+        HbChevronGlyph(color = chevronColor, expanded = expanded,
+            modifier = if (aurora) Modifier.size(HbAuroraLayout.Glyph) else Modifier)
     }
 }
 

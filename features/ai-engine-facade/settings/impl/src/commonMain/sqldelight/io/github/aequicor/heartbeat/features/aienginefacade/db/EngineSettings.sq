@@ -1,0 +1,68 @@
+CREATE TABLE acp_connection (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    command TEXT NOT NULL,
+    argument_text TEXT NOT NULL,
+    argument_separator TEXT NOT NULL,
+    environment_json TEXT NOT NULL
+);
+
+CREATE TABLE chat_engine (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    connection_id TEXT NOT NULL REFERENCES acp_connection(id),
+    local_settings_json TEXT NOT NULL,
+    chat_rules TEXT NOT NULL
+);
+
+CREATE INDEX chat_engine_connection ON chat_engine(connection_id);
+
+selectEngines:
+SELECT * FROM chat_engine ORDER BY name COLLATE NOCASE, id;
+
+selectConnections:
+SELECT * FROM acp_connection ORDER BY id;
+
+selectConnectionForEngine:
+SELECT acp_connection.* FROM acp_connection
+JOIN chat_engine ON chat_engine.connection_id = acp_connection.id
+WHERE chat_engine.id = ?;
+
+selectEngineNames:
+SELECT id, name FROM chat_engine;
+
+selectEngineCatalog:
+SELECT e.id, e.name, c.name AS connection_name
+FROM chat_engine e JOIN acp_connection c ON c.id = e.connection_id
+ORDER BY e.name COLLATE NOCASE, e.id;
+
+selectEngineById:
+SELECT * FROM chat_engine WHERE id = ?;
+
+insertConnection:
+INSERT INTO acp_connection(id, name, preset, command, argument_text, argument_separator, environment_json)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateConnection:
+UPDATE acp_connection
+SET name = :name, preset = :preset, command = :command, argument_text = :argument_text,
+    argument_separator = :argument_separator, environment_json = :environment_json
+WHERE id = :id;
+
+insertEngine:
+INSERT INTO chat_engine(id, name, connection_id, local_settings_json, chat_rules)
+VALUES (?, ?, ?, ?, ?);
+
+updateEngineSettings:
+UPDATE chat_engine SET local_settings_json = :local_settings_json, chat_rules = :chat_rules WHERE id = :id;
+
+renameEngine:
+UPDATE chat_engine SET name = :name WHERE id = :id;
+
+copyEngine:
+INSERT INTO chat_engine(id, name, connection_id, local_settings_json, chat_rules)
+SELECT :new_id, :new_name, connection_id, local_settings_json, chat_rules FROM chat_engine WHERE id = :source_id;
+
+deleteEngine:
+DELETE FROM chat_engine WHERE id = :id;
