@@ -19,6 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import io.github.aequicor.heartbeat.designsystem.components.HbAuroraFieldSelect
 import io.github.aequicor.heartbeat.designsystem.components.HbButtonVariant
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as Aurora
@@ -75,9 +78,13 @@ private fun ConnectionFooter(editor: State.Editor.Connection, state: State.Loade
     val failure = (check as? AcpCheckState.Failed)?.failure
     if (failure != null) SettingsText(failure.message, Modifier.padding(vertical = HbSpacing.M),
         HbTypography.Caption, HbTheme.colors.status.error.foreground)
-    if (check is AcpCheckState.Connected) SettingsText("Связь установлена · ACP ${check.version}", Modifier
-        .padding(vertical = HbSpacing.S),
-        HbTypography.Caption, HbTheme.colors.status.success.foreground)
+    if (check is AcpCheckState.Connected) {
+        SettingsText(
+            text = "Подключение к движку проверено успешно (ACP ${check.version}).",
+            modifier = Modifier.padding(vertical = HbSpacing.S).semantics { liveRegion = LiveRegionMode.Polite },
+            color = HbTheme.colors.status.success.foreground,
+        )
+    }
     val notice = state.notice
     if (notice != null) SettingsText(notice, Modifier.padding(vertical = HbSpacing.S), HbTypography.Caption)
     SettingsRule()
