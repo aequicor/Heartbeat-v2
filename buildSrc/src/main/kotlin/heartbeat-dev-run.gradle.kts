@@ -49,7 +49,7 @@ class DevRuns(private val project: Project) {
             osPrefix = "windows",
             archs = setOf("amd64", "x86_64"),
             module = ":platform:desktop",
-            runTask = "runDistributable",
+            runTask = "run",
             label = "Windows x64",
         ),
         EntryPoint(
