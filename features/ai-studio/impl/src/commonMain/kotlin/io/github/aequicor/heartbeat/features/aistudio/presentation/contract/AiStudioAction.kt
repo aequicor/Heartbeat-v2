@@ -17,9 +17,15 @@ public sealed interface AiStudioAction {
     public data object CollapseChatSearch : AiStudioAction
     public data object CreateSessionWithoutProject : AiStudioAction
     public data object CreateSession : AiStudioAction
+    public data class CreateSessionInProject(val id: String) : AiStudioAction
+    public data object LoadBootstrapProjects : AiStudioAction
     public data object DismissSessionBootstrap : AiStudioAction
     public sealed interface BootstrapProject : AiStudioAction {
-        public data class Add(val workingDirectoryPath: String) : BootstrapProject
+        public data class Add(val workingDirectoryPath: String, val displayName: String? = null) : BootstrapProject
+        public data class Select(
+            val project: SessionBootstrapState.Project,
+            val title: String? = null,
+        ) : BootstrapProject
         public data class Retry(val name: String) : BootstrapProject
         public data object Cancel : BootstrapProject
     }

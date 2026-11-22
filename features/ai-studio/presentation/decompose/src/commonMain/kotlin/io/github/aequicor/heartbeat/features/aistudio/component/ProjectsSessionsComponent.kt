@@ -22,6 +22,7 @@ interface ProjectsSessionsComponent {
     fun loadMoreProjects()
     fun loadMoreSessions(projectId: String)
     fun loadMoreChildren(parentId: String)
+    fun retryPage(rowId: String)
 }
 
 internal class DefaultProjectsSessionsComponent(
@@ -55,6 +56,8 @@ internal class DefaultProjectsSessionsComponent(
     override fun loadMoreSessions(projectId: String) = dispatch(Project.LoadMoreSessions(projectId))
 
     override fun loadMoreChildren(parentId: String) = dispatch(Session.LoadMoreChildren(parentId))
+
+    override fun retryPage(rowId: String) = dispatch(Panel.RetryPage(rowId))
 
     private fun dispatch(action: ProjectsSessionsAction) {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {

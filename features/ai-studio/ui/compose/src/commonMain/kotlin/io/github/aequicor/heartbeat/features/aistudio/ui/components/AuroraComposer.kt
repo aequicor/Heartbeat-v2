@@ -48,9 +48,15 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_creation_failed
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_project_unavailable
 import kotlinx.coroutines.flow.StateFlow
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraLowerControls(
@@ -128,6 +134,43 @@ internal fun AuroraTailControl(
 }
 
 @Composable
+internal fun AuroraBootstrapComposer(
+    bootstrap: SessionBootstrapState,
+    chat: Chat,
+    touch: Boolean,
+    maxTextHeight: Dp,
+    onAction: (AiStudioAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var field by remember(bootstrap.id) { mutableStateOf(TextFieldValue("")) }
+    val error = when (bootstrap.error) {
+        SessionBootstrapState.Error.ProjectUnavailable -> Res.string.session_project_unavailable
+        SessionBootstrapState.Error.StorageFailure -> if (bootstrap.pendingProject == null) {
+            Res.string.session_creation_failed
+        } else null
+        else -> null
+    }
+    Column(
+        modifier.widthIn(max = AuroraLayout.Composer).fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
+    ) {
+        error?.let { AuroraHeaderStorageError(stringResource(it)) }
+        AuroraComposer(
+            field, { field = it }, Activity.Idle, listOf(), listOf(), touch, maxTextHeight,
+            onAction = { action ->
+                if (action == AiStudioAction.Send) {
+                    onAction(AiStudioAction.SubmitSessionBootstrap(
+                        bootstrap.project, field.text, chat.scenario, chat.access, chat.effort,
+                    ))
+                }
+            },
+            sendBlocked = bootstrap.operation != null,
+            attachmentEnabled = false,
+        )
+    }
+}
+
+@Composable
 private fun AuroraComposer(
     field: TextFieldValue,
     onEdit: (TextFieldValue) -> Unit,
@@ -138,10 +181,12 @@ private fun AuroraComposer(
     maxTextHeight: Dp,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
+    sendBlocked: Boolean = false,
+    attachmentEnabled: Boolean = true,
 ) {
     val working = activity != Activity.Idle
     val stopping = activity == Activity.Stopping
-    val sendEnabled = field.text.isNotBlank() || files.isNotEmpty()
+    val sendEnabled = !sendBlocked && (field.text.isNotBlank() || files.isNotEmpty())
     val onSend = { onAction(AiStudioAction.Send) }
     var focused by remember { mutableStateOf(false) }
     val surface = if (touch) {
@@ -157,21 +202,14 @@ private fun AuroraComposer(
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
     ) {
         if (files.isNotEmpty()) AuroraDraftAttachments(files, touch, onAction)
-        if (stopping || activity == Activity.Sending) {
-            AuroraText(
-                if (stopping) "Останавливаем…" else "Отправляем…",
-                Modifier.padding(start = AuroraLayout.ContentInset, top = AuroraLayout.SmallGap)
-                    .semantics { liveRegion = LiveRegionMode.Polite },
-                small = true, color = AuroraColors.Muted,
-            )
-        }
+        AuroraComposerActivity(activity)
         Row(
             Modifier.fillMaxWidth()
                 .heightIn(min = if (touch) AuroraLayout.ComposerMinRow else AuroraLayout.DesktopTarget),
             verticalAlignment = if (touch) Alignment.CenterVertically else Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(if (touch) AuroraLayout.SmallGap else AuroraLayout.Space),
         ) {
-            AuroraAttachMenu(choices, files, touch, onAction)
+            if (attachmentEnabled) AuroraAttachMenu(choices, files, touch, onAction)
             AuroraComposerField(
                 field, onEdit, onSend, touch, sendEnabled && !working, maxTextHeight,
                 Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
@@ -181,6 +219,21 @@ private fun AuroraComposer(
             }
         }
     }
+}
+
+@Composable
+private fun AuroraComposerActivity(activity: Activity) {
+    val label = when (activity) {
+        Activity.Stopping -> "Останавливаем…"
+        Activity.Sending -> "Отправляем…"
+        else -> return
+    }
+    AuroraText(
+        label,
+        Modifier.padding(start = AuroraLayout.ContentInset, top = AuroraLayout.SmallGap)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        small = true, color = AuroraColors.Muted,
+    )
 }
 
 @Composable

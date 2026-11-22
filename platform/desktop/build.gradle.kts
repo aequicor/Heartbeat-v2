@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JvmVendorSpec
 import java.io.File
@@ -160,6 +161,42 @@ compose.desktop {
             packageName = "Heartbeat"
             packageVersion = desktopVersion
         }
+    }
+}
+
+if (isWindows) {
+    val jnaJar = configurations.runtimeClasspath.get().incoming.artifactView {
+        componentFilter { component ->
+            component is ModuleComponentIdentifier &&
+                component.group == "net.java.dev.jna" && component.module == "jna"
+        }
+    }.files
+    val jnaResources = layout.buildDirectory.dir("jna-launcher-resources")
+    val jnaLibrary = jnaResources.map { it.file("windows/jna/jnidispatch.dll") }
+    val jnaArchitecture = when (architecture(System.getProperty("os.arch"))) {
+        "x64" -> "x86-64"
+        "arm64" -> "aarch64"
+        else -> "x86"
+    }
+    val prepareWindowsJna = tasks.register("prepareWindowsJna") {
+        inputs.files(jnaJar)
+        inputs.property("jnaArchitecture", jnaArchitecture)
+        outputs.file(jnaLibrary)
+        doLast {
+            // Use the native library from the same JNA version as the runtime classpath.
+            ZipFile(jnaJar.singleFile).use { jar ->
+                val entryPath = "com/sun/jna/win32-$jnaArchitecture/jnidispatch.dll"
+                val entry = checkNotNull(jar.getEntry(entryPath)) { "JNA is missing $entryPath" }
+                val target = jnaLibrary.get().asFile.toPath()
+                Files.createDirectories(target.parent)
+                jar.getInputStream(entry).use { source ->
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        }
+    }
+    compose.desktop.application.nativeDistributions {
+        appResourcesRootDir.set(prepareWindowsJna.map { jnaResources.get() })
     }
 }
 

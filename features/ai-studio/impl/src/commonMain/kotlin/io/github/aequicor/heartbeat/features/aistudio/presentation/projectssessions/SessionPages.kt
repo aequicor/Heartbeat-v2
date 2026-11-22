@@ -36,46 +36,40 @@ internal fun PagesDraft.includeIfInLoadedRange(session: StudioSession): Boolean 
     return inLoadedRange
 }
 
-internal suspend fun PagesDraft.revealSessionPath(projectId: ProjectId, path: List<SessionId>) {
-    val root = path.firstOrNull() ?: return
-    while (roots[projectId]?.items?.none { it.id == root } == true) {
-        val cursor = roots[projectId]?.nextCursor ?: break
-        loadMoreRoots(projectId, cursor)
+internal suspend fun PagesDraft.loadMoreRoots(id: ProjectId, cursor: PageCursor<SessionId>): Boolean {
+    val before = roots[id]?.takeIf { it.nextCursor == cursor } ?: return false
+    val next = readPage(NavigationPageRequest.Sessions(id, cursor)) {
+        catalog.listRootSessions(id, SessionStatus.ACTIVE, after = cursor)
     }
-    for ((parent, child) in path.zipWithNext()) {
-        if (loadedSession(parent)?.isExpanded != true) break
-        while (children[parent]?.items?.none { it.id == child } == true) {
-            val cursor = children[parent]?.nextCursor ?: break
-            loadMoreChildren(parent, cursor)
-        }
+    if (next != null) {
+        val merged = before.followedBy(next, StudioSession::id)
+        roots[id] = merged.copy(items = merged.items.sortedWith(sessionOrder))
+        loadExpandedChildren(next.items)
     }
+    return next != null
 }
 
-internal suspend fun PagesDraft.loadMoreRoots(id: ProjectId, cursor: PageCursor<SessionId>) {
-    val before = roots[id] ?: return
-    if (before.nextCursor != cursor) return
-    val next = catalog.listRootSessions(id, SessionStatus.ACTIVE, after = cursor)
-    val merged = before.followedBy(next, StudioSession::id)
-    roots[id] = merged.copy(items = merged.items.sortedWith(sessionOrder))
-    loadExpandedChildren(next.items)
-}
-
-internal suspend fun PagesDraft.loadMoreChildren(id: SessionId, cursor: PageCursor<SessionId>) {
-    val before = children[id] ?: return
-    if (before.nextCursor != cursor) return
-    val next = catalog.listChildSessions(id, SessionStatus.ACTIVE, after = cursor)
-    children[id] = before.followedBy(next, StudioSession::id)
-    loadExpandedChildren(next.items)
+internal suspend fun PagesDraft.loadMoreChildren(id: SessionId, cursor: PageCursor<SessionId>): Boolean {
+    val before = children[id]?.takeIf { it.nextCursor == cursor } ?: return false
+    val next = readPage(NavigationPageRequest.Children(id, cursor)) {
+        catalog.listChildSessions(id, SessionStatus.ACTIVE, after = cursor)
+    }
+    if (next != null) {
+        children[id] = before.followedBy(next, StudioSession::id)
+        loadExpandedChildren(next.items)
+    }
+    return next != null
 }
 
 internal suspend fun PagesDraft.loadRoots(id: ProjectId) {
-    val page = catalog.listRootSessions(id, SessionStatus.ACTIVE)
+    val page = readPage(NavigationPageRequest.Sessions(id)) { catalog.listRootSessions(id, SessionStatus.ACTIVE) }
+        ?: return
     roots[id] = page
     loadExpandedChildren(page.items)
 }
 
-private suspend fun PagesDraft.loadChildren(id: SessionId) {
-    val page = children[id] ?: catalog.listChildSessions(id, SessionStatus.ACTIVE)
+internal suspend fun PagesDraft.loadChildren(id: SessionId) {
+    val page = children[id] ?: readChildPage(id) ?: return
     children[id] = page
     loadExpandedChildren(page.items)
 }
@@ -83,10 +77,17 @@ private suspend fun PagesDraft.loadChildren(id: SessionId) {
 private suspend fun PagesDraft.loadExpandedChildren(rows: List<StudioSession>) {
     for (session in rows) {
         if (session.id in children) continue
-        if (session.isExpanded) loadChildren(session.id)
-        else children[session.id] = catalog.listChildSessions(session.id, SessionStatus.ACTIVE)
+        if (session.isExpanded) {
+            loadChildren(session.id)
+        } else {
+            val page = readChildPage(session.id)
+            if (page != null) children[session.id] = page
+        }
     }
 }
+
+private suspend fun PagesDraft.readChildPage(id: SessionId): Page<StudioSession, SessionId>? =
+    readPage(NavigationPageRequest.Children(id)) { catalog.listChildSessions(id, SessionStatus.ACTIVE) }
 
 private val sessionOrder = compareByDescending<StudioSession> { it.updatedAt }.thenBy { it.id.value.toString() }
 

@@ -18,12 +18,19 @@ internal class SqlDelightProjectDao(
 
     private val queries get() = StudioProjectQueries(connection.driver)
 
-    override suspend fun insert(immutableName: String, workingDirectory: String): ProjectDto {
+    override suspend fun insert(
+        immutableName: String,
+        workingDirectory: String,
+    ): ProjectDao.Registration {
         val id = Uuid.random().toString()
         val project = accessStudioDatabase("Insert project") {
             val now = clock.now()
             val projectQueries = queries
             projectQueries.transactionWithResult {
+                val existing = projectQueries.selectActiveProjectByDirectory(workingDirectory).executeAsOneOrNull()
+                if (existing != null) {
+                    return@transactionWithResult ProjectDao.Registration(existing.toProjectDto(), created = false)
+                }
                 projectQueries.insertProject(
                     id,
                     immutableName,
@@ -31,10 +38,11 @@ internal class SqlDelightProjectDao(
                     now.epochSeconds,
                     now.nanosecondsOfSecond.toLong(),
                 )
-                projectQueries.selectProjectByImmutableName(immutableName).executeAsOne().toProjectDto()
+                val saved = projectQueries.selectProjectByImmutableName(immutableName).executeAsOne()
+                ProjectDao.Registration(saved.toProjectDto(), created = true)
             }
         }
-        if (project.id != id) throw ProjectNameAlreadyExistsException(immutableName)
+        if (project.created && project.project.id != id) throw ProjectNameAlreadyExistsException(immutableName)
         return project
     }
 

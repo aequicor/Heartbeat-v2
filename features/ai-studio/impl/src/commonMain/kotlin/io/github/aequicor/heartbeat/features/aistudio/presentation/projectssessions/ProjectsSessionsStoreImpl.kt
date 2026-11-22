@@ -83,6 +83,7 @@ internal class ProjectsSessionsStoreImpl(
     }
 
     override suspend fun dispatch(action: ProjectsSessionsAction): Result<Unit> {
+        if (action is Panel.RetryPage && state.value.retryingPage == action.rowId) return Result.success(Unit)
         val result = CompletableDeferred<Result<Unit>>()
         try {
             requests.send(Request(action, state.value.pages, result))
@@ -226,12 +227,13 @@ internal class ProjectsSessionsStoreImpl(
             current.copy(visible = true)
         }
         is Panel.Search -> {
-            if (current.query.isNotBlank() || action.query.isNotBlank()) reloadNavigation(action.query)
+            val wasSearching = current.query.isNotBlank()
+            if (wasSearching || action.query.isNotBlank()) reloadNavigation(action.query, wasSearching)
             current.copy(query = action.query)
         }
         Panel.ExpandSearch -> current.copy(searchVisible = true)
         Panel.CollapseSearch -> {
-            reloadNavigation("")
+            if (current.query.isNotBlank()) reloadNavigation("", wasSearching = true)
             current.copy(searchVisible = false, query = "")
         }
         Panel.ExpandPanel -> current.copy(visible = true)
@@ -239,6 +241,12 @@ internal class ProjectsSessionsStoreImpl(
         Panel.LoadMoreProjects -> {
             val cursor = requested.projectPage.nextCursor
             if (cursor != null && projectPage.nextCursor == cursor) loadMoreProjects()
+            current
+        }
+        is Panel.RetryPage -> {
+            retryFailedPage(action.rowId, requested.failures[action.rowId]) {
+                mutableState.value = current.copy(retryingPage = action.rowId)
+            }
             current
         }
     }

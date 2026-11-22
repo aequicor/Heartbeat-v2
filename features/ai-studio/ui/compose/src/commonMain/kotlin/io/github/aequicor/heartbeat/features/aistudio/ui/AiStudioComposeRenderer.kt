@@ -42,7 +42,6 @@ class AiStudioComposeRenderer(
             onAction = { action ->
                 val projectsSessions = component.projectsSessions
                 when (action) {
-                    is AiStudioAction.OpenChat -> projectsSessions.selectSession(action.id)
                     is AiStudioAction.SearchChats -> projectsSessions.search(action.text)
                     AiStudioAction.ExpandChatSearch -> projectsSessions.setSearchVisible(true)
                     AiStudioAction.CollapseChatSearch -> projectsSessions.setSearchVisible(false)

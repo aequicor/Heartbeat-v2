@@ -8,6 +8,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectTree
@@ -26,7 +27,7 @@ internal class ProjectsSessionsInteractorImpl(
 ) : ProjectsSessionsInteractor {
 
     override suspend fun createProject(workingDirectory: Path, name: String): ProjectCreationResult =
-        projects.create(name, workingDirectory)
+        projects.register(name, ProjectDirectory.Local(workingDirectory))
 
     override suspend fun search(query: String): List<ProjectTree> {
         val text = query.trim()

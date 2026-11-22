@@ -13,6 +13,7 @@ import io.github.aequicor.heartbeat.features.aistudio.data.workspace.StudioWorks
 import io.github.aequicor.heartbeat.features.aistudio.db.HeartbeatDatabase
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
@@ -47,6 +48,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
@@ -94,7 +96,7 @@ class StudioWorkspaceIntegrationTest {
         driver().use { driver ->
             val connection = connection(driver)
             val graph = graph(connection)
-            graph.sessionBootstrap.createProject("/work/Alpha".toPath())
+            graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/work/Alpha".toPath()))
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
             val store = store(TestPreferences(), graph, storage)
@@ -126,7 +128,7 @@ class StudioWorkspaceIntegrationTest {
             val connection = connection(driver)
             val graph = graph(connection)
             repeat(6) {
-                graph.sessionBootstrap.createSession(ProjectId.Ungrouped, "Session $it", Instant.DISTANT_PAST)
+                graph.repository.createSession(ProjectId.Ungrouped, "Session $it", Instant.DISTANT_PAST)
             }
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
@@ -196,7 +198,7 @@ class StudioWorkspaceIntegrationTest {
             assertEquals(ungrouped, graph.catalog.listProjects(ProjectStatus.ACTIVE).items.single())
             assertEquals(ungrouped, graph.projectDataSource.findById(ProjectId.Ungrouped))
 
-            graph.sessionBootstrap.createProject("/work/Без проекта".toPath())
+            graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/work/Без проекта".toPath()))
             store.dispatch(AiStudioAction.CreateSessionWithoutProject)
             runCurrent()
             val target = assertNotNull(store.screenState.value.sessionBootstrap).project
@@ -206,7 +208,7 @@ class StudioWorkspaceIntegrationTest {
             val created = graph.catalog.listRootSessions(ProjectId.Ungrouped, SessionStatus.ACTIVE)
                 .items.single { it.id != imported.id }
             assertEquals(ProjectId.Ungrouped, created.projectId)
-            assertNull(store.screenState.value.chat)
+            assertEquals(created.id.value.toString(), store.screenState.value.chat?.id)
             val rows = store.screenState.value.navigation.filter { it.title == "Без проекта" }
             assertEquals("project:$systemId", rows.single { it.kind == AiStudioScreenState.NavigationKind.Section }.id)
             assertTrue(rows.any { it.kind == AiStudioScreenState.NavigationKind.Project })
@@ -220,11 +222,11 @@ class StudioWorkspaceIntegrationTest {
             val graph = graph(connection)
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
-            val originalProject = assertIs<ProjectCreationResult.Created>(
+            val originalProject = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/work/Original".toPath()),
             ).project
             val seed = legacyWorkspace(originalProject.title).chats.single()
-            val session = graph.sessionBootstrap.createSession(
+            val session = graph.repository.createSession(
                 originalProject.id, seed.summary.title, Instant.DISTANT_PAST,
             )
             val projectId = originalProject.id.value.toString()
@@ -383,17 +385,16 @@ class StudioWorkspaceIntegrationTest {
             val graph = graph(connection)
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/research".toPath(), name = "Research"),
             ).project
-            val bootstrap = graph.sessionBootstrap
-            val root = bootstrap.createSession(project.id, "Root", Instant.DISTANT_PAST)
-            val child = bootstrap.createSession(project.id, "Branch", Instant.DISTANT_PAST, root.id)
-            val match = bootstrap.createSession(project.id, "Квантовый датчик", Instant.DISTANT_PAST, child.id)
-            repeat(6) { bootstrap.createSession(project.id, "Other root $it") }
-            val archived = bootstrap.createSession(project.id, "Квантовый архив")
+            val root = graph.repository.createSession(project.id, "Root", Instant.DISTANT_PAST)
+            val child = graph.repository.createSession(project.id, "Branch", Instant.DISTANT_PAST, root.id)
+            val match = graph.repository.createSession(project.id, "Квантовый датчик", Instant.DISTANT_PAST, child.id)
+            repeat(6) { graph.repository.createSession(project.id, "Other root $it") }
+            val archived = graph.repository.createSession(project.id, "Квантовый архив")
             graph.catalog.setSessionArchived(archived, isArchived = true, changedAt = archived.createdAt)
-            val archivedProject = assertIs<ProjectCreationResult.Created>(
+            val archivedProject = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/archived".toPath(), name = "Квантовый проект"),
             ).project
             graph.catalog.setProjectArchived(archivedProject, isArchived = true)
@@ -407,7 +408,7 @@ class StudioWorkspaceIntegrationTest {
             assertEquals(match, childNode.children.single().session)
             assertEquals(7, graph.catalog.search("RESEARCH").single().sessions.size)
 
-            val emptyProject = assertIs<ProjectCreationResult.Created>(
+            val emptyProject = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/literal".toPath(), name = "Наука [B?*]"),
             ).project
             val literalMatch = graph.catalog.search("[b?*]").single()
@@ -446,9 +447,9 @@ class StudioWorkspaceIntegrationTest {
             val graph = graph(connection)
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
-            val waiting = graph.sessionBootstrap.createSession(ProjectId.Ungrouped, "Waiting result")
-            val interrupted = graph.sessionBootstrap.createSession(ProjectId.Ungrouped, "Interrupted work")
-            val other = graph.sessionBootstrap.createSession(ProjectId.Ungrouped, "Other session")
+            val waiting = graph.repository.createSession(ProjectId.Ungrouped, "Waiting result")
+            val interrupted = graph.repository.createSession(ProjectId.Ungrouped, "Interrupted work")
+            val other = graph.repository.createSession(ProjectId.Ungrouped, "Other session")
             val waitingId = waiting.id.value.toString()
             val interruptedId = interrupted.id.value.toString()
             val project = Chat.UngroupedProjectKey
@@ -502,12 +503,12 @@ class StudioWorkspaceIntegrationTest {
     fun loadsChildrenOnlyForTheCurrentCursor() = runTest {
         driver().use { driver ->
             val graph = graph(connection(driver))
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/paged".toPath(), name = "Paged project"),
             ).project
             val time = Instant.parse("2026-11-21T17:00:00Z")
-            val parent = graph.sessionBootstrap.createSession(project.id, "Parent", time)
-            repeat(11) { graph.sessionBootstrap.createSession(project.id, "child $it", time, parent.id) }
+            val parent = graph.repository.createSession(project.id, "Parent", time)
+            repeat(11) { graph.repository.createSession(project.id, "child $it", time, parent.id) }
 
             val store = ProjectsSessionsStoreImpl(graph.catalog, graph.observeProjectsSessions(), backgroundScope)
             store.dispatch(Panel.Load)
@@ -539,12 +540,12 @@ class StudioWorkspaceIntegrationTest {
     fun navigationUsesPersistedExpansionWithoutWorkspaceMetadata() = runTest {
         driver().use { driver ->
             val graph = graph(connection(driver))
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/nested".toPath(), name = "Nested project"),
             ).project
-            val parent = graph.sessionBootstrap.createSession(project.id, "Parent")
-            val child = graph.sessionBootstrap.createSession(project.id, "Child", parentSessionId = parent.id)
-            val grandchild = graph.sessionBootstrap.createSession(project.id, "Grandchild", parentSessionId = child.id)
+            val parent = graph.repository.createSession(project.id, "Parent")
+            val child = graph.repository.createSession(project.id, "Child", Clock.System.now(), parent.id)
+            val grandchild = graph.repository.createSession(project.id, "Grandchild", Clock.System.now(), child.id)
             graph.catalog.setSessionExpanded(child, false)
 
             val store = ProjectsSessionsStoreImpl(graph.catalog, graph.observeProjectsSessions(), backgroundScope)
@@ -568,21 +569,21 @@ class StudioWorkspaceIntegrationTest {
             val graph = graph(connection(driver))
             val projectId = ProjectId.Ungrouped
             repeat(6) {
-                graph.sessionBootstrap.createSession(projectId, "Session $it", Instant.DISTANT_PAST)
+                graph.repository.createSession(projectId, "Session $it", Instant.DISTANT_PAST)
             }
             val store = ProjectsSessionsStoreImpl(graph.catalog, graph.observeProjectsSessions(), backgroundScope)
             store.dispatch(Panel.Load)
             val before = store.state.value.pages.roots.getValue(projectId)
             assertNotNull(before.nextCursor)
 
-            val project = assertIs<ProjectCreationResult.Created>(
-                graph.sessionBootstrap.createProject("/work/Alpha".toPath()),
+            val project = assertIs<ProjectCreationResult.Registered>(
+                graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/work/Alpha".toPath())),
             ).project
             runCurrent()
             assertTrue(store.state.value.projects.any { it.id == "project:${project.id.value}" })
             assertEquals(before, store.state.value.pages.roots.getValue(projectId))
 
-            val created = graph.sessionBootstrap.createSession(projectId, "Just created")
+            val created = graph.repository.createSession(projectId, "Just created")
             runCurrent()
 
             val after = store.state.value.pages.roots.getValue(projectId)
@@ -591,7 +592,7 @@ class StudioWorkspaceIntegrationTest {
 
             store.dispatch(Panel.Search("Beta"))
             assertTrue(store.state.value.projects.isEmpty())
-            graph.sessionBootstrap.createProject("/work/Beta".toPath())
+            graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/work/Beta".toPath()))
             runCurrent()
             assertEquals(listOf("Beta"), store.state.value.projects.map { it.name })
         }
@@ -626,7 +627,7 @@ class StudioWorkspaceIntegrationTest {
 
             val selected = bootstrap.screenState.value.navigation.single { it.selected }
             assertEquals("First prompt", selected.title)
-            assertNull(bootstrap.screenState.value.chat)
+            assertEquals(selected.id, bootstrap.screenState.value.chat?.id)
             assertTrue(bootstrap.screenState.value.messages.isEmpty())
             assertNull(bootstrap.screenState.value.sessionBootstrap)
             val change = assertIs<ProjectsSessionsChange.SessionAdded>(
@@ -646,7 +647,7 @@ class StudioWorkspaceIntegrationTest {
             val graph = graph(connection)
             val storage = StudioWorkspacePersistence(connection)
             storage.importEmptyWorkspace()
-            graph.sessionBootstrap.createProject("/original/Alpha".toPath())
+            graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/original/Alpha".toPath()))
             val store = store(TestPreferences(), graph, storage)
             val directory = "/work/Alpha"
             store.dispatch(AiStudioAction.CreateSessionWithoutProject)
@@ -678,14 +679,13 @@ class StudioWorkspaceIntegrationTest {
 
 private suspend fun seedPagedProjects(graph: StudioInteractorTestGraph): StoredSession {
     repeat(40) { graph.catalog.createProject("/project-$it".toPath(), name = "project $it") }
-    val project = assertIs<ProjectCreationResult.Created>(
+    val project = assertIs<ProjectCreationResult.Registered>(
         graph.catalog.createProject("/paged".toPath(), name = "Paged project"),
     ).project
-    val bootstrap = graph.sessionBootstrap
-    val root = bootstrap.createSession(project.id, "Parent", Instant.parse("2026-11-21T17:00:00Z"))
+    val root = graph.repository.createSession(project.id, "Parent", Instant.parse("2026-11-21T17:00:00Z"))
     val time = Instant.parse("2026-11-21T16:00:00Z")
-    repeat(5) { bootstrap.createSession(project.id, "root $it", time) }
-    repeat(6) { bootstrap.createSession(project.id, "child $it", time, root.id) }
+    repeat(5) { graph.repository.createSession(project.id, "root $it", time) }
+    repeat(6) { graph.repository.createSession(project.id, "child $it", time, root.id) }
     return root
 }
 

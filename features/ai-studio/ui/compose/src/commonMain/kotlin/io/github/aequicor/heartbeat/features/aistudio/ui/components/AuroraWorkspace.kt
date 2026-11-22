@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +59,11 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
 import kotlinx.coroutines.flow.StateFlow
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraWorkspace(
@@ -79,9 +86,14 @@ internal fun AuroraWorkspace(
     Box(
         modifier.auroraWindowFrame(clearance, caption.height, caption.leftInset > Dp.Hairline).auroraBackdrop(backdrop),
     ) {
-        if (chatId == null) {
-            AuroraText("Загрузка истории…", Modifier.align(Alignment.Center))
-        } else {
+        val bootstrap = state.sessionBootstrap
+        if (bootstrap != null) {
+            key(bootstrap.id) {
+                AuroraBootstrapWorkspace(
+                    state, bootstrap, touch, showNavigation, Dp(preferredWidth), clearance, caption, onAction,
+                )
+            }
+        } else if (chatId != null) {
             AuroraChatHost(chatId) {
                 AuroraChatViewport(
                     state, draft, liveText, touch, onAction, showNavigation, Dp(preferredWidth),
@@ -96,6 +108,21 @@ internal fun AuroraWorkspace(
                         if (subagentFocusTarget == chatId) focus.requestFocus()
                         subagentFocusTarget = null
                     },
+                )
+            }
+        } else if (state.loading) {
+            AuroraText("Загрузка истории…", Modifier.align(Alignment.Center))
+        } else {
+            Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space)) {
+                if (showNavigation) {
+                    AuroraChip(
+                        stringResource(Res.string.projects_sessions), { onAction(AiStudioAction.ExpandChats) },
+                        touch = touch,
+                    )
+                }
+                AuroraChip(
+                    stringResource(Res.string.new_session), { onAction(AiStudioAction.CreateSessionWithoutProject) },
+                    touch = touch,
                 )
             }
         }
@@ -152,7 +179,8 @@ private fun AuroraChatViewport(
         }
         AuroraHeader(
             state, touch, showNavigation, onHeaderAction,
-            Modifier.align(Alignment.TopCenter).zIndex(1f).widthIn(max = corridor).onSizeChanged { topPx = it.height },
+            Modifier.align(Alignment.TopCenter).zIndex(1f).widthIn(max = corridor)
+                .onSizeChanged { topPx = it.height },
             captionClearance = headerCaptionClearance(captionClearance, gutter + headerInset),
             captionOnLeft = caption.leftInset > Dp.Hairline,
             edgeInset = headerInset,
@@ -256,7 +284,7 @@ private fun BoxScope.AuroraResizeHandles(
     AuroraResizeHandle(1, resize, reset, Modifier.align(Alignment.CenterEnd).offset(x = -fromEdge))
 }
 
-private fun Modifier.auroraLowerLayout(touch: Boolean, corridor: Dp): Modifier =
+internal fun Modifier.auroraLowerLayout(touch: Boolean, corridor: Dp): Modifier =
     widthIn(max = corridor).padding(
         start = AuroraLayout.ContentInset,
         end = AuroraLayout.ContentInset,
@@ -271,7 +299,7 @@ internal fun LazyListState.preserveReadingOnComposerResize(previousHeight: Int, 
     }
 }
 
-private fun headerCaptionClearance(caption: Dp, sides: Dp): Dp =
+internal fun headerCaptionClearance(caption: Dp, sides: Dp): Dp =
     if (caption > Dp.Hairline) {
         (caption + AuroraLayout.HeaderCaptionGap - sides - AuroraLayout.FrameStroke).coerceAtLeast(Dp.Hairline)
     } else Dp.Hairline
