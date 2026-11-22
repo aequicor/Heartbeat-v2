@@ -31,7 +31,6 @@ internal class EngineSettingsStoreImpl(
     private val defaultDispatcher: CoroutineDispatcher,
     private val interactor: EngineSettingsInteractor,
     private val ignoreEnvironmentNameCase: Boolean,
-    private val close: () -> Unit,
 ) : EngineSettingsStore {
 
     private val mutableState = MutableStateFlow<State>(State.Loading)
@@ -62,7 +61,7 @@ internal class EngineSettingsStoreImpl(
         val current = state.value as? Loaded
         when {
             action == Action.Load -> if (current == null) load()
-            current == null -> if (action == Action.Close || action == Action.Back) close()
+            current == null -> if (action is Action.LeavePage) action.leave()
             current.dialog != null -> handleDialog(current, action)
             else -> handleLoaded(current, action)
         }
@@ -103,7 +102,7 @@ internal class EngineSettingsStoreImpl(
             is Action.FindSetting -> find(current, action.field)
             Action.CancelFieldSearch -> publish(current.copy(requestedField = null))
             is Action.Select, Action.AddConnection, Action.OpenEngineSettings, Action.OpenConnection,
-            Action.BackToList, Action.Back, Action.Close, is Action.Copy -> navigate(current, action)
+            Action.BackToList, is Action.LeavePage, is Action.Copy -> navigate(current, action)
             Action.Load, Action.Check, Action.Discard, Action.DismissDialog, is Action.ConfirmDelete -> Unit
         }
     }
@@ -205,7 +204,7 @@ internal class EngineSettingsStoreImpl(
     private suspend fun navigate(current: Loaded, action: Action, confirmed: Boolean = false) {
         if (action is Action.Select && action.id == current.editor?.engineId && current.requestedField == null) return
         if (!confirmed && current.editor?.changed == true) {
-            pendingAction = if (action == Action.Back) Action.BackToList else action
+            pendingAction = action
             publish(current.copy(dialog = State.Dialog.Unsaved, notice = null))
             return
         }
@@ -229,10 +228,10 @@ internal class EngineSettingsStoreImpl(
             is Action.FindSetting -> openEditor(current, action.field.connectionField, action.field)
             is Action.Copy -> copyEngine(current, action.id)
             is Action.Delete -> requestDelete(current, action.id)
-            Action.BackToList, Action.Back -> backToList(current, closeFromList = action == Action.Back)
-            Action.Close -> {
+            Action.BackToList -> backToList(current)
+            is Action.LeavePage -> {
                 cancelCheck()
-                close()
+                action.leave()
             }
             else -> Unit
         }
@@ -253,18 +252,11 @@ internal class EngineSettingsStoreImpl(
         select(current, engines.getValue(id), connectionPage, field)
     }
 
-    private fun backToList(current: Loaded, closeFromList: Boolean) {
+    private fun backToList(current: Loaded) {
         cancelCheck()
-        if (closeFromList && current.editor == null) {
-            close()
-        } else {
-            publish(
-                current.copy(
-                    editor = null, requestedField = null, highlighted = null, notice = null,
-                    dialog = null, renameId = null,
-                ),
-            )
-        }
+        publish(current.copy(
+            editor = null, requestedField = null, highlighted = null, notice = null, dialog = null, renameId = null,
+        ))
     }
 
     @Throwable(CancellationException::class)

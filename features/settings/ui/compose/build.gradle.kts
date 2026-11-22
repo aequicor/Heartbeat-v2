@@ -5,6 +5,7 @@ plugins {
 
 kotlin {
     sourceSets.commonMain.dependencies {
+        implementation(compose.components.resources)
         implementation(project(":features:settings:api"))
         implementation(project(":features:settings:presentation:decompose"))
         implementation(project(":navigation:decompose-compose"))
@@ -12,4 +13,8 @@ kotlin {
         implementation(project(":di:api"))
         implementation(libs.kotlinx.coroutines.core)
     }
+}
+
+compose.resources {
+    packageOfResClass = "io.github.aequicor.heartbeat.features.settings.ui.resources"
 }

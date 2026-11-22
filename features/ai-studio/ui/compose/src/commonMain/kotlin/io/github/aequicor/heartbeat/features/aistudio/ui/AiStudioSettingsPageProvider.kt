@@ -19,7 +19,7 @@ class AiStudioSettingsPageProvider(
     override val pageIds: Set<String> = setOf(AiStudioSettingsContributor.PAGE_ID)
 
     @Composable
-    override fun Content(pageId: String, context: ComponentContext, onBack: () -> Unit) {
+    override fun Content(pageId: String, context: ComponentContext) {
         when (pageId) {
             AiStudioSettingsContributor.PAGE_ID -> AiStudioSettingsPage(settings, appScope)
             else -> error("Unknown settings page: $pageId")

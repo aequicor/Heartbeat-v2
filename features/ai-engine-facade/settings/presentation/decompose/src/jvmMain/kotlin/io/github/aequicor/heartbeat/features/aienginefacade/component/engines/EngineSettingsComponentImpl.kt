@@ -13,14 +13,12 @@ import kotlin.coroutines.cancellation.CancellationException
 internal class EngineSettingsComponentImpl(
     factory: EngineSettingsStoreFactory,
     mainDispatcher: CoroutineDispatcher,
-    onClose: () -> Unit,
 ) : EngineSettingsComponent, InstanceKeeper.Instance {
 
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
     private val store = factory.create(
         scope,
         ignoreEnvironmentNameCase = System.getProperty("os.name").startsWith("Windows", ignoreCase = true),
-        close = onClose,
     )
 
     override val state = store.state

@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.components.HbPaneHeader
 import io.github.aequicor.heartbeat.designsystem.components.HbSettingsRow
 import io.github.aequicor.heartbeat.designsystem.components.HbSwitch
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
@@ -21,6 +22,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
+import io.github.aequicor.heartbeat.features.aistudio.ui.AiStudioSettingsContributor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -45,6 +47,7 @@ internal fun AiStudioSettingsPage(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = HbSpacing.S, vertical = HbSpacing.L),
     ) {
+        HbPaneHeader(title = AiStudioSettingsContributor.Title, titleStyle = HbTypography.Title)
         Column(
             modifier = Modifier.widthIn(max = HbPaneGeometry.SettingsFormMax.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(HbSpacing.M),

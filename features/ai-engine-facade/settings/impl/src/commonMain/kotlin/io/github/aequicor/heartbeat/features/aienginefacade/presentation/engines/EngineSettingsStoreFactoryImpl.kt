@@ -16,9 +16,8 @@ internal class EngineSettingsStoreFactoryImpl(
     override fun create(
         scope: CoroutineScope,
         ignoreEnvironmentNameCase: Boolean,
-        close: () -> Unit,
     ): EngineSettingsStore {
-        val store = EngineSettingsStoreImpl(scope, defaultDispatcher, interactor, ignoreEnvironmentNameCase, close)
+        val store = EngineSettingsStoreImpl(scope, defaultDispatcher, interactor, ignoreEnvironmentNameCase)
         scope.launch { store.dispatch(EngineSettingsScreenAction.Load) }
         return store
     }

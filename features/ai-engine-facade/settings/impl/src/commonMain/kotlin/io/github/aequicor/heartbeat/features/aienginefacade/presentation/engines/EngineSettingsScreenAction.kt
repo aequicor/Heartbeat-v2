@@ -34,9 +34,7 @@ public sealed interface EngineSettingsScreenAction {
 
     public data object Save : EngineSettingsScreenAction
 
-    public data object Back : EngineSettingsScreenAction
-
-    public data object Close : EngineSettingsScreenAction
+    public data class LeavePage(val leave: () -> Unit) : EngineSettingsScreenAction
 
     public data object BackToList : EngineSettingsScreenAction
 
