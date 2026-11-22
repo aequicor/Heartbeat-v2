@@ -9,8 +9,10 @@ import kotlin.coroutines.cancellation.CancellationException
 
 internal interface ProjectDao {
 
+    data class Registration(val project: ProjectDto, val created: Boolean)
+
     @Throws(DaoException::class, ProjectNameAlreadyExistsException::class, CancellationException::class)
-    suspend fun insert(immutableName: String, workingDirectory: String): ProjectDto
+    suspend fun insert(immutableName: String, workingDirectory: String): Registration
 
     @Throws(DaoException::class, CancellationException::class)
     suspend fun selectById(id: String): ProjectDto?

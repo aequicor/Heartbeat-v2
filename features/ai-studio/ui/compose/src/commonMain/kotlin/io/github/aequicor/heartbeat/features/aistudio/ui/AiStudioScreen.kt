@@ -114,7 +114,7 @@ private class AuroraPaneLayout(
     val sidebar: Boolean,
     val filesAside: Boolean,
     val top: Dp,
-    private val captionTop: Dp,
+    val captionTop: Dp,
     val captionOverlap: Dp,
     private val captionOnLeft: Boolean,
 ) {

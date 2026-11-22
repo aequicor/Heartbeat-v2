@@ -10,6 +10,7 @@ public sealed interface ProjectsSessionsAction {
         public data object CollapseSearch : Panel
         public data class Search(val query: String) : Panel
         public data object LoadMoreProjects : Panel
+        public data class RetryPage(val rowId: String) : Panel
     }
 
     public sealed interface Project : ProjectsSessionsAction {

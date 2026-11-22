@@ -13,15 +13,19 @@ internal data class ProjectsSessionsPages(
     val projectPage: Page<StudioProject, ProjectId> = Page(items = listOf(), nextCursor = null),
     val roots: Map<ProjectId, Page<StudioSession, SessionId>> = mapOf(),
     val children: Map<SessionId, Page<StudioSession, SessionId>> = mapOf(),
+    val failures: Map<String, NavigationPageFailure> = mapOf(),
+    val loadedPageCounts: Map<String, Int> = mapOf(),
 )
 
 internal class PagesDraft(initial: ProjectsSessionsPages, val catalog: ProjectsSessionsInteractor) {
     var projectPage = initial.projectPage
     val roots = initial.roots.toMutableMap()
     val children = initial.children.toMutableMap()
+    val failures = initial.failures.toMutableMap()
+    val loadedPageCounts = initial.loadedPageCounts.toMutableMap()
 
     fun snapshot(): ProjectsSessionsPages =
-        ProjectsSessionsPages(projectPage, roots.toMap(), children.toMap())
+        ProjectsSessionsPages(projectPage, roots.toMap(), children.toMap(), failures.toMap(), loadedPageCounts.toMap())
 }
 
 internal fun PagesDraft.loadedProject(id: ProjectId): StudioProject? = projectPage.items.firstOrNull { it.id == id }

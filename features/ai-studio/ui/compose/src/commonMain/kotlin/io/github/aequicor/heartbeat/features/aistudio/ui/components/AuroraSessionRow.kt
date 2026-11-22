@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.archive_named_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.archive_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_archive_chat_icon
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_project_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_actions
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_in_project
 import org.jetbrains.compose.resources.painterResource
@@ -45,25 +47,36 @@ internal fun AuroraSessionList(
 ) {
     val chats = state.chats
     val byId = if (state.usesPagedNavigation) chats.associateBy(Chat::id) else mapOf()
-    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(AuroraLayout.FrameStroke)) {
+    val projectTitles = state.navigation
+        .filter { it.kind == NavigationKind.Project || it.kind == NavigationKind.Section }
+        .associate { it.project to it.title }
+    val list = rememberLazyListState()
+    LazyColumn(modifier, state = list, verticalArrangement = Arrangement.spacedBy(AuroraLayout.FrameStroke)) {
         if (state.usesPagedNavigation) {
             items(state.navigation, key = NavigationRow::id) { row ->
                 if (row.kind == NavigationKind.Chat) {
-                    byId[row.id]?.let { AuroraChatRow(it, row.selected, touch, onAction) }
+                    val chat = byId[row.id] ?: Chat(
+                        row.id, row.title, projectTitles[row.project].orEmpty(), projectId = row.project,
+                    )
+                    AuroraChatRow(chat, row.selected, touch, onAction)
+                } else if (row.kind.isPagination) {
+                    AuroraNavigationPage(row, list, touch, projectsSessions)
                 } else {
-                    val onClick: () -> Unit = if (row.kind.isPagination) {
-                        { row.loadNextPage(projectsSessions) }
-                    } else {
-                        { projectsSessions.setProjectExpanded(row.project, row.expanded != true) }
-                    }
-                    AuroraControl(
-                        onClick,
-                        Modifier.fillMaxWidth(),
-                        touch = touch,
-                        background = Color.Transparent,
-                        round = false,
-                    ) {
-                        AuroraText(row.displayTitle())
+                    val title = row.displayTitle()
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        AuroraControl(
+                            { projectsSessions.setProjectExpanded(row.project, row.expanded != true) },
+                            Modifier.weight(1f), touch = touch, background = Color.Transparent, round = false,
+                        ) {
+                            AuroraText(title)
+                        }
+                        AuroraControl(
+                            { onAction(AiStudioAction.CreateSessionInProject(row.project)) },
+                            label = stringResource(Res.string.new_project_session, title),
+                            touch = touch, background = Color.Transparent,
+                        ) {
+                            HbIcon(HbIconGlyph.Edit, tint = AuroraColors.NavigationIcon, size = AuroraLayout.Glyph)
+                        }
                     }
                 }
             }

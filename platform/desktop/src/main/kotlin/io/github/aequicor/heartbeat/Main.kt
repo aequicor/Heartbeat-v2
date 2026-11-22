@@ -46,6 +46,7 @@ import org.jetbrains.jewel.window.styling.TitleBarStyle
 fun main() {
     println("Heartbeat started")
 
+    configurePackagedJna()
     val dataDirectory = desktopDataDirectory()
     ensureDataDirectory(dataDirectory)
 
@@ -94,6 +95,15 @@ fun main() {
             os.startsWith("Windows") || os.startsWith("Mac") -> EdgeToEdgeHeartbeatWindow(state, onClose, content)
             else -> JewelHeartbeatWindow(state, isDark, onClose, content)
         }
+    }
+}
+
+private fun configurePackagedJna() {
+    val resources = System.getProperty("compose.application.resources.dir") ?: return
+    val nativeDirectory = File(resources, "jna")
+    if (File(nativeDirectory, "jnidispatch.dll").isFile && System.getProperty("jna.boot.library.path") == null) {
+        // Windows sandbox permission checks can fail even when temp file creation works.
+        System.setProperty("jna.boot.library.path", nativeDirectory.absolutePath)
     }
 }
 

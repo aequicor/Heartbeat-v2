@@ -35,6 +35,12 @@ SELECT * FROM studio_project WHERE name = :immutable_name;
 selectProjectById:
 SELECT * FROM studio_project WHERE id = :id;
 
+selectActiveProjectByDirectory:
+SELECT * FROM studio_project
+WHERE working_directory = :working_directory AND status = 'ACTIVE'
+ORDER BY created_at_seconds, created_at_nanos, id
+LIMIT 1;
+
 selectProjects:
 SELECT * FROM studio_project
 WHERE status = :status

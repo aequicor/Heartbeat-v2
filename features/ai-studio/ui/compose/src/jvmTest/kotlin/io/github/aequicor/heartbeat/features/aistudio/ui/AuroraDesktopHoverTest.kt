@@ -95,8 +95,8 @@ class AuroraDesktopHoverTest {
             assertEquals(listOf("Проверки" to true), expansion)
             assertEquals(
                 listOf<AiStudioAction>(
-                    AiStudioAction.NewProjectChat("Проверки"),
-                    AiStudioAction.NewProjectChat("Без проекта"),
+                    AiStudioAction.CreateSessionInProject("Проверки"),
+                    AiStudioAction.CreateSessionInProject("Без проекта"),
                 ),
                 received,
             )
@@ -268,21 +268,26 @@ class AuroraDesktopHoverTest {
     }
 
     @Test
-    fun titleHoverFillsTheWholeCellAndItsTrailingSpaceOpensTheMenu() {
+    fun titleHoverAndMenuAreLimitedToTheTitleButton() {
         val scene = headerScene()
         try {
             clock.frame(scene)
             val title = scene.cell("Меню диалога «Единая модель сессий», проект Heartbeat")
             val left = title.leftInset()
             val right = title.rightInset()
+            val emptySurface = Offset(600f, title.center.y)
+            assertTrue(title.right < emptySurface.x)
+            scene.move(emptySurface)
+            assertEquals(HbAuroraColors.Pearl.toArgb(), scene.colorAt(emptySurface))
+            scene.click(emptySurface)
+            assertNull(scene.textNode("Файлы диалога"))
             scene.move(right)
             assertEquals(hoverColor, scene.colorAt(left))
             assertEquals(hoverColor, scene.colorAt(right))
+            assertEquals(HbAuroraColors.Pearl.toArgb(), scene.colorAt(emptySurface))
             scene.capture("aurora-title-cell-hover")
             scene.click(right)
-            assertNotNull(scene.node { item ->
-                item.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == "Файлы диалога" }
-            })
+            assertNotNull(scene.textNode("Файлы диалога"))
         } finally {
             scene.close()
         }
@@ -307,6 +312,12 @@ class AuroraDesktopHoverTest {
 
             scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyDown))
             scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyUp))
+            clock.frame(scene)
+            scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyDown))
+            scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyUp))
+            clock.frame(scene)
+            scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyDown, isShiftPressed = true))
+            scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyUp, isShiftPressed = true))
             clock.frame(scene)
             clock.reveal(scene)
             assertEquals(true, assertNotNull(scene.description(label)).config.getOrNull(SemanticsProperties.Focused))
@@ -374,6 +385,9 @@ class AuroraDesktopHoverTest {
 
     private fun ImageComposeScene.description(label: String) =
         node { label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+
+    private fun ImageComposeScene.textNode(value: String) =
+        node { it.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text -> text.text == value } }
 
     private fun ImageComposeScene.node(matches: (SemanticsNode) -> Boolean) =
         semanticsOwners.firstNotNullOfOrNull { it.rootSemanticsNode.find(matches) }

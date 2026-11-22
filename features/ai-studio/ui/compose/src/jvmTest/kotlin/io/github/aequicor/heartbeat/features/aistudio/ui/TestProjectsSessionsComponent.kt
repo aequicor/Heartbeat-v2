@@ -12,4 +12,5 @@ internal open class TestProjectsSessionsComponent : ProjectsSessionsComponent {
     override fun loadMoreProjects() = Unit
     override fun loadMoreSessions(projectId: String) = Unit
     override fun loadMoreChildren(parentId: String) = Unit
+    override fun retryPage(rowId: String) = Unit
 }

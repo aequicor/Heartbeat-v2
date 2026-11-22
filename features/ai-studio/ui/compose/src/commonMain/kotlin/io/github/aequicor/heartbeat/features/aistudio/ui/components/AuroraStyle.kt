@@ -5,6 +5,8 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -73,14 +75,21 @@ internal fun AuroraControl(
     horizontalPadding: Dp = AuroraLayout.Space,
     minimumTarget: Dp = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget,
     clipContent: Boolean = true,
+    hoverBackground: Color? = null,
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(if (round) AuroraLayout.ControlRadius else AuroraLayout.SmallRadius)
     var focused by remember { mutableStateOf(false) }
     val focusVisible = focused && HbFocusIndication.keyboardNavigation
+    val interactions = interactionSource ?: if (hoverBackground != null) {
+        remember { MutableInteractionSource() }
+    } else null
+    val hovered = interactions?.collectIsHoveredAsState()?.value == true
+    val surfaceColor = if (enabled && hovered) hoverBackground ?: background else background
     val surface = if (clipContent) {
-        Modifier.clip(shape).background(background)
-    } else Modifier.background(background, shape)
+        Modifier.clip(shape).background(surfaceColor)
+    } else Modifier.background(surfaceColor, shape)
     Row(
         modifier = modifier
             .sizeIn(minHeight = minimumTarget, minWidth = minimumTarget)
@@ -89,7 +98,7 @@ internal fun AuroraControl(
             .then(if (label == null) Modifier else Modifier.semantics { contentDescription = label })
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = null, indication = null,
+                interactionSource = interactions, indication = null,
                 enabled = enabled, role = Role.Button, onClick = onClick,
             )
             .padding(horizontal = horizontalPadding),

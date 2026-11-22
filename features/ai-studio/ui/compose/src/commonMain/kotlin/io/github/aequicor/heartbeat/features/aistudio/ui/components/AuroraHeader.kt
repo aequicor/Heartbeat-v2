@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
@@ -72,7 +76,7 @@ private fun AuroraTouchHeader(
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.HeaderRowGap),
     ) {
         val inset = Modifier.padding(horizontal = AuroraLayout.ContentInset)
-        AuroraTouchChatTitle(chat, showNavigation, state.subagents, onAction, inset)
+        AuroraTouchChatTitle(chat, state.sessionBootstrap, showNavigation, state.subagents, onAction, inset)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
@@ -87,7 +91,11 @@ private fun AuroraTouchHeader(
 
 @Composable
 private fun AuroraTouchChatTitle(
-    chat: Chat, showNavigation: Boolean, agents: List<Subagent>, onAction: (AiStudioAction) -> Unit,
+    chat: Chat,
+    bootstrap: SessionBootstrapState?,
+    showNavigation: Boolean,
+    agents: List<Subagent>,
+    onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -104,23 +112,36 @@ private fun AuroraTouchChatTitle(
             }
         }
         val actions = listOf(
-            HbMenuAction(stringResource(Res.string.new_session), { onAction(AiStudioAction.NewChat) }),
+            HbMenuAction(
+                stringResource(Res.string.new_session), { onAction(AiStudioAction.CreateSessionWithoutProject) },
+            ),
             HbMenuAction("Файлы диалога", { onAction(AiStudioAction.ToggleFiles(true)) }),
         )
         val radius = AuroraLayout.MessageRadius
         val title = chat.displayTitle()
         val project = chat.displayProject()
-        AuroraHeaderMenu(actions, Modifier.weight(1f), touch = true) { trigger, open ->
-            AuroraHeaderButton(
-                stringResource(Res.string.session_in_project, title, project),
-                open,
-                trigger.fillMaxWidth().auroraHeaderSurface(radius, outline = false),
-                height = AuroraLayout.TouchTarget, radius = radius,
-                contentPadding = PaddingValues(horizontal = AuroraLayout.Space),
-            ) {
-                Column {
-                    AuroraHeaderText(project, color = AuroraColors.Muted)
-                    AuroraHeaderText(title, style = HbTypography.PaneTitle)
+        BoxWithConstraints(Modifier.weight(1f).auroraHeaderSurface(radius, outline = false)) {
+            val projectModifier = Modifier.widthIn(max = maxWidth * 0.52f)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AuroraHeaderMenu(actions, Modifier.weight(1f), touch = true) { trigger, open ->
+                    AuroraHeaderButton(
+                        stringResource(Res.string.session_in_project, title, bootstrap?.projectTitle ?: project),
+                        open, trigger.fillMaxWidth(), height = AuroraLayout.TouchTarget, radius = radius,
+                        contentPadding = PaddingValues(horizontal = AuroraLayout.Space),
+                    ) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            AuroraHeaderText(title, style = HbTypography.PaneTitle)
+                        }
+                    }
+                }
+                Box(
+                    Modifier.width(AuroraLayout.FrameStroke).height(AuroraLayout.Glyph)
+                        .background(AuroraColors.NavigationSearchOutline),
+                )
+                if (bootstrap == null) {
+                    AuroraStaticProject(project, projectModifier.padding(horizontal = AuroraLayout.Space))
+                } else {
+                    AuroraProjectSelector(bootstrap, touch = true, onAction, projectModifier)
                 }
             }
         }

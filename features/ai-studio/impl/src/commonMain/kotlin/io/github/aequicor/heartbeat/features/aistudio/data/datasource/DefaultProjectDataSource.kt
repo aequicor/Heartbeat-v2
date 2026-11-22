@@ -9,21 +9,28 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
-import okio.Path
 import okio.Path.Companion.toPath
 
 @Inject
 internal class DefaultProjectDataSource(private val dao: ProjectDao) : ProjectDataSource {
 
-    override suspend fun create(immutableName: String, workingDirectory: Path): ProjectCreationResult = try {
+    override suspend fun register(
+        immutableName: String,
+        directory: ProjectDirectory,
+    ): ProjectCreationResult = try {
         accessStudioRepository {
-            val project = dao.insert(immutableName, workingDirectory.toString())
-            ProjectCreationResult.Created(project.toProjectWithDirectory())
+            val location = when (directory) {
+                is ProjectDirectory.Local -> directory.path.toString()
+                is ProjectDirectory.DocumentTree -> directory.uri
+            }
+            val (row, created) = dao.insert(immutableName, location)
+            ProjectCreationResult.Registered(row.toProjectWithDirectory(), created)
         }
     } catch (conflict: ProjectNameAlreadyExistsException) {
-        ProjectCreationResult.NameAlreadyExists(conflict.immutableName)
+        ProjectCreationResult.NameConflict(conflict.immutableName)
     }
 
     override suspend fun findById(id: ProjectId): Project? =
@@ -64,7 +71,8 @@ private fun ProjectDto.toProjectWithDirectory(): Project.WithDirectory {
         id = ProjectId.parse(id),
         immutableName = immutableName,
         title = title,
-        workingDirectory = workingDirectory.toPath(),
+        directory = if (workingDirectory.startsWith("content://")) ProjectDirectory.DocumentTree(workingDirectory)
+        else ProjectDirectory.Local(workingDirectory.toPath()),
         status = ProjectStatus.valueOf(status),
         createdAt = createdAt.toInstant(),
         updatedAt = updatedAt.toInstant(),

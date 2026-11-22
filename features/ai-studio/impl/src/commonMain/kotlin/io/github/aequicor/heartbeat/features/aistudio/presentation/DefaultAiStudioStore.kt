@@ -34,9 +34,11 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.Proj
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.projectssessions.ProjectsSessionsStoreImpl
-import io.github.aequicor.heartbeat.features.aistudio.presentation.projectssessions.findCatalogProject
 import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
-import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.applyBootstrapProjectAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.loadBootstrapProjects
+import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.sessionTitleFromPrompt
+import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.submitSessionBootstrap
+import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.updateBootstrapProject
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.StudioWorkspaceStorage
@@ -198,11 +200,14 @@ internal class DefaultAiStudioStore(
             AiStudioAction.CreateSessionWithoutProject -> showSessionBootstrap(SessionBootstrapState.Project.Ungrouped)
             AiStudioAction.CreateSession -> {
                 val project = screen.value.chat?.projectId?.let { SessionBootstrapState.Project.Existing(it) }
-                showSessionBootstrap(project ?: SessionBootstrapState.Project.Ungrouped)
+                showSessionBootstrap(project ?: SessionBootstrapState.Project.Ungrouped, screen.value.chat?.project)
             }
+            is AiStudioAction.CreateSessionInProject -> showSessionBootstrapForProject(action.id)
+            AiStudioAction.LoadBootstrapProjects -> loadBootstrapProjects(screen, catalog)
             AiStudioAction.DismissSessionBootstrap -> screen.update { it.copy(sessionBootstrap = null) }
-            is AiStudioAction.BootstrapProject -> updateBootstrapProject(action)
-            is AiStudioAction.SubmitSessionBootstrap -> submitSessionBootstrap(action)
+            is AiStudioAction.BootstrapProject -> updateBootstrapProject(screen, sessionBootstrap, action)
+            is AiStudioAction.SubmitSessionBootstrap ->
+                submitSessionBootstrap(screen, sessionBootstrap, action, ::openBootstrappedSession)
             is AiStudioAction.RenameProject -> updateProjectsSessions(ProjectAction.Rename(action.id, action.title))
             is AiStudioAction.DeleteProject -> updateProjectsSessions(ProjectAction.Delete(action.id))
             is AiStudioAction.NewProjectChat -> newChat(action.project)
@@ -244,7 +249,7 @@ internal class DefaultAiStudioStore(
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         workspace = workspace.copy(selectedId = id)
         if (screen.value.chat?.id == id) {
-            screen.update { withProjectsSessions(it.copy(chat = target.summary)) }
+            screen.update { withProjectsSessions(it.copy(chat = target.summary, sessionBootstrap = null)) }
             if (target !== loaded) save()
         } else {
             showChat(target)
@@ -286,6 +291,7 @@ internal class DefaultAiStudioStore(
                 attachments = target.attachments,
                 viewer = null,
                 subagents = workspace.subagents(id),
+                sessionBootstrap = null,
             )
             withProjectsSessions(next)
         }
@@ -318,12 +324,13 @@ internal class DefaultAiStudioStore(
             ProjectId.Ungrouped
         } else {
             val storedId = workspace.chats.firstOrNull { it.summary.project == rawProjectId }?.summary?.projectId
-            runCatching { ProjectId.parse(storedId ?: rawProjectId) }.getOrNull()
+            runCatching { ProjectId.parse(storedId ?: rawProjectId) }.getOrNull() ?: return null
         }
-        val project = if (catalog != null && projectId != null) findCatalogProject(catalog, projectId) else null
-        project ?: return null
-        val session = sessionBootstrap?.createSession(project.id, Chat.UntitledTitle)
-        return session?.let { addStoredSession(it, project) }
+        val result = sessionBootstrap?.createSession(projectId, Chat.UntitledTitle)
+        return when (result) {
+            is SessionBootstrapResult.Created -> addStoredSession(result.session, result.project)
+            SessionBootstrapResult.ProjectUnavailable, null -> null
+        }
     }
 
     private fun addStoredSession(session: Session, project: Project, payloadLoaded: Boolean = true): String {
@@ -339,42 +346,38 @@ internal class DefaultAiStudioStore(
         return id
     }
 
-    private fun showSessionBootstrap(project: SessionBootstrapState.Project) {
-        screen.update { it.copy(sessionBootstrap = SessionBootstrapState(project)) }
-    }
-
-    private suspend fun submitSessionBootstrap(action: AiStudioAction.SubmitSessionBootstrap) {
-        if (screen.value.sessionBootstrap == null) return
-        val error = when (val result = sessionBootstrap?.let { startBootstrappedSession(it, action) }) {
-            is SessionBootstrapResult.Created -> {
-                screen.update { it.copy(sessionBootstrap = null) }
-                val id = addStoredSession(result.session, result.project)
-                updateChat(id) { chat ->
-                    chat.copy(
-                        draft = action.prompt,
-                        summary = chat.summary.copy(
-                            scenario = action.scenario,
-                            access = action.access,
-                            effort = action.effort ?: chat.summary.effort,
-                        ),
-                    )
-                }
-                selectCatalogSession(id)
-                save()
-                return
-            }
-            SessionBootstrapResult.EmptyPrompt -> SessionBootstrapState.Error.EmptyPrompt
-            SessionBootstrapResult.ProjectUnavailable -> SessionBootstrapState.Error.ProjectUnavailable
-            null -> SessionBootstrapState.Error.StorageFailure
+    private suspend fun showSessionBootstrap(project: SessionBootstrapState.Project, title: String? = null) {
+        projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
+        val bootstrap = SessionBootstrapState(project, projectTitle = title, id = nextId())
+        screen.update {
+            withProjectsSessions(it.copy(sessionBootstrap = bootstrap, filesVisible = false, viewer = null))
         }
-        screen.update { it.copy(sessionBootstrap = SessionBootstrapState(action.project, error)) }
     }
 
-    private suspend fun updateBootstrapProject(action: AiStudioAction.BootstrapProject) {
-        val bootstrap = sessionBootstrap ?: return
-        val state = screen.value.sessionBootstrap ?: return
-        val next = applyBootstrapProjectAction(bootstrap, state, action)
-        screen.update { it.copy(sessionBootstrap = next) }
+    private suspend fun showSessionBootstrapForProject(id: String) {
+        val row = screen.value.navigation.firstOrNull { it.project == id && it.expanded != null }
+        val project = if (id == ProjectId.Ungrouped.value.toString()) SessionBootstrapState.Project.Ungrouped
+        else SessionBootstrapState.Project.Existing(id)
+        showSessionBootstrap(project, row?.title)
+    }
+
+    private suspend fun openBootstrappedSession(
+        action: AiStudioAction.SubmitSessionBootstrap,
+        result: SessionBootstrapResult.Created,
+    ) {
+        val id = addStoredSession(result.session, result.project)
+        updateChat(id) { chat ->
+            chat.copy(
+                draft = action.prompt,
+                summary = chat.summary.copy(
+                    scenario = action.scenario,
+                    access = action.access,
+                    effort = action.effort ?: chat.summary.effort,
+                ),
+            )
+        }
+        openChat(id, acknowledgeResult = false)
+        save()
     }
 
     private fun readAt(action: AiStudioAction.ReadAt) {
@@ -492,7 +495,7 @@ internal class DefaultAiStudioStore(
 
     private suspend fun summaryForPrompt(chat: AuroraChat, text: String): Chat? {
         if (!chat.summary.isUntitled) return chat.summary
-        val firstLine = text.lineSequence().firstOrNull().orEmpty().take(MaxTitleLength)
+        val firstLine = sessionTitleFromPrompt(text)
         val title = firstLine.ifBlank { chat.attachments.first().name }
         val store = projectsSessionsStore
         store?.dispatch(SessionAction.Rename(chat.summary.id, title))?.getOrThrow()
@@ -705,23 +708,7 @@ internal class DefaultAiStudioStore(
     private companion object {
         const val SaveError = "Не удалось сохранить диалог"
         const val RestoreError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются."
-        const val MaxTitleLength = 48
         const val SaveInterval = 150L
         const val MockTime = "14:04"
     }
-}
-
-private suspend fun startBootstrappedSession(
-    bootstrap: SessionBootstrapInteractor,
-    action: AiStudioAction.SubmitSessionBootstrap,
-): SessionBootstrapResult? = try {
-    val projectId = when (val project = action.project) {
-        SessionBootstrapState.Project.Ungrouped -> ProjectId.Ungrouped
-        is SessionBootstrapState.Project.Existing -> ProjectId.parse(project.id)
-    }
-    bootstrap.startInProject(projectId, action.prompt)
-} catch (_: IllegalArgumentException) {
-    SessionBootstrapResult.ProjectUnavailable
-} catch (_: StudioRepositoryException) {
-    null
 }

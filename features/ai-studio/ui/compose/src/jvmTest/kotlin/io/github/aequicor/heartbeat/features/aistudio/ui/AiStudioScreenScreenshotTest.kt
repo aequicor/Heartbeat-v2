@@ -380,7 +380,7 @@ class AiStudioScreenScreenshotTest {
     }
 
     @Test
-    fun nativeCaptionReservesOnlyItsCornerAndKeepsSettingsInteractive() {
+    fun nativeCaptionKeepsSettingsAndTitleButtonsInteractive() {
         val regions = mutableMapOf<Any, Rect>()
         val registered = mutableSetOf<Rect>()
         val caption = HbWindowCaption(138.dp, 32.dp) { key, rect ->
@@ -393,8 +393,10 @@ class AiStudioScreenScreenshotTest {
         }
         val desktop = screenshot("aurora-windows", 1440, 900, workspace, HbDensity.Dense, AuroraTestFonts.ui, caption)
         assertTrue(registered.any { it.contains(Offset(127f, 28f)) })
-        assertTrue(registered.any { it.contains(Offset(450f, 24f)) })
+        assertTrue(registered.any { it.left > 300f && it.top < caption.height.value })
         assertTrue(registered.none { it.contains(Offset(197f, 22f)) })
+        assertTrue(registered.none { it.contains(Offset(1000f, 22f)) })
+        assertTrue(registered.none { it.overlaps(Rect(1302f, 0f, 1440f, 32f)) })
         assertTrue(regions.isEmpty())
         val canvas = HbAuroraColors.DesktopCanvas.toArgb()
         val image = ImageIO.read(desktop)
@@ -406,10 +408,12 @@ class AiStudioScreenScreenshotTest {
         val compactImage = ImageIO.read(compact)
         assertEquals(canvas, compactImage.getRGB(490, 22))
         assertNotEquals(canvas, compactImage.getRGB(175, 25))
+        registered.clear()
         val tiny = screenshot("aurora-windows-compact", 345, 450, workspace, HbDensity.Dense, caption = caption)
         val tinyImage = ImageIO.read(tiny)
         assertEquals(canvas, tinyImage.getRGB(120, 22))
         assertNotEquals(canvas, tinyImage.getRGB(120, 50))
+        assertTrue(registered.all { it.top >= caption.height.value })
     }
 
     @Test
@@ -433,7 +437,7 @@ class AiStudioScreenScreenshotTest {
         assertNotEquals(canvas, compact.getRGB(450, 22))
         assertNotEquals(canvas, compact.getRGB(40, 93))
         assertTrue(registered.none { it.overlaps(Rect(0f, 0f, 72f, 32f)) })
-        assertTrue(registered.any { it.contains(Offset(155f, 24f)) })
+        assertTrue(registered.any { it.top < caption.height.value && it.left >= 72f })
     }
 
     @Test
