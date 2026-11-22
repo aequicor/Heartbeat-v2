@@ -106,6 +106,9 @@ jobs:
           distribution: jetbrains
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          cache-read-only: true
+      - uses: ./.github/actions/restore-gradle-dependencies
       - name: Run Linux native tests
         # Bare task names: Gradle runs linuxX64Test in every module that declares the target
         # (universal and Decompose modules), so new modules are covered without editing the list.
@@ -170,6 +173,9 @@ jobs:
           distribution: jetbrains
           java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
+        with:
+          cache-read-only: true
+      - uses: ./.github/actions/restore-gradle-dependencies
       - name: Compile Apple targets and run macOS tests
         # Bare task names: Gradle compiles each Apple target and runs macOS tests in every module
         # that declares it (universal and Decompose modules), so the matrix stays complete without

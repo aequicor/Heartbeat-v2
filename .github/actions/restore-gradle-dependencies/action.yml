@@ -1,0 +1,34 @@
+name: Restore shared Gradle dependencies
+description: Restores the dependency cache populated by the trusted master workflow.
+
+inputs:
+  warm-up:
+    description: Restore into the writable Gradle home used by the cache warmer.
+    default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the dependency cache key matched exactly.
+    value: ${{ steps.cache.outputs.cache-hit }}
+  cache-key:
+    description: Primary key for the cache writer.
+    value: ${{ steps.cache.outputs.cache-primary-key }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      id: cache
+      with:
+        path: |
+          .gradle/ci-dependency-cache/caches/modules-2/files-*
+          .gradle/ci-dependency-cache/caches/modules-2/metadata-*
+          .gradle/ci-dependency-cache/caches/modules-2/resources-*
+        key: >-
+          gradle-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('**/*.gradle.kts', '**/gradle.properties', 'gradle/libs.versions.toml', 'gradle/verification-metadata.xml', '.github/workflows/gradle-dependency-cache.yml') }}
+        restore-keys: |
+          gradle-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}-
+    - name: Use the shared dependency cache read-only
+      if: inputs.warm-up != 'true' && steps.cache.outputs.cache-matched-key != ''
+      shell: bash
+      run: |
+        printf 'GRADLE_RO_DEP_CACHE=%s/.gradle/ci-dependency-cache/caches\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
