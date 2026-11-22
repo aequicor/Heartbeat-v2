@@ -1,7 +1,6 @@
 import org.gradle.api.tasks.Exec
 
-// Enables the committed Git hooks. `.githooks/pre-push` runs `detektAll`, so a clone that ran
-// this task blocks a push when detekt finds a violation.
+// Enables the committed Git hooks. The pre-push hook runs the review gates supported by the host.
 
 tasks.register<Exec>("installGitHooks") {
     group = "verification"

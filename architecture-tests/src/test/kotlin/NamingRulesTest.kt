@@ -237,6 +237,26 @@ class NamingRulesTest {
     }
 
     @Test
+    fun projectsSessionsComponentBelongsToAiStudio() {
+        val aiStudioComponent = "io.github.aequicor.heartbeat.features.aistudio.component"
+        val path = "features/ai-studio/presentation/decompose/src/commonMain/kotlin/ProjectsSessionsComponent.kt"
+        Assert.assertNull(
+            NamingRules.violation(
+                aiStudioComponent, DeclarationKind.INTERFACE, "ProjectsSessionsComponent", projectPath = path,
+            ),
+        )
+        Assert.assertNull(
+            NamingRules.violation(
+                aiStudioComponent, DeclarationKind.CLASS, "DefaultProjectsSessionsComponent", projectPath = path,
+            ),
+        )
+        Assert.assertEquals(
+            "component must be <Feature>Component or <Feature>FeatureEntry: ProjectsSessionsComponent",
+            violation(component, DeclarationKind.INTERFACE, "ProjectsSessionsComponent"),
+        )
+    }
+
+    @Test
     fun screensAreNamedScreen() {
         Assert.assertNull(violation(ui, DeclarationKind.FUNCTION, "EditorScreen", listOf("Composable")))
         Assert.assertEquals(

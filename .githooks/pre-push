@@ -1,8 +1,35 @@
 #!/bin/sh
-# Blocks a push when detekt reports a violation in any module.
-#
-# Installed by `git config core.hooksPath .githooks` (see the `installGitHooks` Gradle task).
+# Runs the review gates supported by this host before pushing.
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
-exec sh ./gradlew --console=plain detektAll
+
+host="$(uname -s)"
+arch="$(uname -m)"
+set -- detektAll architectureCheck \
+    :designsystem:foundation:jvmTest :designsystem:sandbox:jvmTest \
+    :designsystem:compose:components:compileKotlinJvm :designsystem:consumer:compileKotlinJvm
+
+case "$host:$arch" in
+    Linux:x86_64)
+        set -- "$@" compileKotlinLinuxArm64 linuxX64Test ;;
+    Linux:aarch64|Linux:arm64)
+        set -- "$@" compileKotlinLinuxX64 linuxArm64Test ;;
+    Darwin:*)
+        set -- "$@" compileKotlinMacosArm64 compileKotlinMacosX64 \
+            compileKotlinIosArm64 compileKotlinIosSimulatorArm64 compileKotlinIosX64
+        case "$arch" in
+            arm64) set -- "$@" macosArm64Test ;;
+            x86_64) set -- "$@" macosX64Test ;;
+        esac ;;
+esac
+
+export HB_UPDATE_GOLDENS=0
+status=0
+HB_GOLDEN_MODE=render sh ./gradlew --console=plain --continue "$@" || status=$?
+
+case "$host" in
+    MINGW*|MSYS*|CYGWIN*)
+        HB_GOLDEN_MODE=compare sh ./gradlew --console=plain :designsystem:sandbox:jvmTest || status=$? ;;
+esac
+exit "$status"

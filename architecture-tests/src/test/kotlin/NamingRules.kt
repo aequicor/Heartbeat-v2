@@ -222,7 +222,12 @@ internal object NamingRules {
             "Default${feature}ComponentFactory",
             "Default${feature}FeatureEntry",
         )
-        return if (declarationName in allowed || declarationName.endsWith("FeatureEntry")) {
+        val aiStudioChildComponent = feature == "AiStudio" && when (declarationKind) {
+            DeclarationKind.INTERFACE -> declarationName == "ProjectsSessionsComponent"
+            DeclarationKind.CLASS -> declarationName == "DefaultProjectsSessionsComponent"
+            else -> false
+        }
+        return if (declarationName in allowed || declarationName.endsWith("FeatureEntry") || aiStudioChildComponent) {
             null
         } else {
             "component must be <Feature>Component or <Feature>FeatureEntry: $declarationName"
