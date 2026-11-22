@@ -20,6 +20,7 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 DefaultDirName={userpf}\{#AppName}
 DefaultGroupName={#AppName}
+AllowNoIcons=yes
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=Heartbeat-{#AppVersion}-setup
@@ -42,7 +43,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Check: not WizardNoIcons
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
