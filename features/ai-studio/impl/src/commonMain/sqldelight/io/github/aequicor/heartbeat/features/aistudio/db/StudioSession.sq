@@ -8,7 +8,10 @@ CREATE TABLE studio_session (
     updated_at_seconds INTEGER NOT NULL,
     updated_at_nanos INTEGER NOT NULL,
     parent_session_id TEXT,
-    is_expanded INTEGER NOT NULL DEFAULT 1
+    is_expanded INTEGER NOT NULL DEFAULT 1,
+    workspace_payload TEXT,
+    workspace_summary TEXT,
+    work_state TEXT NOT NULL DEFAULT 'Idle'
 );
 
 CREATE INDEX studio_session_root_page
@@ -34,9 +37,63 @@ SELECT project_id FROM studio_session WHERE id = :parent_id;
 selectSessionById:
 SELECT * FROM studio_session WHERE id = :id;
 
-listRootSessions:
+searchProjectsSessions:
+WITH RECURSIVE matching_projects(id) AS (
+    SELECT id
+    FROM studio_project
+    WHERE status = 'ACTIVE' AND alias GLOB :pattern
+), matching_sessions(id, project_id, parent_session_id) AS (
+    SELECT session.id, session.project_id, session.parent_session_id
+    FROM studio_session AS session
+    JOIN studio_project AS project ON project.id = session.project_id
+    WHERE project.status = 'ACTIVE' AND session.status = 'ACTIVE'
+      AND (session.title GLOB :pattern OR session.project_id IN (SELECT id FROM matching_projects))
+    UNION
+    SELECT parent.id, parent.project_id, parent.parent_session_id
+    FROM matching_sessions AS child
+    JOIN studio_session AS parent ON parent.id = child.parent_session_id AND parent.project_id = child.project_id
+    WHERE parent.status = 'ACTIVE'
+), result_projects(id) AS (
+    SELECT id FROM matching_projects
+    UNION
+    SELECT project_id FROM matching_sessions
+)
+SELECT project.id AS project_id,
+       project.name AS project_name,
+       project.alias AS project_title,
+       project.working_directory,
+       project.status AS project_status,
+       project.created_at_seconds AS project_created_seconds,
+       project.created_at_nanos AS project_created_nanos,
+       project.updated_at_seconds AS project_updated_seconds,
+       project.updated_at_nanos AS project_updated_nanos,
+       project.is_expanded AS project_expanded,
+       session.id AS session_id,
+       session.title AS session_title,
+       session.status AS session_status,
+       session.created_at_seconds AS session_created_seconds,
+       session.created_at_nanos AS session_created_nanos,
+       session.updated_at_seconds AS session_updated_seconds,
+       session.updated_at_nanos AS session_updated_nanos,
+       session.is_expanded AS session_expanded,
+       session.work_state AS session_work_state,
+       session.parent_session_id
+FROM result_projects AS result
+JOIN studio_project AS project ON project.id = result.id
+LEFT JOIN matching_sessions AS matched ON matched.project_id = project.id
+LEFT JOIN studio_session AS session ON session.id = matched.id
+ORDER BY project.updated_at_seconds DESC, project.updated_at_nanos DESC, project.id ASC,
+         session.updated_at_seconds DESC, session.updated_at_nanos DESC, session.id ASC;
+
+selectRootSessions:
 SELECT * FROM studio_session
-WHERE project_id = :project_id AND parent_session_id IS NULL AND status = :status
+WHERE project_id = :project_id AND status = :status
+  AND (
+      parent_session_id IS NULL
+      OR (:status = 'ACTIVE' AND parent_session_id IN (
+          SELECT id FROM studio_session WHERE project_id = :project_id AND status = 'ARCHIVED'
+      ))
+  )
   AND (
       :cursor_id IS NULL
       OR updated_at_seconds < :cursor_seconds
@@ -46,7 +103,7 @@ WHERE project_id = :project_id AND parent_session_id IS NULL AND status = :statu
 ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
 LIMIT :fetch_limit;
 
-listChildSessions:
+selectChildSessions:
 SELECT * FROM studio_session
 WHERE parent_session_id = :parent_id AND status = :status
   AND (
@@ -58,13 +115,13 @@ WHERE parent_session_id = :parent_id AND status = :status
 ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
 LIMIT :fetch_limit;
 
-setStudioSessionExpanded:
+updateSessionExpanded:
 UPDATE studio_session SET is_expanded = :is_expanded WHERE id = :id;
 
-renameSession:
+updateSessionTitle:
 UPDATE studio_session SET title = :title WHERE id = :id;
 
-setSessionStatus:
+updateSessionStatus:
 UPDATE studio_session
 SET status = :status,
     updated_at_seconds = CASE WHEN (:event_seconds > updated_at_seconds
@@ -75,8 +132,18 @@ SET status = :status,
         THEN :event_nanos ELSE updated_at_nanos END
 WHERE id = :id AND status != :status;
 
-recordSessionActivity:
+updateSessionActivity:
 UPDATE studio_session
 SET updated_at_seconds = :event_seconds, updated_at_nanos = :event_nanos
 WHERE id = :id AND (:event_seconds > updated_at_seconds
     OR (:event_seconds = updated_at_seconds AND :event_nanos > updated_at_nanos));
+
+deleteSessionTree:
+WITH RECURSIVE subtree(id, project_id) AS (
+    SELECT id, project_id FROM studio_session WHERE id = :id
+    UNION
+    SELECT child.id, child.project_id
+    FROM studio_session AS child
+    JOIN subtree AS parent ON child.parent_session_id = parent.id AND child.project_id = parent.project_id
+)
+DELETE FROM studio_session WHERE id IN (SELECT id FROM subtree);

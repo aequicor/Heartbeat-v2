@@ -54,11 +54,18 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
+import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileGroup
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileRow
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.return_to_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.settings
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraChats(
@@ -67,6 +74,7 @@ internal fun AuroraChats(
     avatarVisible: Boolean,
     onAction: (AiStudioAction) -> Unit,
     onOpenSettings: () -> Unit,
+    projectsSessions: ProjectsSessionsComponent,
     modifier: Modifier = Modifier,
     close: Boolean = false,
 ) {
@@ -77,7 +85,8 @@ internal fun AuroraChats(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (close) {
                 AuroraControl(
-                    { onAction(AiStudioAction.ToggleChats(false)) }, label = "Вернуться к диалогу",
+                    { onAction(AiStudioAction.CollapseChats) },
+                    label = stringResource(Res.string.return_to_session),
                     touch = touch, background = Color.Transparent,
                 ) {
                     HbIcon(HbIconGlyph.Close, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
@@ -88,38 +97,33 @@ internal fun AuroraChats(
                 AuroraColors.Primary,
             )
             AuroraText("Heartbeat", Modifier.weight(1f))
-            AuroraControl(onOpenSettings, label = "Настройки", touch = touch, background = Color.Transparent) {
+            AuroraControl(
+                onOpenSettings,
+                label = stringResource(Res.string.settings),
+                touch = touch,
+                background = Color.Transparent,
+            ) {
                 AiStudioIcon(AiStudioGlyph.Settings, Modifier.size(AuroraLayout.Glyph), AuroraColors.Muted)
             }
         }
         AuroraControl({ onAction(AiStudioAction.NewChat) }, Modifier.fillMaxWidth(), touch = touch, round = false) {
             HbIcon(HbIconGlyph.Plus, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
-            AuroraText("Новый диалог", Modifier.padding(start = AuroraLayout.Space))
+            AuroraText(stringResource(Res.string.new_session), Modifier.padding(start = AuroraLayout.Space))
         }
-        AuroraSearch("Поиск по диалогам", state.chatSearch, { onAction(AiStudioAction.SearchChats(it)) }, touch)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AuroraLayout.FrameStroke)) {
-            items(state.chats, key = { it.id }) { chat ->
-                val selected = state.chat?.id == chat.id
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    AuroraControl({ onAction(AiStudioAction.OpenChat(chat.id)) }, Modifier.weight(1f),
-                        "${chat.title}, ${chat.project}", touch,
-                        background = if (selected) AuroraColors.Lavender else Color.Transparent, round = false,
-                    ) {
-                        AiStudioIcon(AiStudioGlyph.Chat, Modifier.size(AuroraLayout.Glyph), AuroraColors.Muted)
-                        Column(
-                            Modifier.padding(start = AuroraLayout.Space, top = AuroraLayout.SmallGap,
-                                bottom = AuroraLayout.SmallGap),
-                        ) {
-                            AuroraText(chat.title, lines = 1)
-                            AuroraText(chat.project, small = true, color = AuroraColors.Muted, lines = 1)
-                        }
-                    }
-                    AuroraSessionMenu(chat, touch, onAction)
-                }
-            }
-        }
+        AuroraSearch(
+            stringResource(Res.string.search_sessions),
+            state.chatSearch,
+            { onAction(AiStudioAction.SearchChats(it)) },
+            touch,
+        )
+        AuroraSessionList(state, touch, onAction, projectsSessions, Modifier.weight(1f))
         if (avatarVisible) {
-            AuroraControl(onOpenSettings, label = "Настройки", touch = touch, background = Color.Transparent) {
+            AuroraControl(
+                onOpenSettings,
+                label = stringResource(Res.string.settings),
+                touch = touch,
+                background = Color.Transparent,
+            ) {
                 AiStudioIcon(AiStudioGlyph.User, Modifier.size(AuroraLayout.Glyph), AuroraColors.Muted)
             }
         }

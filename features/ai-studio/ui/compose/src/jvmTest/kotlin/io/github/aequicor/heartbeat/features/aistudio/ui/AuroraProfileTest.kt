@@ -15,7 +15,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
-import io.github.aequicor.heartbeat.features.aistudio.di.DefaultAiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.testing.createAiStudioTestStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
@@ -50,7 +50,7 @@ class AuroraProfileTest {
     fun profilesDesktopInputAndScrollingOverTheMockStream() = runBlocking {
         Assume.assumeTrue(System.getenv("HEARTBEAT_PROFILE_AURORA") == "1")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(scope)
+        val store = createAiStudioTestStore(AuroraTestPreferences, scope)
 
         try {
             withTimeout(5_000) { store.screenState.first { !it.loading } }
@@ -83,7 +83,7 @@ class AuroraProfileTest {
                         }
                         store.dispatch(action)
                     },
-                    onOpenSettings = {}, avatarVisible = false,
+                    onOpenSettings = {}, avatarVisible = false, projectsSessions = TestProjectsSessionsComponent(),
                 )
             }
         }

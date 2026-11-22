@@ -14,6 +14,11 @@ CREATE TABLE studio_project (
 CREATE INDEX studio_project_page
 ON studio_project(status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);
 
+INSERT INTO studio_project(
+    id, name, alias, working_directory, status,
+    created_at_seconds, created_at_nanos, updated_at_seconds, updated_at_nanos
+) VALUES ('00000000-0000-0000-0000-000000000000', ':system:ungrouped:', 'Без проекта', '', 'ACTIVE', 0, 0, 0, 0);
+
 insertProject:
 INSERT OR IGNORE INTO studio_project(
     id, name, alias, working_directory, status,
@@ -30,7 +35,7 @@ SELECT * FROM studio_project WHERE name = :immutable_name;
 selectProjectById:
 SELECT * FROM studio_project WHERE id = :id;
 
-listProjects:
+selectProjects:
 SELECT * FROM studio_project
 WHERE status = :status
   AND (
@@ -42,15 +47,21 @@ WHERE status = :status
 ORDER BY updated_at_seconds DESC, updated_at_nanos DESC, id ASC
 LIMIT :fetch_limit;
 
-setProjectExpanded:
+updateProjectExpanded:
 UPDATE studio_project SET is_expanded = :is_expanded WHERE id = :id;
 
-renameProjectTitle:
+updateProjectTitle:
 UPDATE studio_project
 SET alias = :title, updated_at_seconds = :now_seconds, updated_at_nanos = :now_nanos
 WHERE id = :id AND alias != :title;
 
-setProjectStatus:
+updateProjectStatus:
 UPDATE studio_project
 SET status = :status, updated_at_seconds = :now_seconds, updated_at_nanos = :now_nanos
 WHERE id = :id AND status != :status;
+
+deleteProjectSessions:
+DELETE FROM studio_session WHERE project_id = :id;
+
+deleteProject:
+DELETE FROM studio_project WHERE id = :id;

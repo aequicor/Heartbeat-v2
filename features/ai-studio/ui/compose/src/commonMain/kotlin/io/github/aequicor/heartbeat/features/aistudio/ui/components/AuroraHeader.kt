@@ -29,6 +29,11 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_in_project
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraHeader(
@@ -76,7 +81,7 @@ private fun AuroraTouchHeader(
             AuroraTouchParameters(chat, onAction, Modifier.weight(1f))
             AuroraTouchMetrics(chat.contextPercent, chat.quota, Modifier.padding(end = AuroraLayout.ContentInset))
         }
-        AuroraHeaderStorageError(state.storageError, inset)
+        AuroraHeaderStorageError(state.navigationErrorText(), inset)
     }
 }
 
@@ -91,25 +96,31 @@ private fun AuroraTouchChatTitle(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showNavigation) {
-            AuroraTouchHeaderIcon("Диалоги", { onAction(AiStudioAction.ToggleChats(true)) }) {
+            AuroraTouchHeaderIcon(
+                stringResource(Res.string.projects_sessions),
+                { onAction(AiStudioAction.ExpandChats) },
+            ) {
                 AiStudioIcon(AiStudioGlyph.Menu, Modifier.size(AuroraLayout.Glyph), AuroraColors.Muted)
             }
         }
         val actions = listOf(
-            HbMenuAction("Новый диалог", { onAction(AiStudioAction.NewChat) }),
+            HbMenuAction(stringResource(Res.string.new_session), { onAction(AiStudioAction.NewChat) }),
             HbMenuAction("Файлы диалога", { onAction(AiStudioAction.ToggleFiles(true)) }),
         )
         val radius = AuroraLayout.MessageRadius
+        val title = chat.displayTitle()
+        val project = chat.displayProject()
         AuroraHeaderMenu(actions, Modifier.weight(1f), touch = true) { trigger, open ->
             AuroraHeaderButton(
-                "${chat.title}, ${chat.project}", open,
+                stringResource(Res.string.session_in_project, title, project),
+                open,
                 trigger.fillMaxWidth().auroraHeaderSurface(radius, outline = false),
                 height = AuroraLayout.TouchTarget, radius = radius,
                 contentPadding = PaddingValues(horizontal = AuroraLayout.Space),
             ) {
                 Column {
-                    AuroraHeaderText(chat.project, color = AuroraColors.Muted)
-                    AuroraHeaderText(chat.title, style = HbTypography.PaneTitle)
+                    AuroraHeaderText(project, color = AuroraColors.Muted)
+                    AuroraHeaderText(title, style = HbTypography.PaneTitle)
                 }
             }
         }

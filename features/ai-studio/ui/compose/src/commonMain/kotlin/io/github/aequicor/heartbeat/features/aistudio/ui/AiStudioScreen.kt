@@ -21,6 +21,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
+import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
@@ -48,6 +49,7 @@ internal fun AiStudioScreen(
     onAction: (AiStudioAction) -> Unit,
     onOpenSettings: () -> Unit,
     avatarVisible: Boolean,
+    projectsSessions: ProjectsSessionsComponent,
     modifier: Modifier = Modifier,
 ) {
     BindAuroraDiagramContext()
@@ -70,7 +72,7 @@ internal fun AiStudioScreen(
         ) {
             if (panes.sidebar) {
                 AuroraDesktopSidebar(
-                    state, onAction, onOpenSettings,
+                    state, onAction, onOpenSettings, projectsSessions,
                     Modifier.width(AuroraLayout.SidebarWithGap).padding(top = panes.sidebarTop),
                 )
             }
@@ -84,8 +86,8 @@ internal fun AiStudioScreen(
                     )
                 }
                 if (state.chatsVisible && !panes.sidebar) {
-                    AuroraPanelDialog({ onAction(AiStudioAction.ToggleChats(false)) }) {
-                        AuroraChats(state, touch, avatarVisible, onAction, onOpenSettings,
+                    AuroraPanelDialog({ onAction(AiStudioAction.CollapseChats) }) {
+                        AuroraChats(state, touch, avatarVisible, onAction, onOpenSettings, projectsSessions,
                             Modifier.fillMaxSize().then(workspaceSemantics).padding(AuroraLayout.Space), close = true)
                     }
                 }

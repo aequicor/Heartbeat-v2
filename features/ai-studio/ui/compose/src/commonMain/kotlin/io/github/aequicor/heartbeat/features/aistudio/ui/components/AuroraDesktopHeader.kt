@@ -48,7 +48,11 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_project_closed_icon
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_menu_in_project
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraDesktopHeader(
@@ -84,7 +88,7 @@ internal fun AuroraDesktopHeader(
                 horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (showNavigation) AuroraHeaderNavigation(onAction)
+                if (showNavigation) AuroraHeaderNavigation { onAction(AiStudioAction.ExpandChats) }
                 AuroraTitleMenu(
                     chat, state.filesVisible, onAction, titleFocus,
                     onReady = { onTitleReady(titleFocus) }, modifier = Modifier.weight(1f),
@@ -107,16 +111,17 @@ internal fun AuroraDesktopHeader(
                     AuroraHeaderMetrics(chat.contextPercent, chat.quota, compact)
                 }
             }
-            AuroraHeaderStorageError(state.storageError, inset)
+            AuroraHeaderStorageError(state.navigationErrorText(), inset)
         }
     }
 }
 
 @Composable
-private fun AuroraHeaderNavigation(onAction: (AiStudioAction) -> Unit) {
+private fun AuroraHeaderNavigation(onOpen: () -> Unit) {
     HbWindowClientArea { clientArea ->
         AuroraHeaderButton(
-            "Диалоги", { onAction(AiStudioAction.ToggleChats(true)) },
+            stringResource(Res.string.projects_sessions),
+            onOpen,
             clientArea.auroraHeaderSurface(AuroraLayout.MessageRadius),
             radius = AuroraLayout.MessageRadius, contentPadding = PaddingValues(horizontal = AuroraLayout.Space),
         ) {
@@ -135,23 +140,29 @@ private fun AuroraTitleMenu(
     modifier: Modifier = Modifier,
 ) {
     SideEffect(titleFocus) { onReady() }
+    val title = chat.displayTitle()
     val actions = listOf(
-        HbMenuAction("Новый диалог", { onAction(AiStudioAction.NewChat) }, glyph = HbIconGlyph.Edit),
+        HbMenuAction(
+            stringResource(Res.string.new_session),
+            { onAction(AiStudioAction.NewChat) },
+            glyph = HbIconGlyph.Edit,
+        ),
         HbMenuAction(
             if (filesVisible) "Скрыть файлы диалога" else "Файлы диалога",
             { onAction(AiStudioAction.ToggleFiles(!filesVisible)) }, glyph = HbIconGlyph.FolderOpen,
         ),
     )
     var expanded by remember { mutableStateOf(false) }
-    var truncated by remember(chat.title) { mutableStateOf(false) }
+    var truncated by remember(title) { mutableStateOf(false) }
     HbWindowClientArea { clientArea ->
         HbMenu(
             expanded, onDismissRequest = { expanded = false }, actions = actions,
             modifier = modifier.then(clientArea), presentation = HbMenuPresentation.AuroraMessage,
         ) { trigger ->
-            HbTooltip(chat.title, enabled = truncated && !expanded) {
+            HbTooltip(title, enabled = truncated && !expanded) {
                 AuroraHeaderButton(
-                    "Меню диалога «${chat.title}», проект ${chat.project}", { expanded = true },
+                    stringResource(Res.string.session_menu_in_project, title, chat.displayProject()),
+                    { expanded = true },
                     trigger.focusRequester(titleFocus).fillMaxWidth().auroraFloatingHeaderSurface(AuroraColors.Pearl),
                     radius = AuroraLayout.FloatingHeaderRadius,
                     contentPadding = PaddingValues(horizontal = AuroraLayout.ContentInset),
@@ -163,7 +174,7 @@ private fun AuroraTitleMenu(
                     )
                     Spacer(Modifier.width(AuroraLayout.Space))
                     AuroraFadingText(
-                        chat.title,
+                        title,
                         HbTypography.PaneTitle.copy(color = AuroraColors.MessageInk),
                         AuroraLayout.NavigationTitleFade, Modifier.weight(1f, fill = false),
                         onOverflowChange = { truncated = it },

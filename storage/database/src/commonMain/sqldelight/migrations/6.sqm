@@ -1,0 +1,1 @@
+ALTER TABLE studio_session ADD COLUMN work_state TEXT NOT NULL DEFAULT 'Idle';

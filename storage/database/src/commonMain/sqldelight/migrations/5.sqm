@@ -1,0 +1,9 @@
+UPDATE studio_session
+SET project_id = '00000000-0000-0000-0000-000000000000'
+WHERE project_id IN (
+    SELECT id FROM studio_project
+    WHERE working_directory = '' AND id != '00000000-0000-0000-0000-000000000000'
+);
+
+DELETE FROM studio_project
+WHERE working_directory = '' AND id != '00000000-0000-0000-0000-000000000000';

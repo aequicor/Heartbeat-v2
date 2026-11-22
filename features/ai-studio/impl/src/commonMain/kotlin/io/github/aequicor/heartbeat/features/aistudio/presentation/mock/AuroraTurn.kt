@@ -2,6 +2,7 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.presentation.mock
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
@@ -41,6 +42,13 @@ internal class AuroraTurn(
     var reply: Reply? = null
         private set
 
+    val workState: SessionWorkState
+        get() = when (activity) {
+            Activity.Idle -> SessionWorkState.Idle
+            Activity.Waiting -> SessionWorkState.Demand
+            Activity.Sending, Activity.Running, Activity.Stopping -> SessionWorkState.Working
+        }
+
     private var scheduled: Job? = null
     private var generation = 0L
     private var timerTicks = 0
@@ -49,7 +57,8 @@ internal class AuroraTurn(
     private var sendingAnswer: User? = null
     private var frame = 0
     private val thinkingMarkdown by lazy { WorkMarkdownStream() }
-    private val demonstration = chatId == LargeMessageDemo.ChatId && prompt.scenario == Scenario.Stream
+    private val demonstration =
+        store.mockSessionId(chatId) == LargeMessageDemo.ChatId && prompt.scenario == Scenario.Stream
     private val answerSample by lazy {
         if (demonstration) LargeMessageDemo.answer(prompt.text) else AuroraMock.richSample
     }

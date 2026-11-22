@@ -58,12 +58,20 @@ class AuroraDesktopHoverTest {
             ),
         )
         val received = mutableListOf<AiStudioAction>()
+        val expansion = mutableListOf<Pair<String, Boolean>>()
+        val projectsSessions = object : TestProjectsSessionsComponent() {
+            override fun setProjectExpanded(id: String, expanded: Boolean) {
+                expansion.add(id to expanded)
+            }
+        }
         val scene = ImageComposeScene(
             HbAuroraLayout.SidebarWithGap.value.toInt(), 160, coroutineContext = clock.context,
         ) {
             AuroraTestTheme(appearance = HbAppearance.Light) {
                 HbDesktopFocusIndication(Modifier.fillMaxSize().background(HbAuroraColors.Canvas)) {
-                    AuroraDesktopSidebar(state, received::add, {}, Modifier.width(HbAuroraLayout.SidebarWithGap))
+                    AuroraDesktopSidebar(
+                        state, received::add, {}, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap),
+                    )
                 }
             }
         }
@@ -84,9 +92,9 @@ class AuroraDesktopHoverTest {
             val ungrouped = assertNotNull(scene.description("Новый диалог · Без проекта")).boundsInRoot
             assertEquals(28f, ungrouped.height)
             scene.click(ungrouped.center)
+            assertEquals(listOf("Проверки" to true), expansion)
             assertEquals(
-                listOf(
-                    AiStudioAction.ToggleNavigation("project"),
+                listOf<AiStudioAction>(
                     AiStudioAction.NewProjectChat("Проверки"),
                     AiStudioAction.NewProjectChat("Без проекта"),
                 ),
@@ -108,7 +116,10 @@ class AuroraDesktopHoverTest {
             HbAuroraLayout.SidebarWithGap.value.toInt(), 160, coroutineContext = clock.context,
         ) {
             AuroraTestTheme(appearance = HbAppearance.Light) {
-                AuroraDesktopSidebar(state, actions::add, {}, Modifier.width(HbAuroraLayout.SidebarWithGap))
+                AuroraDesktopSidebar(
+                    state, actions::add, {}, TestProjectsSessionsComponent(),
+                    Modifier.width(HbAuroraLayout.SidebarWithGap),
+                )
             }
         }
         try {
@@ -135,12 +146,19 @@ class AuroraDesktopHoverTest {
     }
 
     @Test
-    fun moreChatsFocusesTheFirstNewRowAndLeavesTheRestOfTheLineInactive() {
+    fun moreChatsLeavesTheRestOfTheLineInactiveAndFocusFollowsSelection() {
         val more = NavigationRow("more:project", "Ещё диалоги", NavigationKind.More, "Проверки")
         val added = NavigationRow("entry", "Новая сессия", NavigationKind.Chat, "Проверки")
         val state = mutableStateOf(AiStudioScreenState(navigation = listOf(more)))
         val scale = mutableFloatStateOf(1f)
         val actions = mutableListOf<AiStudioAction>()
+        val requestedProjects = mutableListOf<String>()
+        val projectsSessions = object : TestProjectsSessionsComponent() {
+            override fun loadMoreSessions(projectId: String) {
+                requestedProjects.add(projectId)
+                state.value = state.value.copy(navigation = listOf(added))
+            }
+        }
         val scene = ImageComposeScene(
             HbAuroraLayout.SidebarWithGap.value.toInt(), 200, coroutineContext = clock.context,
         ) {
@@ -148,14 +166,11 @@ class AuroraDesktopHoverTest {
                 AuroraDesktopSidebar(state.value, { action ->
                     actions.add(action)
                     state.value = when (action) {
-                        AiStudioAction.ToggleNavigation(more.id) -> state.value.copy(
-                            navigation = listOf(added), navigationFocusId = added.id,
-                        )
-                        AiStudioAction.NavigationFocusHandled(added.id) -> state.value.copy(navigationFocusId = null)
-                        AiStudioAction.OpenChat(added.id) -> state.value
+                        AiStudioAction.OpenChat(added.id) ->
+                            state.value.copy(navigation = listOf(added.copy(selected = true)))
                         else -> error("Unexpected action: $action")
                     }
-                }, {}, Modifier.width(HbAuroraLayout.SidebarWithGap))
+                }, {}, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap))
             }
         }
         try {
@@ -164,18 +179,15 @@ class AuroraDesktopHoverTest {
             assertTrue(scene.navigationRow(more.title).boundsInRoot.height >= 40f)
             scale.floatValue = 1f
             clock.frame(scene)
-            val button = scene.navigationRow(more.title).boundsInRoot
-            assertEquals(18f, button.left)
-            assertEquals(HbAuroraLayout.NavigationRow.value, button.height)
-            val inside = button.leftInset()
-            val rest = scene.colorAt(inside)
-            scene.move(inside)
-            assertEquals(hoverColor, scene.colorAt(inside))
-            scene.move(Offset(230f, button.center.y))
-            assertEquals(rest, scene.colorAt(inside))
-            scene.click(Offset(230f, button.center.y))
+            val button = checkMoreButtonHitArea(scene, more.title)
             assertTrue(actions.isEmpty())
+            assertTrue(requestedProjects.isEmpty())
             scene.click(button.center)
+            assertEquals(listOf(more.project), requestedProjects)
+            clock.frame(scene)
+            val newRow = scene.navigationRow(added.title)
+            assertTrue(newRow.config.getOrNull(SemanticsProperties.Focused) != true)
+            scene.click(newRow.boundsInRoot.center)
             clock.frame(scene)
             val focused = scene.navigationRow(added.title)
             assertEquals(true, focused.config.getOrNull(SemanticsProperties.Focused))
@@ -183,9 +195,8 @@ class AuroraDesktopHoverTest {
             scene.sendKeyEvent(KeyEvent(Key.Enter, KeyEventType.KeyUp))
             clock.frame(scene)
             assertEquals(
-                listOf(
-                    AiStudioAction.ToggleNavigation(more.id),
-                    AiStudioAction.NavigationFocusHandled(added.id),
+                listOf<AiStudioAction>(
+                    AiStudioAction.OpenChat(added.id),
                     AiStudioAction.OpenChat(added.id),
                 ),
                 actions,
@@ -193,6 +204,21 @@ class AuroraDesktopHoverTest {
         } finally {
             scene.close()
         }
+    }
+
+    private fun checkMoreButtonHitArea(scene: ImageComposeScene, title: String): Rect {
+        val button = scene.navigationRow(title).boundsInRoot
+        assertEquals(18f, button.left)
+        assertEquals(HbAuroraLayout.NavigationRow.value, button.height)
+        val inside = button.leftInset()
+        val rest = scene.colorAt(inside)
+        scene.move(inside)
+        assertEquals(hoverColor, scene.colorAt(inside))
+        val outside = Offset(230f, button.center.y)
+        scene.move(outside)
+        assertEquals(rest, scene.colorAt(inside))
+        scene.click(outside)
+        return button
     }
 
     private fun ImageComposeScene.navigationRow(title: String) = assertNotNull(node { row ->

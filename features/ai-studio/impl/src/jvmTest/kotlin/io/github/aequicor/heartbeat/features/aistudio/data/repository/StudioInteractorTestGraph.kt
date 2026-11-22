@@ -4,13 +4,17 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.di.AppScope
-import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectInteractor
-import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.StudioSessionInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ObserveProjectsSessionsUseCase
 
 @DependencyGraph(AppScope::class)
 internal interface StudioInteractorTestGraph {
-    val projects: ProjectInteractor
-    val sessions: StudioSessionInteractor
+    val catalog: ProjectsSessionsInteractor
+    val projectDataSource: ProjectDataSource
+    val observeProjectsSessions: ObserveProjectsSessionsUseCase
+    val sessionBootstrap: SessionBootstrapInteractor
 
     @DependencyGraph.Factory
     fun interface Factory {

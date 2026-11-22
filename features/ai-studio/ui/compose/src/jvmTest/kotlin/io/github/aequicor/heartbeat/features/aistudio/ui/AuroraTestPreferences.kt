@@ -1,11 +1,9 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui
 
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
-import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStoreFactory
 import kotlinx.coroutines.flow.flowOf
 
-internal object AuroraTestPreferences : PreferencesStoreFactory, PreferencesStore {
-    override fun forNamespace(namespace: String) = this
+internal object AuroraTestPreferences : PreferencesStore {
     override fun observeString(key: String, default: String) = flowOf(default)
     override fun observeBoolean(key: String, default: Boolean) = flowOf(default)
     override fun observeLong(key: String, default: Long) = flowOf(default)

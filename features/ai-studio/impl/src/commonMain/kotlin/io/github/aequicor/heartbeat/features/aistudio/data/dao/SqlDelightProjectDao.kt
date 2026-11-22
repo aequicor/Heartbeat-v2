@@ -18,9 +18,9 @@ internal class SqlDelightProjectDao(
 
     private val queries get() = StudioProjectQueries(connection.driver)
 
-    override suspend fun create(immutableName: String, workingDirectory: String): ProjectDto {
+    override suspend fun insert(immutableName: String, workingDirectory: String): ProjectDto {
         val id = Uuid.random().toString()
-        val project = accessStudioDatabase("Create project") {
+        val project = accessStudioDatabase("Insert project") {
             val now = clock.now()
             val projectQueries = queries
             projectQueries.transactionWithResult {
@@ -38,19 +38,19 @@ internal class SqlDelightProjectDao(
         return project
     }
 
-    override suspend fun findById(id: String): ProjectDto? =
-        accessStudioDatabase("Find project") {
+    override suspend fun selectById(id: String): ProjectDto? =
+        accessStudioDatabase("Select project by ID") {
             queries.selectProjectById(id).executeAsOneOrNull()?.toProjectDto()
         }
 
-    override suspend fun list(
+    override suspend fun select(
         status: String,
         limit: Int,
         after: DaoPageCursor?,
     ): DaoPage<ProjectDto> {
         require(limit > 0)
-        return accessStudioDatabase("List projects") {
-            val rows = queries.listProjects(
+        return accessStudioDatabase("Select projects") {
+            val rows = queries.selectProjects(
                 status,
                 after?.id,
                 after?.updatedAt?.epochSeconds ?: 0L,
@@ -61,10 +61,10 @@ internal class SqlDelightProjectDao(
         }
     }
 
-    override suspend fun renameTitle(id: String, title: String) {
-        accessStudioDatabase("Rename project title") {
+    override suspend fun updateTitle(id: String, title: String) {
+        accessStudioDatabase("Update project title") {
             val now = clock.now()
-            queries.renameProjectTitle(
+            queries.updateProjectTitle(
                 title,
                 now.epochSeconds,
                 now.nanosecondsOfSecond.toLong(),
@@ -73,16 +73,26 @@ internal class SqlDelightProjectDao(
         }
     }
 
-    override suspend fun setExpanded(id: String, isExpanded: Boolean) {
-        accessStudioDatabase("Set project expansion") {
-            queries.setProjectExpanded(if (isExpanded) 1L else 0L, id)
+    override suspend fun updateExpanded(id: String, isExpanded: Boolean) {
+        accessStudioDatabase("Update project expansion") {
+            queries.updateProjectExpanded(if (isExpanded) 1L else 0L, id)
         }
     }
 
-    override suspend fun setStatus(id: String, status: String) {
-        accessStudioDatabase("Set project status") {
+    override suspend fun updateStatus(id: String, status: String) {
+        accessStudioDatabase("Update project status") {
             val now = clock.now()
-            queries.setProjectStatus(status, now.epochSeconds, now.nanosecondsOfSecond.toLong(), id)
+            queries.updateProjectStatus(status, now.epochSeconds, now.nanosecondsOfSecond.toLong(), id)
+        }
+    }
+
+    override suspend fun delete(id: String) {
+        accessStudioDatabase("Delete project") {
+            val projectQueries = queries
+            projectQueries.transaction {
+                projectQueries.deleteProjectSessions(id)
+                projectQueries.deleteProject(id)
+            }
         }
     }
 }

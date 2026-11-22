@@ -1,0 +1,38 @@
+CREATE TABLE studio_workspace (
+    singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+    metadata TEXT NOT NULL
+);
+
+selectWorkspaceMetadata:
+SELECT metadata FROM studio_workspace WHERE singleton = 1;
+
+upsertWorkspaceMetadata:
+INSERT OR REPLACE INTO studio_workspace(singleton, metadata) VALUES (1, :metadata);
+
+selectWorkspaceSessions:
+SELECT session.id, session.project_id, project.alias, session.title, session.status,
+       session.parent_session_id, session.is_expanded, session.workspace_summary, session.work_state,
+       project.is_expanded AS project_expanded
+FROM studio_session AS session
+JOIN studio_project AS project ON project.id = session.project_id
+ORDER BY session.updated_at_seconds DESC, session.updated_at_nanos DESC, session.id ASC;
+
+selectWorkspacePayload:
+SELECT workspace_payload FROM studio_session WHERE id = :id;
+
+importWorkspaceSession:
+INSERT INTO studio_session(
+    id, project_id, title, status, created_at_seconds, created_at_nanos,
+    updated_at_seconds, updated_at_nanos, parent_session_id, is_expanded, workspace_payload, workspace_summary, work_state
+) VALUES (:id, :project_id, :title, :status, 0, 0, :updated_at, 0, :parent_id, :expanded, :payload, :summary, :work_state);
+
+updateWorkspaceSession:
+UPDATE studio_session SET workspace_payload = :payload, workspace_summary = :summary
+WHERE id = :id;
+
+updateWorkspaceSessionWorkState:
+UPDATE studio_session SET work_state = :work_state WHERE id = :id AND work_state = :previous_work_state;
+
+resetInterruptedWorkStates:
+UPDATE studio_session SET work_state = 'Idle' WHERE work_state IN ('Working', 'Demand');
+

@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -62,6 +63,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
@@ -72,23 +74,39 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_new_ch
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_project_closed_icon
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_project_new_chat_icon
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_project_open_icon
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_search_chats_icon
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.collapse_child_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.expand_child_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_project_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.scroll_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_needs_answer
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_new_result
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_working
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.settings
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AuroraDesktopSidebar(
     state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
     onOpenSettings: () -> Unit,
+    projectsSessions: ProjectsSessionsComponent,
     modifier: Modifier = Modifier,
 ) {
     val list = rememberLazyListState()
-    RevealSidebarFocusTarget(list, state.navigation, state.navigationFocusId)
+    val selectedSessionFocus = rememberSelectedSessionFocus(list, state.navigation)
     Column(modifier.fillMaxHeight()) {
         SidebarHeader(state.chatSearchVisible, onAction, onOpenSettings)
         if (state.chatSearchVisible) {
             Box(Modifier.width(AuroraLayout.NavigationWidth).padding(top = AuroraLayout.SmallGap)) {
-                AuroraSearch("Поиск по диалогам", state.chatSearch, { onAction(AiStudioAction.SearchChats(it)) }, false)
+                AuroraSearch(
+                    stringResource(Res.string.search_sessions),
+                    state.chatSearch,
+                    { onAction(AiStudioAction.SearchChats(it)) },
+                    false,
+                )
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth().padding(top = AuroraLayout.SmallGap, bottom = AuroraLayout.Space)) {
@@ -104,16 +122,21 @@ internal fun AuroraDesktopSidebar(
                         else -> AuroraLayout.NavigationRowGap
                     }
                     val rowModifier = Modifier.width(AuroraLayout.NavigationWidth).padding(top = gap)
-                    if (row.kind == NavigationKind.More) {
-                        AuroraMoreChats(row.title, { onAction(AiStudioAction.ToggleNavigation(row.id)) }, rowModifier)
+                    if (row.kind.isPagination) {
+                        AuroraMoreChats(
+                            row.displayTitle(),
+                            { row.loadNextPage(projectsSessions) },
+                            rowModifier,
+                        )
                     } else {
-                        val focus = sidebarTitleFocus(list, row.id, state.navigationFocusId, onAction)
-                        SidebarRow(row, onAction, rowModifier, titleFocusModifier = focus)
+                        val focus = if (row.selected) Modifier.focusRequester(selectedSessionFocus) else Modifier
+                        SidebarRow(row, onAction, projectsSessions, rowModifier, titleFocusModifier = focus)
                     }
                 }
             }
             AuroraHistoryScrollbar(
-                list, "Прокрутка диалогов",
+                list,
+                stringResource(Res.string.scroll_sessions),
                 Modifier.align(Alignment.CenterEnd).padding(end = AuroraLayout.SmallGap / 2),
                 reverse = false,
             )
@@ -139,7 +162,10 @@ private fun SidebarHeader(
             Spacer(Modifier.width(AuroraLayout.Space))
             HbWindowClientArea { clientArea ->
                 AuroraControl(
-                    onOpenSettings, clientArea, label = "Настройки", background = Color.Transparent,
+                    onOpenSettings,
+                    clientArea,
+                    label = stringResource(Res.string.settings),
+                    background = Color.Transparent,
                     horizontalPadding = (AuroraLayout.DesktopTarget - AuroraLayout.NavigationSymbol) / 2,
                 ) {
                     HbIcon(HbIconGlyph.Settings, tint = AuroraColors.NavigationIcon,
@@ -153,7 +179,6 @@ private fun SidebarHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
         ) {
-            val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
             AuroraControl(
                 { onAction(AiStudioAction.NewChat) },
                 Modifier.weight(1f),
@@ -164,25 +189,14 @@ private fun SidebarHeader(
             ) {
                 Image(painterResource(Res.drawable.aurora_new_chat_icon), null, Modifier.size(AuroraLayout.Glyph))
                 BasicText(
-                    "Новый диалог",
+                    stringResource(Res.string.new_session),
                     Modifier.padding(start = AuroraLayout.ControlGap)
                         .padding(vertical = AuroraLayout.NavigationVerticalInset),
                     style = HbTypography.Label.copy(color = AuroraColors.NavigationOnPrimaryAction),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            AuroraControl(
-                { onAction(AiStudioAction.ShowChatSearch(!searchVisible)) },
-                Modifier.border(AuroraLayout.Stroke, AuroraColors.NavigationSearchOutline, shape),
-                label = "Поиск по диалогам",
-                background = AuroraColors.NavigationSearchSurface, round = false,
-                horizontalPadding = AuroraLayout.ControlGap, minimumTarget = AuroraLayout.NavigationRow,
-            ) {
-                Image(
-                    painterResource(Res.drawable.aurora_search_chats_icon), null, Modifier.size(AuroraLayout.Glyph),
-                    colorFilter = ColorFilter.tint(AuroraColors.NavigationIcon),
-                )
-            }
+            SidebarSearchButton(searchVisible, onAction)
         }
     }
 }
@@ -191,6 +205,7 @@ private fun SidebarHeader(
 private fun SidebarRow(
     row: NavigationRow,
     onAction: (AiStudioAction) -> Unit,
+    projectsSessions: ProjectsSessionsComponent,
     modifier: Modifier = Modifier,
     titleFocusModifier: Modifier = Modifier,
 ) {
@@ -198,7 +213,6 @@ private fun SidebarRow(
     val session = row.kind == NavigationKind.Chat
     val child = row.depth > 0
     val expanded = row.expanded
-    val toggle = { onAction(AiStudioAction.ToggleNavigation(row.id)) }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var focused by remember { mutableStateOf(false) }
@@ -213,8 +227,10 @@ private fun SidebarRow(
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             if (session && expanded != null) {
+                val label = if (expanded) Res.string.collapse_child_sessions else Res.string.expand_child_sessions
                 SidebarAction(
-                    if (expanded) "Свернуть вложенные диалоги" else "Развернуть вложенные диалоги", toggle,
+                    stringResource(label),
+                    { projectsSessions.setSessionExpanded(row.id, !expanded) },
                     Modifier.width(AuroraLayout.DesktopTarget),
                 ) { SidebarChevron(expanded) }
             }
@@ -224,12 +240,19 @@ private fun SidebarRow(
                 project -> Dp.Hairline
                 else -> AuroraLayout.NavigationIndent
             }
-            val open = if (session) { { onAction(AiStudioAction.OpenChat(row.id)) } } else toggle
+            val open: () -> Unit = if (session) {
+                { onAction(AiStudioAction.OpenChat(row.id)) }
+            } else {
+                { projectsSessions.setProjectExpanded(row.project, expanded != true) }
+            }
             SidebarTitle(row, open, indentation, Modifier.weight(1f).then(titleFocusModifier))
         }
         if (project) {
-            SidebarAction("Новый диалог · ${row.project}", { onAction(AiStudioAction.NewProjectChat(row.project)) },
-                Modifier.width(AuroraLayout.DesktopTarget)) {
+            SidebarAction(
+                stringResource(Res.string.new_project_session, row.displayTitle()),
+                { onAction(AiStudioAction.NewProjectChat(row.project)) },
+                Modifier.width(AuroraLayout.DesktopTarget),
+            ) {
                 Image(
                     painterResource(Res.drawable.aurora_project_new_chat_icon), null,
                     Modifier.size(AuroraLayout.Glyph),
@@ -269,9 +292,14 @@ private fun SidebarTitle(
             SidebarProjectTitle(row)
         } else if (row.kind == NavigationKind.Chat) {
             val style = HbTypography.Label.copy(color = AuroraColors.DesktopInk)
-            AuroraFadingText(row.title, style, AuroraLayout.NavigationTitleFade, Modifier.weight(1f, fill = false))
+            AuroraFadingText(
+                row.displayTitle(),
+                style,
+                AuroraLayout.NavigationTitleFade,
+                Modifier.weight(1f, fill = false),
+            )
         } else {
-            SidebarText(row.title, Modifier.weight(1f, fill = false), color = AuroraColors.NavigationMuted)
+            SidebarText(row.displayTitle(), Modifier.weight(1f, fill = false), color = AuroraColors.NavigationMuted)
         }
     }
 }
@@ -293,7 +321,8 @@ private fun RowScope.SidebarProjectTitle(row: NavigationRow) {
     }
     Spacer(Modifier.width(AuroraLayout.Space))
     BasicText(
-        row.title, Modifier.weight(1f, fill = false),
+        row.displayTitle(),
+        Modifier.weight(1f, fill = false),
         style = HbTypography.Label.copy(color = AuroraColors.DesktopInk),
         maxLines = 1, overflow = TextOverflow.Ellipsis,
     )
@@ -364,11 +393,12 @@ internal fun SidebarChevron(expanded: Boolean) {
 
 @Composable
 internal fun SidebarStatus(status: NavigationStatus, modifier: Modifier = Modifier) {
-    val label = when (status) {
-        NavigationStatus.Unread -> "Новый результат"
-        NavigationStatus.Working -> "Выполняется"
-        NavigationStatus.Attention -> "Нужен ответ"
+    val labelResource = when (status) {
+        NavigationStatus.Unread -> Res.string.session_new_result
+        NavigationStatus.Working -> Res.string.session_working
+        NavigationStatus.Attention -> Res.string.session_needs_answer
     }
+    val label = stringResource(labelResource)
     Box(modifier.height(AuroraLayout.NavigationRow), contentAlignment = Alignment.Center) {
             Canvas(
                 Modifier.size(AuroraLayout.NavigationStatus)
