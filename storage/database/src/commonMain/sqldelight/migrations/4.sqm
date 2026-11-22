@@ -1,0 +1,21 @@
+CREATE TEMPORARY TABLE legacy_ungrouped_project AS
+SELECT id, name, is_expanded FROM studio_project
+WHERE working_directory = '' AND (
+    name = ':ungrouped:' OR (name = 'imported-' || id AND alias = 'Без проекта' AND status = 'ACTIVE')
+);
+
+INSERT INTO studio_project(
+    id, name, alias, working_directory, status,
+    created_at_seconds, created_at_nanos, updated_at_seconds, updated_at_nanos, is_expanded
+)
+SELECT '00000000-0000-0000-0000-000000000000',
+       CASE WHEN EXISTS (SELECT 1 FROM studio_project WHERE name = ':system:ungrouped:')
+            THEN 'system-' || lower(hex(randomblob(16))) ELSE ':system:ungrouped:' END,
+       'Без проекта', '', 'ACTIVE', 0, 0, 0, 0,
+       coalesce((SELECT is_expanded FROM legacy_ungrouped_project ORDER BY (name = ':ungrouped:') DESC, id LIMIT 1), 1);
+
+UPDATE studio_session SET project_id = '00000000-0000-0000-0000-000000000000'
+WHERE project_id IN (SELECT id FROM legacy_ungrouped_project);
+
+DELETE FROM studio_project WHERE id IN (SELECT id FROM legacy_ungrouped_project);
+DROP TABLE legacy_ungrouped_project;

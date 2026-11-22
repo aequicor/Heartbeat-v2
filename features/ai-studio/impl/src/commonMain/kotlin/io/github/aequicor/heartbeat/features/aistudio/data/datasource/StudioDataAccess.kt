@@ -1,4 +1,4 @@
-package io.github.aequicor.heartbeat.features.aistudio.data.repository
+package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
@@ -18,4 +18,7 @@ internal fun Instant.toDatabaseTimestamp() = DatabaseTimestamp(epochSeconds, nan
 internal fun DatabaseTimestamp.toInstant(): Instant = Instant.fromEpochSeconds(epochSeconds, nanoseconds)
 
 internal fun <Id> PageCursor<Id>.toDaoCursor(encodeId: (Id) -> String) =
-    DaoPageCursor(updatedAt.toDatabaseTimestamp(), encodeId(id))
+    DaoPageCursor(updatedAt = updatedAt.toDatabaseTimestamp(), id = encodeId(id))
+
+internal fun <Id> DaoPageCursor.toPageCursor(decodeId: (String) -> Id): PageCursor<Id> =
+    PageCursor(updatedAt = updatedAt.toInstant(), id = decodeId(id))

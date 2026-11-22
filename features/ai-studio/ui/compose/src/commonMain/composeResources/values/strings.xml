@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="project_creation_failed">Не удалось создать проект.</string>
+    <string name="project_deletion_failed">Не удалось удалить проект.</string>
+    <string name="session_deletion_failed">Не удалось удалить диалог.</string>
+    <string name="project_rename_failed">Не удалось переименовать проект.</string>
+    <string name="session_rename_failed">Не удалось переименовать диалог.</string>
+    <string name="project_directory_required">Укажите рабочую папку проекта.</string>
+    <string name="project_name_already_exists">Проект «%1$s» уже существует.</string>
+    <string name="projects_sessions">Диалоги</string>
+    <string name="ungrouped_sessions">Без проекта</string>
+    <string name="more_sessions">Ещё диалоги</string>
+    <string name="more_projects">Ещё проекты</string>
+    <string name="new_session">Новый диалог</string>
+    <string name="new_project_session">Новый диалог · %1$s</string>
+    <string name="search_sessions">Поиск по диалогам</string>
+    <string name="scroll_sessions">Прокрутка диалогов</string>
+    <string name="collapse_child_sessions">Свернуть вложенные диалоги</string>
+    <string name="expand_child_sessions">Развернуть вложенные диалоги</string>
+    <string name="session_new_result">Новый результат</string>
+    <string name="session_working">Выполняется</string>
+    <string name="session_needs_answer">Нужен ответ</string>
+    <string name="return_to_session">Вернуться к диалогу</string>
+    <string name="archive_session">Архивировать диалог</string>
+    <string name="archive_named_session">Архивировать диалог «%1$s»</string>
+    <string name="session_actions">Действия диалога «%1$s»</string>
+    <string name="session_in_project">%1$s, %2$s</string>
+    <string name="session_menu_in_project">Меню диалога «%1$s», проект %2$s</string>
+    <string name="settings">Настройки</string>
+</resources>

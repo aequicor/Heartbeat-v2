@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.contract
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyMarkdownParser
 import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.WorkMarkdownStream
 import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.isLiteralReply
@@ -17,6 +19,7 @@ public data class AiStudioScreenState(
     val chatSearch: String = "",
     val chatSearchVisible: Boolean = false,
     val navigation: List<NavigationRow> = listOf(),
+    val usesPagedNavigation: Boolean = false,
     val messages: List<Message> = listOf(),
     val live: Reply? = null,
     val request: Request? = null,
@@ -36,8 +39,37 @@ public data class AiStudioScreenState(
     val expandedEvents: Set<String> = setOf(),
     val storageError: String? = null,
     val subagents: List<Subagent> = listOf(),
-    val navigationFocusId: String? = null,
+    val deletionError: DeletionError? = null,
+    val renameError: RenameError? = null,
+    val sessionBootstrap: SessionBootstrapState? = null,
 ) {
+
+    public enum class DeletionError { Project, Session }
+
+    public enum class RenameError { Project, Session }
+
+    public data class SessionBootstrapState(
+        val project: Project,
+        val error: Error? = null,
+        val pendingProject: PendingProject? = null,
+    ) {
+        public data class PendingProject(val workingDirectoryPath: String, val name: String)
+
+        public sealed interface Project {
+            public data object Ungrouped : Project
+            public data class Existing(val id: String) : Project
+        }
+
+        public sealed interface Error {
+            public data object EmptyPrompt : Error
+            public data object InvalidWorkingDirectory : Error
+            public data object InvalidName : Error
+            public data object ProjectUnavailable : Error
+            public data class ProjectNameTaken(val name: String) : Error
+            public data object StorageFailure : Error
+        }
+    }
+
     public data class Draft(val chatId: String? = null, val text: String = "")
     public data class LiveText(
         val replyId: String? = null, val text: String = "", val document: ReplyDocument? = null,
@@ -153,7 +185,22 @@ public data class AiStudioScreenState(
         val navigationStatus: NavigationStatus? = null,
         val quota: Quota? = null,
         val mockSubagent: Boolean = false,
-    )
+        val projectId: String? = null,
+    ) {
+
+        public val isUntitled: Boolean get() = title == UntitledTitle
+        public val isUngrouped: Boolean
+            get() = when (projectId) {
+                null -> project == UngroupedProjectKey
+                else -> projectId == ProjectId.Ungrouped.value.toString()
+            }
+
+        public companion object {
+            // These values also appear in existing workspace snapshots and navigation keys.
+            internal const val UntitledTitle = "Новый диалог"
+            internal const val UngroupedProjectKey = Project.UngroupedTitle
+        }
+    }
 
     @Serializable
     public data class Quota(val hours: Int, val usedPercent: Int)
@@ -170,9 +217,12 @@ public data class AiStudioScreenState(
         val selected: Boolean = false,
         val status: NavigationStatus? = null,
         val lastChild: Boolean = false,
-    )
+    ) {
 
-    public enum class NavigationKind { Project, Chat, More, Section }
+        public val isUntitled: Boolean get() = kind == NavigationKind.Chat && title == Chat.UntitledTitle
+    }
+
+    public enum class NavigationKind { Project, Chat, More, Section, MoreProjects, MoreChildren }
 
     @Serializable
     public enum class NavigationStatus { Working, Attention, Unread }

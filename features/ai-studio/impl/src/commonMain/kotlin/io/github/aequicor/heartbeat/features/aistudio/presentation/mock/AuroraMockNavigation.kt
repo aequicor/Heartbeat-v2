@@ -6,7 +6,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Scenario
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.Ungrouped
 
 internal fun mockNavigation(): List<AuroraChat> = buildList {
     val heartbeat = "Heartbeat"
@@ -36,7 +35,7 @@ internal fun mockNavigation(): List<AuroraChat> = buildList {
     addProject("Проверки", listOf("Отмена запроса", "Восстановление связи", "Очередь сообщений"))
     add(Chat(AuroraMock.LongChat, "Длинная история", "Проверки", Scenario.Stream, contextPercent = 71))
     add(Chat("research", "Отчёт по контрактам", "Проверки", Scenario.RunFailure))
-    addProject(Ungrouped, listOf("Как устроен планировщик", "Идеи для Aurora"))
+    addProject(Chat.UngroupedProjectKey, listOf("Как устроен планировщик", "Идеи для Aurora"))
 }.map { AuroraChat(it) }
 
 internal fun AuroraWorkspace.withMockNavigation(): AuroraWorkspace {

@@ -15,8 +15,8 @@
  *
  * This rule minimises the internal API; it does not replace the module boundary. The dependency
  * graph in `architectureCheck` forbids dependencies between feature implementations. AI Studio
- * adapters may use the listed contracts in their own `impl`. The Store's mutable state and
- * internal state model stay within that module.
+ * adapters may use the listed contracts in their own `impl`. Mutable state and paging data
+ * stay within that module.
  */
 internal object VisibilityRules {
 
@@ -53,6 +53,9 @@ internal object VisibilityRules {
         "AiStudioSettings",
         "AiStudioStore",
         "AiStudioStoreFactory",
+        "ProjectsSessionsAction",
+        "ProjectsSessionsState",
+        "ProjectsSessionsStore",
     )
 
     /**
@@ -72,8 +75,7 @@ internal object VisibilityRules {
             role == null -> null
             // The api role is the feature's public surface, checked by `apiContractsArePublic`.
             NamingRules.isApiPackage(packageName) -> null
-            packageName == "io.github.aequicor.heartbeat.features.aistudio.presentation.contract" &&
-                declarationName in aiStudioAdapterContracts -> null
+            isAiStudioAdapterContract(packageName, declarationName, declarationKind) -> null
             role in metroRoles && metroAnnotations.any(annotations::contains) -> null
             role == listOf("domain", "repository") ->
                 repositoryContractViolation(declarationKind, declarationName)
@@ -96,6 +98,18 @@ internal object VisibilityRules {
             role == listOf("ui") -> screenViolation(declarationKind, declarationName, annotations)
             else -> detailViolation(declarationName)
         }
+    }
+
+    private fun isAiStudioAdapterContract(
+        packageName: String,
+        declarationName: String,
+        declarationKind: DeclarationKind,
+    ): Boolean = when (packageName) {
+        "io.github.aequicor.heartbeat.features.aistudio.presentation.contract" ->
+            declarationName in aiStudioAdapterContracts
+        "io.github.aequicor.heartbeat.features.aistudio.component" ->
+            declarationName == "ProjectsSessionsComponent" && declarationKind == DeclarationKind.INTERFACE
+        else -> false
     }
 
     /**

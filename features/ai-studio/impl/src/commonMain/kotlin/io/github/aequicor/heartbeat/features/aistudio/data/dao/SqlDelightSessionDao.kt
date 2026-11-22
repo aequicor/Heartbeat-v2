@@ -1,25 +1,31 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
+import app.cash.sqldelight.SuspendingTransacterImpl
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
-import io.github.aequicor.heartbeat.features.aistudio.data.model.StudioSessionDto
+import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioSessionQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Studio_session
 import kotlin.uuid.Uuid
 
-internal class SqlDelightStudioSessionDao(
+internal class SqlDelightSessionDao(
     private val connection: DatabaseConnection,
-) : StudioSessionDao {
+) : SessionDao {
     private val queries get() = StudioSessionQueries(connection.driver)
 
-    override suspend fun start(
+    override suspend fun <T> transaction(block: suspend () -> T): T = accessStudioDatabase("Save studio session") {
+        val transacter = object : SuspendingTransacterImpl(connection.driver) {}
+        transacter.transactionWithResult { block() }
+    }
+
+    override suspend fun insert(
         projectId: String,
         title: String,
         sentAt: DatabaseTimestamp,
         parentSessionId: String?,
-    ): StudioSessionDto = accessStudioDatabase("Start studio session") {
+    ): SessionDto = accessStudioDatabase("Insert studio session") {
         val id = Uuid.random().toString()
         val sessionQueries = queries
         sessionQueries.transactionWithResult {
@@ -43,20 +49,20 @@ internal class SqlDelightStudioSessionDao(
         }
     }
 
-    override suspend fun findById(id: String): StudioSessionDto? =
-        accessStudioDatabase("Find studio session") {
+    override suspend fun selectById(id: String): SessionDto? =
+        accessStudioDatabase("Select studio session by ID") {
             queries.selectSessionById(id).executeAsOneOrNull()?.toSessionDto()
         }
 
-    override suspend fun listRoots(
+    override suspend fun selectRoots(
         projectId: String,
         status: String,
         limit: Int,
         after: DaoPageCursor?,
-    ): DaoPage<StudioSessionDto> {
+    ): DaoPage<SessionDto> {
         require(limit > 0)
-        return accessStudioDatabase("List root studio sessions") {
-            val rows = queries.listRootSessions(
+        return accessStudioDatabase("Select root studio sessions") {
+            val rows = queries.selectRootSessions(
                 projectId,
                 status,
                 after?.id,
@@ -64,19 +70,19 @@ internal class SqlDelightStudioSessionDao(
                 after?.updatedAt?.nanoseconds ?: 0L,
                 limit.toLong() + 1,
             ).executeAsList().map(Studio_session::toSessionDto)
-            studioPage(rows, limit, StudioSessionDto::toCursor)
+            studioPage(rows, limit, SessionDto::toCursor)
         }
     }
 
-    override suspend fun listChildren(
+    override suspend fun selectChildren(
         parentSessionId: String,
         status: String,
         limit: Int,
         after: DaoPageCursor?,
-    ): DaoPage<StudioSessionDto> {
+    ): DaoPage<SessionDto> {
         require(limit > 0)
-        return accessStudioDatabase("List child studio sessions") {
-            val rows = queries.listChildSessions(
+        return accessStudioDatabase("Select child studio sessions") {
+            val rows = queries.selectChildSessions(
                 parentSessionId,
                 status,
                 after?.id,
@@ -84,35 +90,39 @@ internal class SqlDelightStudioSessionDao(
                 after?.updatedAt?.nanoseconds ?: 0L,
                 limit.toLong() + 1,
             ).executeAsList().map(Studio_session::toSessionDto)
-            studioPage(rows, limit, StudioSessionDto::toCursor)
+            studioPage(rows, limit, SessionDto::toCursor)
         }
     }
 
-    override suspend fun rename(id: String, title: String) {
-        accessStudioDatabase("Rename studio session") { queries.renameSession(title, id) }
+    override suspend fun updateTitle(id: String, title: String) {
+        accessStudioDatabase("Update studio session title") { queries.updateSessionTitle(title, id) }
     }
 
-    override suspend fun setExpanded(id: String, isExpanded: Boolean) {
-        accessStudioDatabase("Set session expansion") {
-            queries.setStudioSessionExpanded(if (isExpanded) 1L else 0L, id)
+    override suspend fun updateExpanded(id: String, isExpanded: Boolean) {
+        accessStudioDatabase("Update session expansion") {
+            queries.updateSessionExpanded(if (isExpanded) 1L else 0L, id)
         }
     }
 
-    override suspend fun setStatus(id: String, status: String, changedAt: DatabaseTimestamp) {
-        accessStudioDatabase("Set studio session status") {
-            queries.setSessionStatus(status, changedAt.epochSeconds, changedAt.nanoseconds, id)
+    override suspend fun updateStatus(id: String, status: String, changedAt: DatabaseTimestamp) {
+        accessStudioDatabase("Update studio session status") {
+            queries.updateSessionStatus(status, changedAt.epochSeconds, changedAt.nanoseconds, id)
         }
     }
 
-    /** Records a sent message or completed agent run on the current transaction, when present. */
-    fun recordActivity(id: String, at: DatabaseTimestamp) {
-        accessStudioDatabase("Record studio session activity") {
-            queries.recordSessionActivity(at.epochSeconds, at.nanoseconds, id)
+    override suspend fun delete(id: String) {
+        accessStudioDatabase("Delete studio session tree") { queries.deleteSessionTree(id) }
+    }
+
+    /** Updates the session's activity timestamp if newer, joining the current transaction when present. */
+    fun updateActivity(id: String, at: DatabaseTimestamp) {
+        accessStudioDatabase("Update studio session activity") {
+            queries.updateSessionActivity(at.epochSeconds, at.nanoseconds, id)
         }
     }
 }
 
-private fun Studio_session.toSessionDto() = StudioSessionDto(
+private fun Studio_session.toSessionDto() = SessionDto(
     id,
     project_id,
     title,
@@ -121,6 +131,7 @@ private fun Studio_session.toSessionDto() = StudioSessionDto(
     DatabaseTimestamp(updated_at_seconds, updated_at_nanos),
     parent_session_id,
     isExpanded = is_expanded == 1L,
+    workState = work_state,
 )
 
-private fun StudioSessionDto.toCursor() = DaoPageCursor(updatedAt, id)
+private fun SessionDto.toCursor() = DaoPageCursor(updatedAt, id)

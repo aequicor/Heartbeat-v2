@@ -7,20 +7,33 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import dev.zacsweers.metro.createGraphFactory
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SqlDelightProjectDao
-import io.github.aequicor.heartbeat.features.aistudio.data.dao.SqlDelightStudioSessionDao
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.SqlDelightSessionDao
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.DefaultProjectDataSource
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.DefaultSessionsDataSource
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.SqlDelightProjectsSessionsSearchDataSource
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.toDatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.ProjectNameAlreadyExistsException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.db.HeartbeatDatabase
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
-import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectInteractor
-import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.StudioSessionInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractorImpl
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootstrapResult
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.StudioSessionId
-import io.github.aequicor.heartbeat.features.aistudio.domain.repository.ProjectRepository
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
+import io.github.aequicor.heartbeat.features.aistudio.presentation.DefaultAiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.TestPreferences
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DeletionError
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import okio.Path.Companion.toPath
 import kotlin.coroutines.cancellation.CancellationException
@@ -38,35 +51,209 @@ import kotlin.uuid.Uuid
 class StudioRepositoryIntegrationTest {
 
     @Test
+    fun bootstrapPersistsTheDirectoryAndRejectsADuplicateName() = runTest {
+        driver().use { driver ->
+            val connection = connection(driver)
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
+            val path = "/work/first-directory".toPath()
+            val created = assertIs<ProjectCreationResult.Created>(graph.sessionBootstrap.registerProject("Alpha", path))
+
+            val project = created.project
+            assertEquals("Alpha", project.immutableName)
+            assertEquals(path, project.workingDirectory)
+            assertEquals(listOf(), graph.catalog.listRootSessions(project.id, SessionStatus.ACTIVE).items)
+
+            val duplicate = graph.sessionBootstrap.createProject("/other/Alpha".toPath())
+            assertEquals(ProjectCreationResult.NameAlreadyExists("Alpha"), duplicate)
+            assertEquals(
+                listOf(project, Project.WithoutDirectory(isExpanded = true)),
+                graph.catalog.listProjects(ProjectStatus.ACTIVE, 2).items,
+            )
+            assertEquals(
+                ProjectsSessionsChange.ProjectAdded(created.project.id),
+                graph.observeProjectsSessions().replayCache.single(),
+            )
+
+            val next = assertIs<SessionBootstrapResult.Created>(
+                graph.sessionBootstrap.startInProject(project.id, "Continue"),
+            )
+            assertEquals(project, next.project)
+            assertEquals(project.id, next.session.projectId)
+            assertNull(
+                HeartbeatDatabase(driver).studioWorkspaceQueries
+                    .selectWorkspacePayload(next.session.id.value.toString()).executeAsOneOrNull()?.workspace_payload,
+            )
+            assertEquals(
+                listOf(project, Project.WithoutDirectory(isExpanded = true)),
+                graph.catalog.listProjects(ProjectStatus.ACTIVE, 2).items,
+            )
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun deleteSessionActionRemovesOnlyTheSelectedSubtree() = runTest {
+        driver().use { driver ->
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
+            val store = DefaultAiStudioStore(TestPreferences(), backgroundScope, graph.catalog)
+            val project = assertIs<ProjectCreationResult.Created>(
+                graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
+            ).project
+            val root = graph.sessionBootstrap.createSession(project.id, "Root", Start)
+            val child = graph.sessionBootstrap.createSession(project.id, "Child", Later, root.id)
+            val grandchild = graph.sessionBootstrap.createSession(project.id, "Grandchild", Latest, child.id)
+            val sibling = graph.sessionBootstrap.createSession(project.id, "Sibling", Latest, root.id)
+
+            store.dispatch(AiStudioAction.DeleteSession(child.id.value.toString()))
+            store.dispatch(AiStudioAction.DeleteSession(child.id.value.toString()))
+            runCurrent()
+
+            assertNull(store.screenState.value.deletionError)
+            assertNull(graph.catalog.findSession(child.id))
+            assertNull(graph.catalog.findSession(grandchild.id))
+            assertEquals(root, graph.catalog.findSession(root.id))
+            assertEquals(listOf(sibling), graph.catalog.listChildSessions(root.id, SessionStatus.ACTIVE, 2).items)
+            assertEquals(project, graph.projectDataSource.findById(project.id))
+        }
+    }
+
+    @Test
+    fun bootstrapStartsSessionsInTheRegisteredSystemProject() = runTest {
+        driver().use { driver ->
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
+            val project = assertIs<Project.WithoutDirectory>(
+                graph.catalog.listProjects(ProjectStatus.ACTIVE).items.single(),
+            )
+            assertEquals(Project.WithoutDirectory(isExpanded = true), project)
+            assertEquals(project, graph.projectDataSource.findById(ProjectId.Ungrouped))
+            assertEquals(ProjectId.Ungrouped, project.id)
+            assertEquals("Без проекта", project.title)
+            val first = assertIs<SessionBootstrapResult.Created>(
+                graph.sessionBootstrap.startInProject(project.id, "First"),
+            )
+            assertFailsWith<IllegalArgumentException> { graph.catalog.deleteProject(project) }
+            assertFailsWith<IllegalArgumentException> { graph.catalog.renameProject(project, "Renamed") }
+            assertFailsWith<IllegalArgumentException> { graph.catalog.setProjectArchived(project, isArchived = true) }
+            val second = assertIs<SessionBootstrapResult.Created>(
+                graph.sessionBootstrap.startInProject(project.id, "Second"),
+            )
+            assertEquals(project.id, graph.catalog.findSession(first.session.id)?.projectId)
+            assertEquals(project.id, graph.catalog.findSession(second.session.id)?.projectId)
+            graph.catalog.setProjectExpanded(project, false)
+            val collapsed = project.copy(isExpanded = false)
+            assertEquals(collapsed, graph.projectDataSource.findById(project.id))
+            assertEquals(listOf(collapsed), graph.catalog.listProjects(ProjectStatus.ACTIVE).items)
+            assertEquals(
+                ProjectsSessionsChange.SessionAdded(second.session, second.project),
+                graph.observeProjectsSessions().replayCache.single(),
+            )
+        }
+    }
+
+    @Test
+    fun sessionFailureKeepsThePreviouslyRegisteredProject() = runTest {
+        driver().use { driver ->
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
+            val project = assertIs<ProjectCreationResult.Created>(
+                graph.sessionBootstrap.createProject("/work/Alpha".toPath()),
+            ).project
+            driver.execute(
+                null,
+                """
+                CREATE TRIGGER reject_session BEFORE INSERT ON studio_session
+                BEGIN SELECT RAISE(ABORT, 'test rejection'); END
+                """.trimIndent(),
+                0,
+            )
+            assertFailsWith<StudioRepositoryException> {
+                graph.sessionBootstrap.startInProject(project.id, "Start")
+            }
+            assertEquals(project, graph.projectDataSource.findById(project.id))
+            assertEquals(
+                ProjectsSessionsChange.ProjectAdded(project.id),
+                graph.observeProjectsSessions().replayCache.single(),
+            )
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun deleteProjectActionRollsBackSessionsWhenProjectDeletionFails() = runTest {
+        driver().use { driver ->
+            driver.execute(null, "PRAGMA foreign_keys = ON", 0)
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
+            val store = DefaultAiStudioStore(TestPreferences(), backgroundScope, graph.catalog)
+            val alpha = assertIs<ProjectCreationResult.Created>(
+                graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
+            ).project
+            val beta = assertIs<ProjectCreationResult.Created>(
+                graph.catalog.createProject("/beta".toPath(), name = "Beta"),
+            ).project
+            val root = graph.sessionBootstrap.createSession(alpha.id, "Root", Start)
+            val child = graph.sessionBootstrap.createSession(alpha.id, "Child", Later, root.id)
+            graph.catalog.setSessionArchived(child, isArchived = true, changedAt = Latest)
+            val unrelated = graph.sessionBootstrap.createSession(beta.id, "Unrelated", Start)
+            driver.execute(
+                null,
+                """
+                CREATE TRIGGER reject_project_delete BEFORE DELETE ON studio_project
+                BEGIN SELECT RAISE(ABORT, 'test rejection'); END
+                """.trimIndent(),
+                0,
+            )
+
+            val delete = AiStudioAction.DeleteProject(alpha.id.value.toString())
+            store.dispatch(delete)
+            runCurrent()
+            assertEquals(DeletionError.Project, store.screenState.value.deletionError)
+            assertEquals(alpha, graph.projectDataSource.findById(alpha.id))
+            assertEquals(root, graph.catalog.findSession(root.id))
+            assertEquals(SessionStatus.ARCHIVED, graph.catalog.findSession(child.id)?.status)
+
+            driver.execute(null, "DROP TRIGGER reject_project_delete", 0)
+            store.dispatch(delete)
+            runCurrent()
+            assertNull(store.screenState.value.deletionError)
+            assertNull(graph.projectDataSource.findById(alpha.id))
+            assertNull(graph.catalog.findSession(root.id))
+            assertNull(graph.catalog.findSession(child.id))
+            assertEquals(beta, graph.projectDataSource.findById(beta.id))
+            assertEquals(unrelated, graph.catalog.findSession(unrelated.id))
+        }
+    }
+
+    @Test
     fun changingExpansionOnlyUpdatesTheAddressedNode() = runTest {
         driver().use { driver ->
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
             val project = assertIs<ProjectCreationResult.Created>(
-                graph.projects.create("Alpha", "/alpha".toPath()),
+                graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
-            val root = graph.sessions.start(project.id, "Root", Start)
-            val child = graph.sessions.start(project.id, "Child", Later, root.id)
-            val sibling = graph.sessions.start(project.id, "Sibling", Latest)
+            val root = graph.sessionBootstrap.createSession(project.id, "Root", Start)
+            val child = graph.sessionBootstrap.createSession(project.id, "Child", Later, root.id)
+            val sibling = graph.sessionBootstrap.createSession(project.id, "Sibling", Latest)
             assertEquals(true, project.isExpanded)
             assertEquals(true, root.isExpanded)
             assertEquals(true, child.isExpanded)
 
-            graph.sessions.setExpanded(child.id, false)
-            graph.projects.setExpanded(project.id, false)
-            graph.sessions.setExpanded(root.id, false)
-            assertEquals(project.copy(isExpanded = false), graph.projects.list(ProjectStatus.ACTIVE, 1).items.single())
-            assertEquals(root.copy(isExpanded = false), graph.sessions.findById(root.id))
+            graph.catalog.setSessionExpanded(child, false)
+            graph.catalog.setProjectExpanded(project, false)
+            graph.catalog.setSessionExpanded(root, false)
+            val collapsed = project.copy(isExpanded = false)
+            assertEquals(collapsed, graph.projectDataSource.findById(project.id))
+            assertEquals(collapsed, graph.catalog.listProjects(ProjectStatus.ACTIVE, 1).items.single())
+            assertEquals(root.copy(isExpanded = false), graph.catalog.findSession(root.id))
             assertEquals(
                 listOf(sibling, root.copy(isExpanded = false)),
-                graph.sessions.listRoots(project.id, SessionStatus.ACTIVE, 2).items,
+                graph.catalog.listRootSessions(project.id, SessionStatus.ACTIVE, 2).items,
             )
             assertEquals(
                 listOf(child.copy(isExpanded = false)),
-                graph.sessions.listChildren(root.id, SessionStatus.ACTIVE, 1).items,
+                graph.catalog.listChildSessions(root.id, SessionStatus.ACTIVE, 1).items,
             )
-            graph.projects.setExpanded(project.id, true)
-            assertEquals(project, graph.projects.findById(project.id))
-            assertEquals(root.copy(isExpanded = false), graph.sessions.findById(root.id))
+            graph.catalog.setProjectExpanded(project, true)
+            assertEquals(project, graph.catalog.listProjects(ProjectStatus.ACTIVE, 1).items.single())
+            assertEquals(root.copy(isExpanded = false), graph.catalog.findSession(root.id))
         }
     }
 
@@ -77,11 +264,17 @@ class StudioRepositoryIntegrationTest {
             val clock = object : Clock {
                 override fun now() = time
             }
-            val dao = SqlDelightProjectDao(connection(driver), clock)
-            val projects = ProjectInteractor(DefaultProjectRepository(dao))
-            val alpha = assertIs<ProjectCreationResult.Created>(projects.create("Alpha", "/alpha".toPath())).project
-            val beta = assertIs<ProjectCreationResult.Created>(projects.create("Beta", "/beta".toPath())).project
-            val row = assertNotNull(dao.findById(alpha.id.value.toString()))
+            val connection = connection(driver)
+            val dao = SqlDelightProjectDao(connection, clock)
+            val projects = DefaultProjectDataSource(dao)
+            val catalog = ProjectsSessionsInteractorImpl(
+                projects,
+                DefaultSessionsDataSource(SqlDelightSessionDao(connection)),
+                SqlDelightProjectsSessionsSearchDataSource(connection),
+            )
+            val alpha = catalog.registerProjectFixture("/alpha", "Alpha")
+            val beta = catalog.registerProjectFixture("/beta", "Beta")
+            val row = assertNotNull(dao.selectById(alpha.id.value.toString()))
             assertEquals(alpha.id.value.toString(), row.id)
             assertEquals("ACTIVE", row.status)
             assertEquals(DatabaseTimestamp(Start.epochSeconds, Start.nanosecondsOfSecond.toLong()), row.createdAt)
@@ -94,30 +287,37 @@ class StudioRepositoryIntegrationTest {
             assertNull(projects.findById(ProjectId(Uuid.random())))
 
             val expected = listOf(alpha, beta).sortedBy { it.id.value.toString() }
-            val first = projects.list(ProjectStatus.ACTIVE, 1)
-            val second = projects.list(ProjectStatus.ACTIVE, 1, assertNotNull(first.nextCursor))
+            val first = catalog.listProjects(ProjectStatus.ACTIVE, 1)
+            val second = catalog.listProjects(ProjectStatus.ACTIVE, 1, assertNotNull(first.nextCursor))
             assertEquals(expected, first.items + second.items)
-            assertNull(second.nextCursor)
+            val third = catalog.listProjects(ProjectStatus.ACTIVE, 1, assertNotNull(second.nextCursor))
+            assertEquals(Project.WithoutDirectory(isExpanded = true), third.items.single())
+            assertNull(third.nextCursor)
 
             time = Later
-            projects.renameTitle(alpha.id, beta.title)
-            val renamed = assertNotNull(projects.findById(alpha.id))
+            catalog.renameProject(alpha, beta.title)
+            val renamed = assertIs<Project.WithDirectory>(projects.findById(alpha.id))
             assertEquals(alpha.copy(title = beta.title, updatedAt = Later), renamed)
-            assertEquals(listOf(renamed, beta), projects.list(ProjectStatus.ACTIVE, 2).items)
+            assertEquals(listOf(renamed, beta), catalog.listProjects(ProjectStatus.ACTIVE, 2).items)
 
             time = Latest
-            projects.setStatus(alpha.id, ProjectStatus.ARCHIVED)
+            catalog.setProjectArchived(alpha, isArchived = true)
             assertEquals(
                 listOf(renamed.copy(status = ProjectStatus.ARCHIVED, updatedAt = Latest)),
-                projects.list(ProjectStatus.ARCHIVED, 2).items,
+                catalog.listProjects(ProjectStatus.ARCHIVED, 2).items,
             )
-            val conflict = assertFailsWith<ProjectNameAlreadyExistsException> { dao.create("Alpha", "/elsewhere") }
+            val conflict = assertFailsWith<ProjectNameAlreadyExistsException> { dao.insert("Alpha", "/elsewhere") }
             assertEquals("Alpha", conflict.immutableName)
             assertEquals(
                 ProjectCreationResult.NameAlreadyExists("Alpha"),
-                projects.create("Alpha", "/elsewhere".toPath()),
+                catalog.createProject("/elsewhere".toPath(), name = "Alpha"),
             )
-            assertEquals(listOf(beta), projects.list(ProjectStatus.ACTIVE, 2).items)
+            assertEquals(
+                listOf(beta.id, ProjectId.Ungrouped),
+                catalog.listProjects(ProjectStatus.ACTIVE, 2).items.map { it.id },
+            )
+            catalog.setProjectArchived(alpha, isArchived = false)
+            assertEquals(ProjectStatus.ACTIVE, projects.findById(alpha.id)?.status)
         }
     }
 
@@ -125,20 +325,23 @@ class StudioRepositoryIntegrationTest {
     fun sessionsPageByProjectParentStatusAndExactActivity() = runTest {
         driver().use { driver ->
             val connection = connection(driver)
-            val projects = ProjectInteractor(DefaultProjectRepository(SqlDelightProjectDao(connection)))
-            val alpha = assertIs<ProjectCreationResult.Created>(projects.create("Alpha", "/alpha".toPath())).project
-            val beta = assertIs<ProjectCreationResult.Created>(projects.create("Beta", "/beta".toPath())).project
-            val dao = SqlDelightStudioSessionDao(connection)
-            val sessions = StudioSessionInteractor(DefaultStudioSessionRepository(dao))
-            val root = sessions.start(alpha.id, "Title provided by caller", Start)
-            val sibling = sessions.start(alpha.id, "Sibling", Start)
-            val child = sessions.start(alpha.id, "Child", Later, root.id)
-            val anotherChild = sessions.start(alpha.id, "Second child", Later, root.id)
-            val grandchild = sessions.start(alpha.id, "Grandchild", Start, child.id)
-            sessions.start(beta.id, "Other project", Later)
-            assertFailsWith<StudioRepositoryException> { sessions.start(beta.id, "Wrong project", Start, root.id) }
+            val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
+            val catalog = graph.catalog
+            val bootstrap = graph.sessionBootstrap
+            val dao = SqlDelightSessionDao(connection)
+            val alpha = catalog.registerProjectFixture("/alpha", "Alpha")
+            val beta = catalog.registerProjectFixture("/beta", "Beta")
+            val root = bootstrap.createSession(alpha.id, "Title provided by caller", Start)
+            val sibling = bootstrap.createSession(alpha.id, "Sibling", Start)
+            val child = bootstrap.createSession(alpha.id, "Child", Later, root.id)
+            val anotherChild = bootstrap.createSession(alpha.id, "Second child", Later, root.id)
+            val grandchild = bootstrap.createSession(alpha.id, "Grandchild", Start, child.id)
+            bootstrap.createSession(beta.id, "Other project", Later)
             assertFailsWith<StudioRepositoryException> {
-                sessions.start(alpha.id, "Missing parent", Start, StudioSessionId(Uuid.random()))
+                bootstrap.createSession(beta.id, "Wrong project", Start, root.id)
+            }
+            assertFailsWith<StudioRepositoryException> {
+                bootstrap.createSession(alpha.id, "Missing parent", Start, SessionId(Uuid.random()))
             }
             assertEquals("Title provided by caller", root.title)
             assertEquals(Start, root.createdAt)
@@ -147,12 +350,12 @@ class StudioRepositoryIntegrationTest {
             assertEquals(root.id, child.parentSessionId)
             assertEquals(alpha.id, child.projectId)
 
-            val roots = sessions.listRoots(alpha.id, SessionStatus.ACTIVE, 1)
-            val moreRoots = sessions.listRoots(alpha.id, SessionStatus.ACTIVE, 1, assertNotNull(roots.nextCursor))
+            val roots = catalog.listRootSessions(alpha.id, SessionStatus.ACTIVE, 1)
+            val moreRoots = catalog.listRootSessions(alpha.id, SessionStatus.ACTIVE, 1, assertNotNull(roots.nextCursor))
             assertEquals(listOf(root, sibling).sortedBy { it.id.value.toString() }, roots.items + moreRoots.items)
             assertNull(moreRoots.nextCursor)
-            val children = sessions.listChildren(root.id, SessionStatus.ACTIVE, 1)
-            val moreChildren = sessions.listChildren(
+            val children = catalog.listChildSessions(root.id, SessionStatus.ACTIVE, 1)
+            val moreChildren = catalog.listChildSessions(
                 root.id,
                 SessionStatus.ACTIVE,
                 1,
@@ -163,55 +366,56 @@ class StudioRepositoryIntegrationTest {
                 children.items + moreChildren.items,
             )
             assertNull(moreChildren.nextCursor)
-            assertEquals(listOf(grandchild), sessions.listChildren(child.id, SessionStatus.ACTIVE, 10).items)
+            assertEquals(listOf(grandchild), catalog.listChildSessions(child.id, SessionStatus.ACTIVE, 10).items)
 
             val siblingId = sibling.id.value.toString()
-            dao.recordActivity(siblingId, Later.toDatabaseTimestamp())
-            dao.recordActivity(siblingId, Start.toDatabaseTimestamp())
-            sessions.rename(sibling.id, "Renamed")
-            sessions.setStatus(sibling.id, SessionStatus.ACTIVE, Latest)
-            assertEquals(sibling.copy(title = "Renamed", updatedAt = Later), sessions.findById(sibling.id))
-            val newest = sessions.listRoots(alpha.id, SessionStatus.ACTIVE, 1)
+            dao.updateActivity(siblingId, Later.toDatabaseTimestamp())
+            dao.updateActivity(siblingId, Start.toDatabaseTimestamp())
+            catalog.renameSession(sibling, "Renamed")
+            catalog.setSessionArchived(sibling, isArchived = false, changedAt = Latest)
+            assertEquals(sibling.copy(title = "Renamed", updatedAt = Later), catalog.findSession(sibling.id))
+            val newest = catalog.listRootSessions(alpha.id, SessionStatus.ACTIVE, 1)
             assertEquals(sibling.id, newest.items.single().id)
-            val older = sessions.listRoots(alpha.id, SessionStatus.ACTIVE, 1, assertNotNull(newest.nextCursor))
+            val older = catalog.listRootSessions(alpha.id, SessionStatus.ACTIVE, 1, assertNotNull(newest.nextCursor))
             assertEquals(root, older.items.single())
-            sessions.setStatus(sibling.id, SessionStatus.ARCHIVED, Start)
-            assertEquals(Later, sessions.listRoots(alpha.id, SessionStatus.ARCHIVED, 1).items.single().updatedAt)
-            sessions.setStatus(sibling.id, SessionStatus.ACTIVE, Latest)
-            assertEquals(Latest, sessions.findById(sibling.id)?.updatedAt)
+            catalog.setSessionArchived(sibling, isArchived = true, changedAt = Start)
+            assertEquals(Later, catalog.listRootSessions(alpha.id, SessionStatus.ARCHIVED, 1).items.single().updatedAt)
+            catalog.setSessionArchived(sibling, isArchived = false, changedAt = Latest)
+            assertEquals(Latest, catalog.findSession(sibling.id)?.updatedAt)
         }
     }
 
     @Test
-    fun injectedInteractorStartsSessionInsideTheCallersTransaction() = runTest {
+    fun bootstrapCreatesSessionInsideTheCallersTransaction() = runTest {
         driver().use { driver ->
             val connection = connection(driver)
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
             val project = assertIs<ProjectCreationResult.Created>(
-                graph.projects.create("Alpha", "/alpha".toPath()),
+                graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
-            val sessions = graph.sessions
+            val catalog = graph.catalog
+            val bootstrap = graph.sessionBootstrap
             val transaction = object : SuspendingTransacterImpl(driver) {}
             driver.execute(null, "CREATE TABLE test_first_message (session_id TEXT NOT NULL)", 0)
-            var rolledBack: StudioSessionId? = null
+            var rolledBack: SessionId? = null
 
             assertFailsWith<IllegalStateException> {
                 transaction.transaction {
-                    val session = sessions.start(project.id, "First", Start)
+                    val session = bootstrap.createSession(project.id, "First", Start)
                     rolledBack = session.id
                     writeFirstMessage(driver, session.id)
                     error("Failure after writing the first message")
                 }
             }
-            assertNull(sessions.findById(assertNotNull(rolledBack)))
+            assertNull(catalog.findSession(assertNotNull(rolledBack)))
             assertEquals(0L, messageCount(driver))
 
             val committed = transaction.transactionWithResult {
-                val session = sessions.start(project.id, "First", Start)
+                val session = bootstrap.createSession(project.id, "First", Start)
                 writeFirstMessage(driver, session.id)
                 session
             }
-            assertEquals(committed, sessions.findById(committed.id))
+            assertEquals(committed, catalog.findSession(committed.id))
             assertEquals(1L, messageCount(driver))
         }
     }
@@ -220,8 +424,8 @@ class StudioRepositoryIntegrationTest {
     fun wrapsStorageFailuresAndPropagatesCancellation() = runTest {
         val failure = IllegalStateException("Database unavailable")
         val project = SqlDelightProjectDao(unavailable(failure))
-        assertSame(failure, assertFailsWith<DaoException> { project.findById(Uuid.random().toString()) }.cause)
-        val repository: ProjectRepository = DefaultProjectRepository(project)
+        assertSame(failure, assertFailsWith<DaoException> { project.selectById(Uuid.random().toString()) }.cause)
+        val repository: ProjectDataSource = DefaultProjectDataSource(project)
         assertSame(
             failure,
             assertFailsWith<StudioRepositoryException> {
@@ -229,11 +433,11 @@ class StudioRepositoryIntegrationTest {
             }.cause,
         )
         val cancelled = CancellationException("Cancelled")
-        val sessions = SqlDelightStudioSessionDao(unavailable(cancelled))
+        val sessions = SqlDelightSessionDao(unavailable(cancelled))
         assertSame(
             cancelled,
             assertFailsWith<CancellationException> {
-                sessions.findById(Uuid.random().toString())
+                sessions.selectById(Uuid.random().toString())
             },
         )
     }
@@ -241,6 +445,9 @@ class StudioRepositoryIntegrationTest {
     private fun driver() = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY).also {
         HeartbeatDatabase.Schema.create(it)
     }
+
+    private suspend fun ProjectsSessionsInteractor.registerProjectFixture(path: String, name: String) =
+        assertIs<ProjectCreationResult.Created>(createProject(path.toPath(), name = name)).project
 
     private fun connection(driver: SqlDriver) = object : DatabaseConnection {
         override val driver = driver
@@ -250,7 +457,7 @@ class StudioRepositoryIntegrationTest {
         override val driver: SqlDriver get() = throw failure
     }
 
-    private fun writeFirstMessage(driver: SqlDriver, session: StudioSessionId) {
+    private fun writeFirstMessage(driver: SqlDriver, session: SessionId) {
         driver.execute(null, "INSERT INTO test_first_message VALUES (?)", 1) {
             bindString(0, session.value.toString())
         }

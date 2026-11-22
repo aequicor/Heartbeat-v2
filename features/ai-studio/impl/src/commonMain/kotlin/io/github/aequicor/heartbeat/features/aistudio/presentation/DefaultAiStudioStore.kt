@@ -3,89 +3,163 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation
 
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootstrapResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Activity
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileGroup
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
-import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraMock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.AuroraTurn
-import io.github.aequicor.heartbeat.features.aistudio.presentation.mock.withMockNavigation
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projectssessions.ProjectsSessionsStoreImpl
+import io.github.aequicor.heartbeat.features.aistudio.presentation.projectssessions.findCatalogProject
+import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
+import io.github.aequicor.heartbeat.features.aistudio.presentation.sessionbootstrap.applyBootstrapProjectAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraWorkspace
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.MorePrefix
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.AuroraNavigation.ProjectPrefix
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.filterFiles
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.navigation
-import io.github.aequicor.heartbeat.features.aistudio.presentation.state.prepareFileGroups
-import io.github.aequicor.heartbeat.features.aistudio.presentation.rich.ReplyRenderStream
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.StudioWorkspaceStorage
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.toNavigationStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.WorkspaceFiles
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.WorkspaceSnapshots
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.collapseWork
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.deletedChatIds
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.renameProject
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.subagents
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.withProjectsSessions
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.withReadResult
+import io.github.aequicor.heartbeat.features.aistudio.presentation.state.withoutChats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction.Panel as PanelAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction.Project as ProjectAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction.Session as SessionAction
 
 /** Workspace commands and mock events are serialized on the component's background scope. */
 internal class DefaultAiStudioStore(
-    private val preferences: PreferencesStore,
+    preferences: PreferencesStore,
     private val scope: CoroutineScope,
+    private val catalog: ProjectsSessionsInteractor? = null,
+    private val persistence: StudioWorkspaceStorage? = null,
+    private val catalogChanges: SharedFlow<ProjectsSessionsChange>? = null,
+    private val sessionBootstrap: SessionBootstrapInteractor? = null,
 ) : AiStudioStore {
-    private val commands = Channel<() -> Unit>(Channel.UNLIMITED)
+
+    override val projectsSessionsStore: ProjectsSessionsStore? = catalog?.let {
+        ProjectsSessionsStoreImpl(it, catalogChanges ?: emptyFlow(), scope)
+    }
+
+    private val commands = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     private val saveRequests = Channel<Unit>(Channel.CONFLATED)
-    private val snapshots = Channel<AuroraWorkspace>(Channel.CONFLATED)
+    private val snapshots = WorkspaceSnapshots(preferences, persistence, useMockWorkspace = catalog == null)
     private val screen = MutableStateFlow(AiStudioScreenState(fileChoices = AuroraMock.inputs))
     private val editor = MutableStateFlow(Draft())
     private val stream = MutableStateFlow(LiveText())
     private var renderOwner: AuroraTurn? = null
     private val renderer = ReplyRenderStream(
-        schedule = { milliseconds, action -> scope.launch { delay(milliseconds); enqueue(action) } },
+        schedule = { milliseconds, action -> scope.launch { delay(milliseconds); enqueue { action() } } },
         publish = { stream.value = it },
     )
     private val fixture = mutableMapOf<String, List<Message>>()
     private val turns = mutableMapOf<String, AuroraTurn>()
     private lateinit var workspace: AuroraWorkspace
     private val selected get() = chat(workspace.selectedId)
-    private var allFiles = listOf<File>()
-    private var allFileGroups = listOf<FileGroup>()
+    private val workspaceFiles = WorkspaceFiles()
 
     override val screenState = screen.asStateFlow()
     override val draft = editor.asStateFlow()
     override val liveText = stream.asStateFlow()
 
+    private fun reportStorageError() {
+        screen.update { it.copy(storageError = SaveError) }
+    }
+
     init {
+        if (catalogChanges != null) {
+            val previousChange = catalogChanges.replayCache.lastOrNull()
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                catalogChanges.filterIsInstance<ProjectsSessionsChange.SessionAdded>().collect { change ->
+                    if (change != previousChange) enqueue {
+                        addStoredSession(change.session, change.project, payloadLoaded = false)
+                        screen.update(::withProjectsSessions)
+                    }
+                }
+            }
+        }
         scope.launch {
             workspace = restore()
-            if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
-                val fallback = workspace.activeChats().firstOrNull()?.id ?: workspace.chats.first().summary.id
-                workspace = workspace.copy(selectedId = fallback)
+            val restored = workspace
+            launch {
+                snapshots.write(
+                    restored,
+                    onSaved = {
+                        screen.update { if (it.storageError == SaveError) it.copy(storageError = null) else it }
+                    },
+                    onFailure = ::reportStorageError,
+                )
             }
-            openChat(workspace.selectedId)
-            for (command in commands) command()
+            if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
+                val fallback = workspace.activeChats().firstOrNull()?.id ?: workspace.chats.firstOrNull()?.summary?.id
+                if (fallback != null) workspace = workspace.copy(selectedId = fallback)
+            }
+            if (catalog != null || workspace.chats.isEmpty()) {
+                screen.update { withProjectsSessions(it.copy(loading = false)) }
+            } else {
+                openChat(workspace.selectedId, acknowledgeResult = false)
+            }
+            launch {
+                projectsSessionsStore?.state?.collect { state ->
+                    enqueue {
+                        if (state.storageError && screen.value.storageError != RestoreError) reportStorageError()
+                        screen.update(::withProjectsSessions)
+                    }
+                }
+            }
+            for (command in commands) {
+                try {
+                    command()
+                } catch (_: StudioRepositoryException) {
+                    reportStorageError()
+                }
+            }
         }
         scope.launch {
             while (saveRequests.receiveCatching().isSuccess) {
                 delay(SaveInterval)
                 enqueue(::save)
             }
-        }
-        scope.launch {
-            for (snapshot in snapshots) persist(snapshot)
         }
     }
 
@@ -104,24 +178,33 @@ internal class DefaultAiStudioStore(
         }
     }
 
-    private fun enqueue(command: () -> Unit) {
+    private fun enqueue(command: suspend () -> Unit) {
         commands.trySend(command)
     }
 
     @Suppress("CyclomaticComplexMethod")
-    private fun handle(action: AiStudioAction) {
+    private suspend fun handle(action: AiStudioAction) {
         when (action) {
             is AiStudioAction.EditDraft, AiStudioAction.Send -> Unit
             is AiStudioAction.ReadAt -> readAt(action)
             is AiStudioAction.OpenChat -> openChat(action.id)
-            is AiStudioAction.ArchiveChat -> archiveChat(action.id)
+            is AiStudioAction.ArchiveChat -> updateProjectsSessions(SessionAction.Archive(action.id))
+            is AiStudioAction.RenameSession -> updateProjectsSessions(SessionAction.Rename(action.id, action.title))
+            is AiStudioAction.DeleteSession -> updateProjectsSessions(SessionAction.Delete(action.id))
             AiStudioAction.NewChat -> newChat()
-            is AiStudioAction.SearchChats -> showChats(action.text)
-            is AiStudioAction.ShowChatSearch -> showChatSearch(action.visible)
-            is AiStudioAction.ToggleNavigation -> toggleNavigation(action.id)
-            is AiStudioAction.NavigationFocusHandled -> screen.update {
-                if (it.navigationFocusId == action.id) it.copy(navigationFocusId = null) else it
+            is AiStudioAction.SearchChats, AiStudioAction.ExpandChatSearch, AiStudioAction.CollapseChatSearch,
+            AiStudioAction.ExpandChats, AiStudioAction.CollapseChats,
+            -> Unit
+            AiStudioAction.CreateSessionWithoutProject -> showSessionBootstrap(SessionBootstrapState.Project.Ungrouped)
+            AiStudioAction.CreateSession -> {
+                val project = screen.value.chat?.projectId?.let { SessionBootstrapState.Project.Existing(it) }
+                showSessionBootstrap(project ?: SessionBootstrapState.Project.Ungrouped)
             }
+            AiStudioAction.DismissSessionBootstrap -> screen.update { it.copy(sessionBootstrap = null) }
+            is AiStudioAction.BootstrapProject -> updateBootstrapProject(action)
+            is AiStudioAction.SubmitSessionBootstrap -> submitSessionBootstrap(action)
+            is AiStudioAction.RenameProject -> updateProjectsSessions(ProjectAction.Rename(action.id, action.title))
+            is AiStudioAction.DeleteProject -> updateProjectsSessions(ProjectAction.Delete(action.id))
             is AiStudioAction.NewProjectChat -> newChat(action.project)
             is AiStudioAction.SetScenario -> updateSummary { it.copy(scenario = action.scenario) }
             is AiStudioAction.SetAccess -> updateSummary { it.copy(access = action.access) }
@@ -135,11 +218,10 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.EditAnswer, is AiStudioAction.MoveQuestion,
             is AiStudioAction.SkipQuestion, is AiStudioAction.SubmitAnswers, is AiStudioAction.AnswerPermission,
             -> turns[workspace.selectedId]?.answer(action)
-            is AiStudioAction.ToggleChats -> screen.update { it.copy(chatsVisible = action.visible) }
             is AiStudioAction.ToggleFiles -> screen.update { it.copy(filesVisible = action.visible) }
-            is AiStudioAction.ShowFileSearch -> showFileSearch(action.visible)
-            is AiStudioAction.SearchFiles -> showFiles(action.text)
-            is AiStudioAction.OpenFile -> openViewer(allFiles.firstOrNull { it.id == action.id })
+            is AiStudioAction.ShowFileSearch -> screen.update { workspaceFiles.setSearchVisible(it, action.visible) }
+            is AiStudioAction.SearchFiles -> screen.update { workspaceFiles.search(it, action.text) }
+            is AiStudioAction.OpenFile -> openViewer(workspaceFiles.find(action.id))
             is AiStudioAction.OpenResult -> openViewer(findMessage(action.id).let { (it as? Reply)?.result })
             AiStudioAction.CloseViewer -> openViewer(null)
             is AiStudioAction.ToggleWork -> screen.update { it.copy(expandedWork = it.expandedWork.toggle(action.id)) }
@@ -153,15 +235,33 @@ internal class DefaultAiStudioStore(
         }
     }
 
-    private fun openChat(id: String) {
-        val target = workspace.chats.firstOrNull { it.summary.id == id } ?: return
+    private suspend fun openChat(id: String, acknowledgeResult: Boolean = true) {
+        val entry = workspace.chats.firstOrNull { it.summary.id == id } ?: return
+        val loaded = loadStoredChat(entry) ?: return
+        val target = if (acknowledgeResult) loaded.withReadResult() else loaded
+        if (target !== entry) updateChat(id) { target }
+        projectsSessionsStore?.dispatch(SessionAction.Select(id))?.getOrThrow()
+        projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
+        workspace = workspace.copy(selectedId = id)
         if (screen.value.chat?.id == id) {
-            screen.update { it.copy(chatsVisible = false, navigationFocusId = null) }
-            return
+            screen.update { withProjectsSessions(it.copy(chat = target.summary)) }
+            if (target !== loaded) save()
+        } else {
+            showChat(target)
         }
+    }
+
+    private fun loadStoredChat(chat: AuroraChat): AuroraChat? = try {
+        persistence?.load(chat) ?: chat
+    } catch (_: StudioRepositoryException) {
+        screen.update { it.copy(loading = false, storageError = RestoreError) }
+        null
+    }
+
+    private fun showChat(target: AuroraChat) {
+        val id = target.summary.id
         val before = editor.getAndUpdate { Draft(id, target.draft) }
         rememberDraft(before)
-        workspace = workspace.copy(selectedId = id)
         val messages = history(target)
         val turn = turns[id]
         requestRender(turn)
@@ -171,102 +271,193 @@ internal class DefaultAiStudioStore(
             anchorIndex < 0 -> 0
             else -> anchorIndex + if (turn?.reply == null) 0 else 1
         }
-        refreshFiles(messages)
+        workspaceFiles.refresh(messages)
         screen.update {
-            it.copy(
-                loading = false, chat = target.summary, chats = matchingChats(it.chatSearch), messages = messages,
-                navigation = sidebar(it.chatSearch), navigationFocusId = null,
-                live = turn?.reply, request = turn?.request, activity = turn?.activity ?: Activity.Idle,
-                restoreAnchor = target.anchor, restoreIndex = restoredIndex,
-                fileGroups = allFileGroups.filterFiles(it.fileSearch),
-                attachments = target.attachments, chatsVisible = false, viewer = null,
-                subagents = subagents(id),
+            val next = it.copy(
+                loading = false,
+                chat = target.summary,
+                messages = messages,
+                live = turn?.reply,
+                request = turn?.request,
+                activity = turn?.activity ?: Activity.Idle,
+                restoreAnchor = target.anchor,
+                restoreIndex = restoredIndex,
+                fileGroups = workspaceFiles.groups(it.fileSearch),
+                attachments = target.attachments,
+                viewer = null,
+                subagents = workspace.subagents(id),
             )
+            withProjectsSessions(next)
         }
         save()
     }
 
-    private fun newChat(project: String = selected.summary.project) {
-        val id = nextId()
-        val entries = workspace.chats.toMutableList()
-        val firstInProject = entries.indexOfFirst { it.summary.project == project }.coerceAtLeast(0)
-        entries.add(firstInProject, AuroraChat(Chat(id, "Новый диалог", project)))
-        workspace = workspace.copy(
-            chats = entries, collapsedNavigation = workspace.collapsedNavigation - (ProjectPrefix + project),
-        )
-        openChat(id)
+    private suspend fun selectCatalogSession(id: String) {
+        val store = projectsSessionsStore ?: return
+        store.dispatch(SessionAction.Select(id)).getOrThrow()
+        screen.update(::withProjectsSessions)
+    }
+
+    private suspend fun newChat(project: String? = null) {
+        val current = screen.value.chat
+        if (catalog != null) {
+            val id = createStoredChat(project ?: projectsSessionsStore?.state?.value?.selectedSessionId?.let {
+                catalog.findSession(SessionId.parse(it))?.projectId?.value?.toString()
+            }) ?: return
+            selectCatalogSession(id)
+            save()
+            return
+        }
+        val chat = Chat(nextId(), Chat.UntitledTitle, project ?: current?.project ?: Chat.UngroupedProjectKey)
+        workspace = workspace.insert(AuroraChat(chat))
+        openChat(chat.id)
+    }
+
+    private suspend fun createStoredChat(rawProjectId: String?): String? {
+        val projectId = if (rawProjectId == null) {
+            ProjectId.Ungrouped
+        } else {
+            val storedId = workspace.chats.firstOrNull { it.summary.project == rawProjectId }?.summary?.projectId
+            runCatching { ProjectId.parse(storedId ?: rawProjectId) }.getOrNull()
+        }
+        val project = if (catalog != null && projectId != null) findCatalogProject(catalog, projectId) else null
+        project ?: return null
+        val session = sessionBootstrap?.createSession(project.id, Chat.UntitledTitle)
+        return session?.let { addStoredSession(it, project) }
+    }
+
+    private fun addStoredSession(session: Session, project: Project, payloadLoaded: Boolean = true): String {
+        val id = session.id.value.toString()
+        if (workspace.chats.none { it.summary.id == id }) {
+            val chat = Chat(
+                id, session.title, project.title,
+                navigationStatus = session.workState.toNavigationStatus(),
+                projectId = project.id.value.toString(),
+            )
+            workspace = workspace.insert(AuroraChat(chat, payloadLoaded = payloadLoaded))
+        }
+        return id
+    }
+
+    private fun showSessionBootstrap(project: SessionBootstrapState.Project) {
+        screen.update { it.copy(sessionBootstrap = SessionBootstrapState(project)) }
+    }
+
+    private suspend fun submitSessionBootstrap(action: AiStudioAction.SubmitSessionBootstrap) {
+        if (screen.value.sessionBootstrap == null) return
+        val error = when (val result = sessionBootstrap?.let { startBootstrappedSession(it, action) }) {
+            is SessionBootstrapResult.Created -> {
+                screen.update { it.copy(sessionBootstrap = null) }
+                val id = addStoredSession(result.session, result.project)
+                updateChat(id) { chat ->
+                    chat.copy(
+                        draft = action.prompt,
+                        summary = chat.summary.copy(
+                            scenario = action.scenario,
+                            access = action.access,
+                            effort = action.effort ?: chat.summary.effort,
+                        ),
+                    )
+                }
+                selectCatalogSession(id)
+                save()
+                return
+            }
+            SessionBootstrapResult.EmptyPrompt -> SessionBootstrapState.Error.EmptyPrompt
+            SessionBootstrapResult.ProjectUnavailable -> SessionBootstrapState.Error.ProjectUnavailable
+            null -> SessionBootstrapState.Error.StorageFailure
+        }
+        screen.update { it.copy(sessionBootstrap = SessionBootstrapState(action.project, error)) }
+    }
+
+    private suspend fun updateBootstrapProject(action: AiStudioAction.BootstrapProject) {
+        val bootstrap = sessionBootstrap ?: return
+        val state = screen.value.sessionBootstrap ?: return
+        val next = applyBootstrapProjectAction(bootstrap, state, action)
+        screen.update { it.copy(sessionBootstrap = next) }
     }
 
     private fun readAt(action: AiStudioAction.ReadAt) {
-        if (workspace.selectedId != action.chatId || selected.anchor == action.anchor) return
-        updateChat(action.chatId) { it.copy(anchor = action.anchor) }
-        saveRequests.trySend(Unit)
-    }
-
-    private fun showChats(query: String) {
-        screen.update {
-            it.copy(
-                chatSearch = query, chats = matchingChats(query), navigation = sidebar(query), navigationFocusId = null,
-            )
-        }
-    }
-
-    private fun showChatSearch(visible: Boolean) {
-        if (!visible) showChats("")
-        screen.update { it.copy(chatSearchVisible = visible) }
-    }
-
-    private fun toggleNavigation(id: String) {
-        val moreIndex = if (id.startsWith(MorePrefix)) screen.value.navigation.indexOfFirst { it.id == id } else -1
-        workspace = if (id.startsWith(MorePrefix)) {
-            if (moreIndex < 0) return
-            workspace.copy(expandedProjects = workspace.expandedProjects + id.removePrefix(MorePrefix))
+        if (workspace.selectedId != action.chatId) return
+        val chat = selected
+        val seen = if (action.anchor == Anchor()) chat.withReadResult() else chat
+        if (chat.anchor == action.anchor && seen === chat) return
+        updateChat(action.chatId) { seen.copy(anchor = action.anchor) }
+        if (seen === chat) {
+            saveRequests.trySend(Unit)
         } else {
-            workspace.copy(collapsedNavigation = workspace.collapsedNavigation.toggle(id))
+            screen.update { withProjectsSessions(it.copy(chat = seen.summary)) }
+            save()
         }
-        screen.update {
-            val navigation = sidebar(it.chatSearch)
-            // The first revealed chat takes the place of the More row.
-            it.copy(navigation = navigation, navigationFocusId = navigation.getOrNull(moreIndex)?.id)
-        }
-        save()
     }
 
-    private fun sidebar(query: String) = workspace.navigation(query, turns.mapValues { it.value.activity })
-
-    private fun archiveChat(id: String) {
-        if (id in workspace.archivedChats || workspace.chats.none { it.summary.id == id }) return
-        workspace = workspace.copy(archivedChats = workspace.archivedChats + id)
+    private suspend fun updateProjectsSessions(action: ProjectsSessionsAction) {
+        val previous = workspace
+        projectsSessionsStore?.dispatch(action)?.getOrThrow()
+        updateWorkspaceAfterNavigation(action)
         screen.update { current ->
-            val removedIndex = current.navigation.indexOfFirst { it.id == id }
-            val navigation = sidebar(current.chatSearch)
-            val focus = if (removedIndex >= 0) {
-                navigation.asSequence().drop(removedIndex).firstOrNull { it.kind != NavigationKind.More }
-                    ?: navigation.lastOrNull { it.kind != NavigationKind.More }
-            } else null
-            current.copy(
-                chats = matchingChats(current.chatSearch), navigation = navigation, navigationFocusId = focus?.id,
-            )
+            when (action) {
+                is ProjectAction.Rename, is SessionAction.Rename -> {
+                    val chat = workspace.chats.firstOrNull { it.summary.id == current.chat?.id }
+                    withProjectsSessions(current.copy(chat = chat?.summary))
+                }
+                else -> withProjectsSessions(current)
+            }
         }
-        save()
+        if (workspace !== previous) save()
     }
 
-    private fun matchingChats(query: String): List<Chat> = workspace.activeChats().filter {
-        it.title.contains(query, ignoreCase = true) || it.project.contains(query, ignoreCase = true)
-    }.toList()
+    private fun updateWorkspaceAfterNavigation(action: ProjectsSessionsAction) {
+        if (action is SessionAction.Archive) {
+            workspace = workspace.copy(archivedChats = workspace.archivedChats + action.id)
+        }
+        val navigation = projectsSessionsStore?.state?.value ?: return
+        when (action) {
+            is ProjectAction.Delete -> {
+                if (navigation.deletionError == null) {
+                    removeDeletedChats { it.summary.projectId == action.id }
+                }
+            }
+            is SessionAction.Delete -> {
+                if (navigation.deletionError == null) {
+                    removeDeletedChats { it.summary.id == action.id }
+                }
+            }
+            is ProjectAction.Rename -> {
+                if (navigation.renameError == null) {
+                    workspace = workspace.renameProject(action.id, action.title)
+                }
+            }
+            is SessionAction.Rename -> {
+                if (navigation.renameError == null) {
+                    updateChat(action.id) { it.copy(summary = it.summary.copy(title = action.title)) }
+                }
+            }
+            else -> Unit
+        }
+    }
 
-    private fun subagents(chatId: String): List<AiStudioScreenState.Subagent> = workspace.chats.mapNotNull {
-        val child = it.summary
-        if (child.parentId == chatId && child.mockSubagent) {
-            AiStudioScreenState.Subagent(child.id, child.title)
-        } else null
+    private fun withProjectsSessions(screen: AiStudioScreenState): AiStudioScreenState =
+        workspace.withProjectsSessions(screen, projectsSessionsStore?.state?.value ?: ProjectsSessionsState())
+
+    private fun removeDeletedChats(matches: (AuroraChat) -> Boolean) {
+        val removed = workspace.deletedChatIds(matches)
+        if (removed.isEmpty()) return
+        val clearedChat = screen.value.chat?.id in removed
+        if (clearedChat) editor.value = Draft()
+        for (id in removed) turns.remove(id)?.stop()
+        workspace = workspace.withoutChats(removed)
+        if (clearedChat) {
+            requestRender(null)
+            screen.update { current ->
+                withProjectsSessions(AiStudioScreenState(loading = false, storageError = current.storageError))
+            }
+        }
     }
 
     private fun updateSummary(transform: (Chat) -> Chat) {
         updateChat(workspace.selectedId) { it.copy(summary = transform(it.summary)) }
-        screen.update {
-            it.copy(chat = selected.summary, chats = matchingChats(it.chatSearch), navigation = sidebar(it.chatSearch))
-        }
+        screen.update { withProjectsSessions(it.copy(chat = selected.summary)) }
         save()
     }
 
@@ -281,29 +472,35 @@ internal class DefaultAiStudioStore(
         save()
     }
 
-    private fun send(draft: Draft) {
+    private suspend fun send(draft: Draft) {
         val chat = selected
         val chatId = chat.summary.id
-        if (draft.chatId != chatId || turns.containsKey(chatId)) return
         val text = draft.text.trim()
-        if (text.isEmpty() && chat.attachments.isEmpty()) return
-        editor.compareAndSet(draft, draft.copy(text = ""))
-        updateChat(chat.summary.id) { record ->
-            record.copy(
-                attachments = listOf(),
-                summary = if (record.summary.title == "Новый диалог") {
-                    val firstLine = text.lineSequence().firstOrNull().orEmpty().take(MaxTitleLength)
-                    record.summary.copy(title = firstLine.ifBlank { record.attachments.first().name })
-                } else {
-                    record.summary
-                },
-            )
+        val emptyPrompt = text.isEmpty() && chat.attachments.isEmpty()
+        if (draft.chatId != chatId || chatId in turns || emptyPrompt) {
+            return
         }
+        val summary = summaryForPrompt(chat, text) ?: return
+        editor.compareAndSet(draft, draft.copy(text = ""))
+        updateChat(chatId) { it.copy(attachments = listOf(), summary = summary) }
         val user = User(
             nextId(), MockTime, text, chat.attachments, Delivery.Sending,
             scenario = chat.summary.scenario, access = chat.summary.access,
         )
         newTurn(user).sendPrompt()
+    }
+
+    private suspend fun summaryForPrompt(chat: AuroraChat, text: String): Chat? {
+        if (!chat.summary.isUntitled) return chat.summary
+        val firstLine = text.lineSequence().firstOrNull().orEmpty().take(MaxTitleLength)
+        val title = firstLine.ifBlank { chat.attachments.first().name }
+        val store = projectsSessionsStore
+        store?.dispatch(SessionAction.Rename(chat.summary.id, title))?.getOrThrow()
+        return if (store?.state?.value?.renameError == null) chat.summary.copy(title = title)
+        else {
+            reportStorageError()
+            null
+        }
     }
 
     private fun newTurn(prompt: User, previous: Reply? = null): AuroraTurn {
@@ -353,42 +550,6 @@ internal class DefaultAiStudioStore(
         screen.update { it.copy(viewer = file) }
     }
 
-    private fun showFiles(query: String) {
-        screen.update {
-            if (it.filesVisible && it.fileSearchVisible) {
-                it.copy(fileSearch = query, fileGroups = allFileGroups.filterFiles(query))
-            } else {
-                it
-            }
-        }
-    }
-
-    private fun showFileSearch(visible: Boolean) {
-        screen.update {
-            when {
-                !it.filesVisible -> it
-                visible -> it.copy(fileSearchVisible = true)
-                else -> it.copy(fileSearchVisible = false, fileSearch = "", fileGroups = allFileGroups)
-            }
-        }
-    }
-
-    private fun refreshFiles(messages: List<Message>) {
-        val next = files(messages)
-        if (next == allFiles) return
-        allFiles = next
-        allFileGroups = prepareFileGroups(next)
-    }
-
-    private fun files(messages: List<Message>): List<File> = buildList {
-        messages.forEach { message ->
-            when (message) {
-                is User -> addAll(message.files)
-                is Reply -> message.result?.let(::add)
-            }
-        }
-    }.distinctBy(File::id)
-
     private fun findMessage(id: String?): Message? = screen.value.messages.firstOrNull { it.id == id }
 
     internal fun nextId(): String {
@@ -409,21 +570,25 @@ internal class DefaultAiStudioStore(
     internal fun changed(chatId: String, structural: Boolean) {
         val turn = turns[chatId] ?: return
         rememberReply(chatId, turn.reply, deferSave = !structural)
-        if (chatId != workspace.selectedId && structural) {
-            screen.update { it.copy(navigation = sidebar(it.chatSearch)) }
+        if (structural) {
+            val status = turn.workState.toNavigationStatus()
+            if (chat(chatId).summary.navigationStatus != status) {
+                updateChat(chatId) { it.copy(summary = it.summary.copy(navigationStatus = status)) }
+            }
         }
+        if (chatId != workspace.selectedId && structural) screen.update(::withProjectsSessions)
         if (chatId == workspace.selectedId) {
             requestRender(turn)
             val messages = if (structural) history(selected) else screen.value.messages
-            if (structural) refreshFiles(messages)
+            if (structural) workspaceFiles.refresh(messages)
             screen.update {
-                it.copy(
-                    chat = selected.summary, chats = if (structural) matchingChats(it.chatSearch) else it.chats,
-                    navigation = if (structural) sidebar(it.chatSearch) else it.navigation,
+                val next = it.copy(
+                    chat = selected.summary,
                     messages = messages, live = turn.reply, request = turn.request, activity = turn.activity,
-                    fileGroups = if (structural) allFileGroups.filterFiles(it.fileSearch) else it.fileGroups,
+                    fileGroups = if (structural) workspaceFiles.groups(it.fileSearch) else it.fileGroups,
                     attachments = selected.attachments,
                 )
+                if (structural) withProjectsSessions(next) else next
             }
         }
         if (structural) save()
@@ -460,40 +625,37 @@ internal class DefaultAiStudioStore(
             putMessage(chatId, reply)
         }
         turns.remove(chatId)
-        updateChat(chatId) { it.copy(interrupted = null) }
+        updateChat(chatId) { chat ->
+            val atTail = chatId == workspace.selectedId && chat.anchor == Anchor()
+            val workState = if (reply?.status == ReplyStatus.Completed && !atTail) SessionWorkState.Waiting
+            else SessionWorkState.Idle
+            chat.copy(
+                interrupted = null,
+                summary = chat.summary.copy(navigationStatus = workState.toNavigationStatus()),
+            )
+        }
         val messages = if (chatId == workspace.selectedId) history(selected) else null
         if (messages != null) {
             renderer.reset()
             renderOwner = null
-            refreshFiles(messages)
+            workspaceFiles.refresh(messages)
         }
         screen.update {
-            val navigation = sidebar(it.chatSearch)
-            val next = if (messages == null) {
-                it.copy(navigation = navigation)
-            } else {
+            val next = if (messages == null) it else {
                 it.copy(
-                    messages = messages, live = null, request = null, activity = Activity.Idle,
-                    fileGroups = allFileGroups.filterFiles(it.fileSearch), navigation = navigation,
+                    chat = selected.summary, messages = messages, live = null, request = null, activity = Activity.Idle,
+                    fileGroups = workspaceFiles.groups(it.fileSearch),
                 )
             }
-            if (reply?.status == ReplyStatus.Completed) next.collapseWork(reply.id) else next
+            val updated = withProjectsSessions(next)
+            if (reply?.status == ReplyStatus.Completed) updated.collapseWork(reply.id) else updated
         }
         // The completed screen revision already owns the full final document. Keep the last
         // live revision until a new turn/chat replaces it, so collectors cannot see a blank handoff.
         save()
     }
 
-    private fun AiStudioScreenState.collapseWork(replyId: String): AiStudioScreenState {
-        val prefix = "$replyId/"
-        return copy(
-            expandedWork = expandedWork - replyId,
-            expandedSteps = expandedSteps.filterNot { it.startsWith(prefix) }.toSet(),
-            expandedEvents = expandedEvents.filterNot { it.startsWith(prefix) }.toSet(),
-        )
-    }
-
-    internal fun event(command: () -> Unit) = enqueue(command)
+    internal fun event(command: () -> Unit) = enqueue { command() }
 
     private fun chat(id: String): AuroraChat = workspace.chats.first { it.summary.id == id }
 
@@ -502,9 +664,12 @@ internal class DefaultAiStudioStore(
     }
 
     private fun history(chat: AuroraChat): List<Message> {
-        val initial = fixture.getOrPut(chat.summary.id) { AuroraMock.history(chat.summary.id) }
+        val mockId = chat.mockId ?: chat.summary.id
+        val initial = fixture.getOrPut(mockId) { AuroraMock.history(mockId) }
         return if (chat.messages.isEmpty()) initial else chat.messages + initial
     }
+
+    internal fun mockSessionId(id: String): String = chat(id).mockId ?: id
 
     private fun rememberDraft(draft: Draft) {
         val id = draft.chatId ?: return
@@ -513,47 +678,50 @@ internal class DefaultAiStudioStore(
 
     private fun save() {
         rememberDraft(editor.value)
-        snapshots.trySend(workspace)
+        snapshots.schedule(workspace)
     }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun restore(): AuroraWorkspace = try {
-        val data = preferences.observeString(WorkspaceKey).first()
-        if (data.isEmpty()) {
-            AuroraMock.workspace()
-        } else {
-            Json.decodeFromString<AuroraWorkspace>(data).recover().withMockNavigation()
+        val restored = snapshots.restore()
+        projectsSessionsStore?.let { store ->
+            store.dispatch(PanelAction.Load).getOrThrow()
+            store.dispatch(SessionAction.Select(restored.selectedId)).getOrThrow()
         }
+        restored
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Exception) {
         // This workspace is temporary. Never replace a snapshot we could not read.
         snapshots.close()
         screen.update {
-            it.copy(storageError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются.")
+            it.copy(storageError = RestoreError)
         }
-        AuroraMock.workspace()
-    }
-
-    @Suppress("TooGenericExceptionCaught")
-    private suspend fun persist(snapshot: AuroraWorkspace) {
-        try {
-            preferences.putString(WorkspaceKey, Json.encodeToString(snapshot))
-            screen.update { if (it.storageError == SaveError) it.copy(storageError = null) else it }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            screen.update { it.copy(storageError = SaveError) }
-        }
+        snapshots.emptyWorkspace()
     }
 
     private fun Set<String>.toggle(id: String) = if (id in this) this - id else this + id
 
     private companion object {
-        const val WorkspaceKey = "workspace_v1"
         const val SaveError = "Не удалось сохранить диалог"
+        const val RestoreError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются."
         const val MaxTitleLength = 48
         const val SaveInterval = 150L
         const val MockTime = "14:04"
     }
+}
+
+private suspend fun startBootstrappedSession(
+    bootstrap: SessionBootstrapInteractor,
+    action: AiStudioAction.SubmitSessionBootstrap,
+): SessionBootstrapResult? = try {
+    val projectId = when (val project = action.project) {
+        SessionBootstrapState.Project.Ungrouped -> ProjectId.Ungrouped
+        is SessionBootstrapState.Project.Existing -> ProjectId.parse(project.id)
+    }
+    bootstrap.startInProject(projectId, action.prompt)
+} catch (_: IllegalArgumentException) {
+    SessionBootstrapResult.ProjectUnavailable
+} catch (_: StudioRepositoryException) {
+    null
 }

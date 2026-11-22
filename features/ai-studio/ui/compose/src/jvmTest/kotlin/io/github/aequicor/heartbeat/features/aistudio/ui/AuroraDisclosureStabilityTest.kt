@@ -36,7 +36,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
-import io.github.aequicor.heartbeat.features.aistudio.di.DefaultAiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.testing.createAiStudioTestStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
@@ -113,7 +113,7 @@ class AuroraDisclosureStabilityTest {
 
     @Test
     fun openingThinkingDoesNotWidenTheRecoveryReply() = runBlocking<Unit> {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = createAiStudioTestStore(AuroraTestPreferences, this)
         try {
             val state = withTimeout(5_000) { store.screenState.first { !it.loading } }
             val reply = state.messages.filterIsInstance<Reply>().single { it.id == "sample-recovery" }

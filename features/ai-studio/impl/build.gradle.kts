@@ -15,7 +15,24 @@ configure<SqlDelightExtension> {
     }
 }
 
+val jvmTestFixtures by configurations.creating {
+    isCanBeResolved = false
+    isCanBeConsumed = true
+}
+
 kotlin {
+    jvm {
+        val main by compilations.getting
+        val testFixtures by compilations.creating {
+            associateWith(main)
+        }
+        val jvmTestFixturesJar by tasks.registering(Jar::class) {
+            archiveClassifier.set("jvm-test-fixtures")
+            from(testFixtures.output.allOutputs)
+        }
+        artifacts.add(jvmTestFixtures.name, jvmTestFixturesJar)
+    }
+
     sourceSets.commonMain.dependencies {
         implementation(libs.jetbrains.markdown)
         implementation(libs.okio)

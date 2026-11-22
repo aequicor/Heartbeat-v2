@@ -1,6 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.model
 
-internal data class StudioSessionDto(
+internal data class SessionDto(
     val id: String,
     val projectId: String,
     val title: String,
@@ -9,4 +9,5 @@ internal data class StudioSessionDto(
     val updatedAt: DatabaseTimestamp,
     val parentSessionId: String? = null,
     val isExpanded: Boolean,
+    val workState: String,
 )

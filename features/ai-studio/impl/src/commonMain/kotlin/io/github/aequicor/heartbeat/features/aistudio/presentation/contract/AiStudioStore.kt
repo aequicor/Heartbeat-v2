@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 
 public interface AiStudioStore {
+    public val projectsSessionsStore: ProjectsSessionsStore?
     public val screenState: StateFlow<AiStudioScreenState>
     public val draft: StateFlow<AiStudioScreenState.Draft>
     public val liveText: StateFlow<AiStudioScreenState.LiveText>

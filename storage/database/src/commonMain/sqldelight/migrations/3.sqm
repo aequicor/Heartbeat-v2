@@ -1,0 +1,7 @@
+ALTER TABLE studio_session ADD COLUMN workspace_payload TEXT;
+ALTER TABLE studio_session ADD COLUMN workspace_summary TEXT;
+
+CREATE TABLE studio_workspace (
+    singleton INTEGER NOT NULL PRIMARY KEY CHECK (singleton = 1),
+    metadata TEXT NOT NULL
+);

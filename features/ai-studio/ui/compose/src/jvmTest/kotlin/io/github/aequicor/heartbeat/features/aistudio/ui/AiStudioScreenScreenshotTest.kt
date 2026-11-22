@@ -42,6 +42,8 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileGroup
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileRow
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.LiveText
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationRow
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Question
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
@@ -49,7 +51,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.User
-import io.github.aequicor.heartbeat.features.aistudio.di.DefaultAiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.testing.createAiStudioTestStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAgentMessage
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
@@ -102,7 +104,7 @@ class AiStudioScreenScreenshotTest {
             AuroraTestTheme(appearance = HbAppearance.Light, density = HbDensity.Touch) {
                 AiStudioScreen(
                     files, MutableStateFlow(Draft(files.chat?.id)), MutableStateFlow(LiveText()),
-                    null, {}, {}, avatarVisible = false,
+                    null, {}, {}, avatarVisible = false, projectsSessions = TestProjectsSessionsComponent(),
                 )
             }
         })
@@ -127,7 +129,7 @@ class AiStudioScreenScreenshotTest {
                         actions.add(action)
                         state.value = state.value.copy(filesVisible = action.visible)
                     }
-                }, {}, avatarVisible = false)
+                }, {}, avatarVisible = false, projectsSessions = TestProjectsSessionsComponent())
             }
         }
         try {
@@ -193,7 +195,10 @@ class AiStudioScreenScreenshotTest {
         val stream = MutableStateFlow(LiveText())
         val scene = ImageComposeScene(960, 600, coroutineContext = clock.context) {
             AuroraTestTheme(appearance = HbAppearance.Light, density = HbDensity.Dense) {
-                AiStudioScreen(state.value, draft, stream, null, {}, {}, avatarVisible = false)
+                AiStudioScreen(
+                    state.value, draft, stream, null, {}, {}, avatarVisible = false,
+                    projectsSessions = TestProjectsSessionsComponent(),
+                )
             }
         }
         try {
@@ -241,14 +246,10 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopFigmaParityFixture() = runBlocking<Unit> {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = createAiStudioTestStore(AuroraTestPreferences, this)
         try {
-            val site = "project:Сайт проекта"
-            withTimeout(5_000) { store.screenState.first { !it.loading } }
-            store.dispatch(AiStudioAction.ToggleNavigation(site))
-            val state = withTimeout(5_000) {
-                store.screenState.first { state -> state.navigation.any { it.id == site && it.expanded == false } }
-            }
+            val restored = withTimeout(5_000) { store.screenState.first { !it.loading } }
+            val state = restored.copy(navigation = parityNavigation(restored))
             val font = AuroraTestFonts.ui
             val scrollIndex = state.messages.indexOfFirst { it.id == "sample-dedup" }
             val matched = state.copy(
@@ -265,6 +266,7 @@ class AiStudioScreenScreenshotTest {
             val windows = ImageIO.read(screenshot(
                 "aurora-windows-parity", 1440, 900, matched, HbDensity.Dense, font,
                 HbWindowCaption(138.dp, 32.dp) { _, _ -> },
+                selectAfterLayout = true,
             ))
             assertWindowsNavigation(windows)
             val touchMessages = state.messages.filter { it.id == "sample-task" || it.id == "sample-reply" }
@@ -275,6 +277,38 @@ class AiStudioScreenScreenshotTest {
             assertEquals(HbAuroraColors.Canvas.toArgb(), android.getRGB(0, 420))
         } finally {
             coroutineContext.cancelChildren()
+        }
+    }
+
+    private fun parityNavigation(state: AiStudioScreenState): List<NavigationRow> = buildList {
+        for ((project, sessions) in state.chats.groupBy(Chat::project)) {
+            val ungrouped = project == "Без проекта"
+            val expanded = project != "Сайт проекта"
+            val kind = if (ungrouped) NavigationKind.Section else NavigationKind.Project
+            add(NavigationRow("project:$project", project, kind, project, expanded = expanded))
+            if (!expanded) continue
+
+            val sessionsByParent = sessions.groupBy(Chat::parentId)
+            val roots = sessionsByParent[null].orEmpty()
+            val visibleRoots = if (ungrouped) roots else roots.take(5)
+            for (session in visibleRoots) {
+                val children = sessionsByParent[session.id].orEmpty()
+                add(NavigationRow(
+                    session.id, session.title, NavigationKind.Chat, project,
+                    expanded = true.takeIf { children.isNotEmpty() },
+                    selected = session.id == state.chat?.id,
+                    status = session.navigationStatus,
+                ))
+                for ((index, child) in children.withIndex()) {
+                    add(NavigationRow(
+                        child.id, child.title, NavigationKind.Chat, project,
+                        depth = 1, status = child.navigationStatus, lastChild = index == children.lastIndex,
+                    ))
+                }
+            }
+            if (visibleRoots.size < roots.size) {
+                add(NavigationRow("more:$project", "", NavigationKind.More, project))
+            }
         }
     }
 
@@ -421,7 +455,7 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopPencilWorkAccess() = runBlocking<Unit> {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = createAiStudioTestStore(AuroraTestPreferences, this)
         try {
             val state = withTimeout(5_000) { store.screenState.first { !it.loading } }
             val reply = state.messages.filterIsInstance<Reply>().single { it.id == "sample-recovery" }
@@ -455,7 +489,7 @@ class AiStudioScreenScreenshotTest {
 
     @Test
     fun desktopCompletedReplyBeforeAndAfterDisclosure() = runBlocking {
-        val store = DefaultAiStudioStoreFactory(AuroraTestPreferences).create(this)
+        val store = createAiStudioTestStore(AuroraTestPreferences, this)
         try {
             val state = withTimeout(5_000) { store.screenState.first { !it.loading } }
             val reply = state.messages.filterIsInstance<Reply>().single { it.id == "sample-draft" }
@@ -528,14 +562,27 @@ class AiStudioScreenScreenshotTest {
         name: String, width: Int, height: Int, state: AiStudioScreenState, density: HbDensity, font: FontFamily? = null,
         caption: HbWindowCaption? = null,
         draftText: String = "",
+        selectAfterLayout: Boolean = false,
     ): File {
         val backdrop = runBlocking { loadAuroraBackdrop() }
-        return renderScreenshot(name, width, height) {
+        val initialState = if (selectAfterLayout) {
+            state.copy(navigation = state.navigation.map { it.copy(selected = false) })
+        } else state
+        val visibleState = mutableStateOf(initialState)
+        return renderScreenshot(name, width, height, beforeCapture = {
+            if (selectAfterLayout) {
+                visibleState.value = state
+                render().close()
+            }
+        }) {
             val content: @Composable () -> Unit = {
                 AuroraTestTheme(appearance = HbAppearance.Light, density = density, fontFamily = font) {
                     val draft = MutableStateFlow(Draft(state.chat?.id, draftText))
                     val stream = MutableStateFlow(LiveText())
-                    AiStudioScreen(state, draft, stream, backdrop, {}, {}, avatarVisible = true)
+                    AiStudioScreen(
+                        visibleState.value, draft, stream, backdrop, {}, {}, avatarVisible = true,
+                        projectsSessions = TestProjectsSessionsComponent(),
+                    )
                 }
             }
             if (caption == null) content() else HbProvideWindowCaption(caption, content)

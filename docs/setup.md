@@ -71,8 +71,11 @@ iOS собирается из проекта Xcode, а не через Gradle.
 
 ## Работа с дизайном
 
-Репозиторий [Heartbeat-design](https://github.com/aequicor/Heartbeat-design) содержит макеты Pencil,
-правила для агентов и спецификацию дизайн-системы. Для работы с ними используй общий локальный клон.
+Макеты Heartbeat хранятся в Figma. Для работы агента с макетом запусти плагин Figwright в нужном
+файле Figma. Агент читает и изменяет макет через MCP Figwright.
+
+Правила для агентов и спецификация дизайн-системы находятся в репозитории
+[Heartbeat-design](https://github.com/aequicor/Heartbeat-design). Для работы с ними используй общий локальный клон.
 
 1. Выполни `git worktree list` из любого worktree Heartbeat-v2. Первая строка показывает путь к
    основному checkout.
@@ -82,7 +85,7 @@ iOS собирается из проекта Xcode, а не через Gradle.
    git clone https://github.com/aequicor/Heartbeat-design.git ../Heartbeat-design
    ```
 
-3. Из любого worktree открывай макеты Pencil по пути к этому клону. Публикуй изменения через PR
+3. Из любого worktree используй правила и спецификацию из этого клона. Публикуй их изменения через PR
    в `Heartbeat-design`.
 
 При первой инициализации подмодуля `design/` выполни `git submodule update --init -- design` из корня

@@ -8,6 +8,7 @@ import dev.zacsweers.metro.ContributesIntoSet
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.features.aistudio.component.AiStudioComponent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioSettings
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
@@ -37,7 +38,19 @@ class AiStudioComposeRenderer(
             draft = component.draft,
             liveText = component.liveText,
             backdrop = backdrop,
-            onAction = component::dispatch,
+            projectsSessions = component.projectsSessions,
+            onAction = { action ->
+                val projectsSessions = component.projectsSessions
+                when (action) {
+                    is AiStudioAction.OpenChat -> projectsSessions.selectSession(action.id)
+                    is AiStudioAction.SearchChats -> projectsSessions.search(action.text)
+                    AiStudioAction.ExpandChatSearch -> projectsSessions.setSearchVisible(true)
+                    AiStudioAction.CollapseChatSearch -> projectsSessions.setSearchVisible(false)
+                    AiStudioAction.ExpandChats -> projectsSessions.setPanelVisible(true)
+                    AiStudioAction.CollapseChats -> projectsSessions.setPanelVisible(false)
+                    else -> component.dispatch(action)
+                }
+            },
             avatarVisible = avatarVisible,
             onOpenSettings = component::openSettings,
         )

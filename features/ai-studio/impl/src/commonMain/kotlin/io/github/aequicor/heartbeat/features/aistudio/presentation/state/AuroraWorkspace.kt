@@ -1,10 +1,12 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.state
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Delivery
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.StepStatus
@@ -12,6 +14,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Serializable
 internal data class AuroraWorkspace(
@@ -24,6 +27,14 @@ internal data class AuroraWorkspace(
 ) {
     fun recover(): AuroraWorkspace = copy(chats = chats.map(AuroraChat::recover))
 
+    fun insert(chat: AuroraChat): AuroraWorkspace {
+        val project = chat.summary.project
+        val ordered = chats.toMutableList()
+        val index = ordered.indexOfFirst { it.summary.project == project }.coerceAtLeast(0)
+        ordered.add(index, chat)
+        return copy(chats = ordered, collapsedNavigation = collapsedNavigation - "project:$project")
+    }
+
     fun activeChats(): Sequence<Chat> = chats.asSequence().map(AuroraChat::summary).filterNot { it.id in archivedChats }
 }
 
@@ -35,6 +46,8 @@ internal data class AuroraChat(
     val attachments: List<File> = listOf(),
     val messages: List<Message> = listOf(),
     val interrupted: Reply? = null,
+    val mockId: String? = null,
+    @Transient val payloadLoaded: Boolean = true,
 ) {
     fun recover(): AuroraChat {
         val history = messages.map { message ->
@@ -48,6 +61,21 @@ internal data class AuroraChat(
         val stopped = interrupted?.finishCurrentSteps(StepStatus.Stopped)?.copy(status = ReplyStatus.Stopped)
         return copy(messages = if (stopped == null) history else listOf(stopped) + history, interrupted = null)
     }
+}
+
+internal val Chat.workState: SessionWorkState
+    get() = when (navigationStatus) {
+        null -> SessionWorkState.Idle
+        NavigationStatus.Unread -> SessionWorkState.Waiting
+        NavigationStatus.Working -> SessionWorkState.Working
+        NavigationStatus.Attention -> SessionWorkState.Demand
+    }
+
+internal fun SessionWorkState.toNavigationStatus(): NavigationStatus? = when (this) {
+    SessionWorkState.Idle -> null
+    SessionWorkState.Waiting -> NavigationStatus.Unread
+    SessionWorkState.Working -> NavigationStatus.Working
+    SessionWorkState.Demand -> NavigationStatus.Attention
 }
 
 internal fun Reply.finishCurrentSteps(status: StepStatus): Reply = copy(

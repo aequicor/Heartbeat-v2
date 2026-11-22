@@ -20,6 +20,12 @@ kotlin {
     }
 }
 
+tasks.named<Test>("jvmTest") {
+    // The render-only job and the pixel comparison must have separate Gradle task inputs.
+    inputs.property("goldenMode", providers.environmentVariable("HB_GOLDEN_MODE").orElse("compare"))
+    inputs.property("updateGoldens", providers.environmentVariable("HB_UPDATE_GOLDENS").orElse("0"))
+}
+
 // The sandbox is a desktop application for review, not a product entry point: it lives in the
 // design system boundary and depends on the published kit only.
 val jvmRuntimeClasspath = configurations.getByName("jvmRuntimeClasspath")

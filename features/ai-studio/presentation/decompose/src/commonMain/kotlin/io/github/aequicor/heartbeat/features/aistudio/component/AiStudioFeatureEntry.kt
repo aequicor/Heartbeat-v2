@@ -34,6 +34,6 @@ class AiStudioFeatureEntry @Inject internal constructor(
     ): FeatureRoot {
         val scope = CoroutineScope(SupervisorJob() + worker)
         context.lifecycle.doOnDestroy(scope::cancel)
-        return DefaultAiStudioComponent(context, host, storeFactory.create(scope))
+        return DefaultAiStudioComponent(context, host, storeFactory.create(scope), scope)
     }
 }

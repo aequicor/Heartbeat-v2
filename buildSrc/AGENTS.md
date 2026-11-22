@@ -7,7 +7,8 @@
 - `heartbeat-detekt` применяет detekt ко всем модулям, подключает наборы правил Compose и Faire и
   регистрирует `detektAll`. Значения правил задавай в `detekt.yml`, а не в скрипте плагина.
 - `heartbeat-git-hooks` регистрирует `installGitHooks`, который переключает `core.hooksPath` на
-  `.githooks`. Хук `pre-push` запускает `detektAll` и блокирует push при нарушениях.
+  `.githooks`. Хук `pre-push` запускает локальные проверки из `static-analysis.yml` и
+  `cross-platform.yml`, доступные на текущем хосте, и блокирует push при сбое.
 - Новую точку входа добавляй в список `entryPoints` класса `DevRuns` и синхронизируй с модулем в
   `platform/`, матрицей `verify-platform` и `docs/setup.md`.
 - Не дублируй версии плагинов и репозитории: версии задавай в `gradle/libs.versions.toml`. Артефакты

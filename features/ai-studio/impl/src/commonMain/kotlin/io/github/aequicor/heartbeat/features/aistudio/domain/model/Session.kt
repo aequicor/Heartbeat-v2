@@ -2,13 +2,14 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.model
 
 import kotlin.time.Instant
 
-internal data class StudioSession(
-    val id: StudioSessionId,
+internal data class Session(
+    val id: SessionId,
     val projectId: ProjectId,
     val title: String,
     val status: SessionStatus,
     val createdAt: Instant,
     val updatedAt: Instant,
-    val parentSessionId: StudioSessionId? = null,
+    val parentSessionId: SessionId? = null,
     val isExpanded: Boolean = true,
+    val workState: SessionWorkState = SessionWorkState.Idle,
 )

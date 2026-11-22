@@ -1,4 +1,4 @@
-package io.github.aequicor.heartbeat.features.aistudio.domain.repository
+package io.github.aequicor.heartbeat.features.aistudio.domain.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
@@ -8,7 +8,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import okio.Path
 
-internal interface ProjectRepository {
+internal interface ProjectDataSource {
 
     suspend fun create(immutableName: String, workingDirectory: Path): ProjectCreationResult
 
@@ -25,4 +25,6 @@ internal interface ProjectRepository {
     suspend fun setExpanded(id: ProjectId, isExpanded: Boolean)
 
     suspend fun setStatus(id: ProjectId, status: ProjectStatus)
+
+    suspend fun delete(id: ProjectId)
 }

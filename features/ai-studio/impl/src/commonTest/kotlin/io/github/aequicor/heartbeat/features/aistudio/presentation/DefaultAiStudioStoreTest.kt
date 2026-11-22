@@ -15,6 +15,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.FileDate
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyBlock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.ReplyStatus
@@ -49,33 +50,11 @@ import kotlin.test.assertTrue
 class DefaultAiStudioStoreTest {
 
     @Test
-    fun projectsAndSubsessionsExpandInPlaceAndSearchShowsAncestors() = runTest {
+    fun chatFixturesDoNotPopulateProjectSessionNavigation() = runTest {
         val store = studio()
-        val initial = store.screenState.value.navigation
-        assertEquals("Heartbeat", initial.first().title)
-        assertEquals(1, initial.single { it.id == "contract-check" }.depth)
-        store.dispatch(AiStudioAction.ToggleNavigation(AuroraMock.InitialChat))
-        runCurrent()
-        assertFalse(store.screenState.value.navigation.any { it.id == "contract-check" })
-        store.dispatch(AiStudioAction.SearchChats("Проверка контрактов"))
-        runCurrent()
-        assertEquals(listOf("Heartbeat", "Единая модель сессий", "Проверка контрактов"),
-            store.screenState.value.navigation.map { it.title })
-        store.dispatch(AiStudioAction.ShowChatSearch(false))
-        store.dispatch(AiStudioAction.ToggleNavigation("more:Heartbeat"))
-        runCurrent()
-        val expanded = store.screenState.value
-        val firstAdded = expanded.navigation.single { it.title == "Журнал событий" }
-        assertEquals(firstAdded.id, expanded.navigationFocusId)
-        assertEquals(AuroraMock.InitialChat, expanded.chat?.id)
 
-        store.dispatch(AiStudioAction.ToggleNavigation("more:Heartbeat"))
-        store.dispatch(AiStudioAction.NavigationFocusHandled("stale-target"))
-        runCurrent()
-        assertEquals(firstAdded.id, store.screenState.value.navigationFocusId)
-        store.dispatch(AiStudioAction.NavigationFocusHandled(firstAdded.id))
-        runCurrent()
-        assertNull(store.screenState.value.navigationFocusId)
+        assertNotNull(store.screenState.value.chat)
+        assertTrue(store.screenState.value.navigation.isEmpty())
     }
 
     @Test
@@ -95,16 +74,14 @@ class DefaultAiStudioStoreTest {
     }
 
     @Test
-    fun restoringAProjectChatKeepsSidebarOrder() = runTest {
+    fun restoringAProjectChatKeepsTheSelectedDraft() = runTest {
         val data = TestPreferences()
         val store = studio(data)
         store.dispatch(AiStudioAction.NewProjectChat("Документы"))
         runCurrent()
         val id = assertNotNull(store.draft.value.chatId)
-        val navigation = store.screenState.value.navigation.map { it.id }
         val restored = studio(data)
         assertEquals(id, restored.draft.value.chatId)
-        assertEquals(navigation, restored.screenState.value.navigation.map { it.id })
     }
 
     @Test
@@ -137,16 +114,11 @@ class DefaultAiStudioStoreTest {
         assertEquals(initialMessages, state.messages)
         assertFalse(state.chats.any { it.id == archived })
         assertFalse(state.navigation.any { it.id == archived })
-        assertEquals(0, state.navigation.single { it.id == "contract-check" }.depth)
-        assertEquals(0, state.navigation.single { it.id == "ui-regression" }.depth)
 
         val restored = studio(data)
         assertEquals(archived, restored.screenState.value.chat?.id)
         assertEquals("Черновик перед архивированием", restored.draft.value.text)
         assertFalse(restored.screenState.value.chats.any { it.id == archived })
-        restored.dispatch(AiStudioAction.SearchChats("Проверка контрактов"))
-        runCurrent()
-        assertEquals(listOf("contract-check"), restored.screenState.value.chats.map { it.id })
     }
 
     @Test
@@ -156,10 +128,6 @@ class DefaultAiStudioStoreTest {
         assertEquals(listOf("contract-check"), initial.subagents.map { it.chatId })
         assertEquals(61, initial.chat?.contextPercent)
         assertEquals(78, initial.chat?.quota?.usedPercent)
-        store.dispatch(AiStudioAction.SearchChats("Только другая группа"))
-        runCurrent()
-        assertEquals(initial.subagents, store.screenState.value.subagents)
-
         store.dispatch(AiStudioAction.OpenChat("contract-check"))
         runCurrent()
         assertTrue(store.screenState.value.subagents.isEmpty())
@@ -341,9 +309,19 @@ class DefaultAiStudioStoreTest {
 
     @Test
     fun finishingInAnUnselectedChatCollapsesOnlyThatTurnsWork() = runTest {
-        val store = studio()
+        val data = TestPreferences()
+        val store = studio(data)
         send(store)
+        runCurrent()
+        assertEquals(
+            NavigationStatus.Working,
+            data.savedNavigationStatus(AuroraMock.InitialChat),
+        )
         awaitQuestions(store)
+        assertEquals(
+            NavigationStatus.Attention,
+            data.savedNavigationStatus(AuroraMock.InitialChat),
+        )
         fillAnswers(store)
         advance(400)
         val permission = assertIs<Request.Permission>(store.screenState.value.request)
@@ -360,11 +338,41 @@ class DefaultAiStudioStoreTest {
         assertEquals(AuroraMock.LongChat, store.screenState.value.chat?.id)
         assertEquals(setOf("sample-recovery/check"), store.screenState.value.expandedSteps)
         assertTrue(store.screenState.value.expandedEvents.isEmpty())
+        assertEquals(
+            NavigationStatus.Unread,
+            data.savedNavigationStatus(AuroraMock.InitialChat),
+        )
         store.dispatch(AiStudioAction.OpenChat(AuroraMock.InitialChat))
         runCurrent()
+        assertNull(data.savedNavigationStatus(AuroraMock.InitialChat))
         val reply = assertIs<Reply>(store.screenState.value.messages.first())
         assertEquals(replyId, reply.id)
         assertEquals(ReplyStatus.Completed, reply.status)
+    }
+
+    @Test
+    fun completingInOpenSessionOnlyMarksResultReadAtTheTail() = runTest {
+        val id = AuroraMock.InitialChat
+        val olderMessage = Anchor("older-message", 48)
+        for (anchor in listOf(Anchor(), olderMessage)) {
+            val data = TestPreferences()
+            val store = studio(data)
+            send(store)
+            awaitQuestions(store)
+            val live = assertNotNull(store.screenState.value.live)
+            store.dispatch(AiStudioAction.ReadAt(id, anchor))
+            runCurrent()
+
+            store.event { store.finish(id, live.copy(status = ReplyStatus.Completed)) }
+            runCurrent()
+
+            val expected = NavigationStatus.Unread.takeIf { anchor == olderMessage }
+            assertEquals(expected, data.savedNavigationStatus(id))
+
+            store.dispatch(AiStudioAction.ReadAt(id, Anchor()))
+            runCurrent()
+            assertNull(data.savedNavigationStatus(id))
+        }
     }
 
     @Test
@@ -419,9 +427,16 @@ class DefaultAiStudioStoreTest {
         val firstScope = sessionScope()
         val store = DefaultAiStudioStore(data, firstScope)
         runCurrent()
+        store.dispatch(AiStudioAction.OpenChat("missing"))
+        runCurrent()
+        assertEquals(AuroraMock.InitialChat, store.screenState.value.chat?.id)
+
         store.dispatch(AiStudioAction.OpenChat(AuroraMock.LongChat))
         runCurrent()
-        val messages = store.screenState.value.messages
+        val state = store.screenState.value
+        assertFalse(state.chatsVisible)
+        assertEquals(AuroraMock.LongChat, state.chat?.id)
+        val messages = state.messages
         assertEquals(AuroraMock.HistoryTurns * 2, messages.size)
         val anchor = Anchor(messages[1_450].id, 12)
         store.dispatch(AiStudioAction.ReadAt(AuroraMock.LongChat, anchor))
@@ -709,7 +724,11 @@ private fun TestScope.fillAnswers(store: DefaultAiStudioStore) {
     runCurrent()
 }
 
-private class TestPreferences(initial: String = "") : PreferencesStore {
+private fun TestPreferences.savedNavigationStatus(chatId: String): NavigationStatus? =
+    Json.decodeFromString<AuroraWorkspace>(snapshot.value).chats.single { it.summary.id == chatId }
+        .summary.navigationStatus
+
+internal class TestPreferences(initial: String = "") : PreferencesStore {
     val snapshot = MutableStateFlow(initial)
 
     override fun observeString(key: String, default: String) = snapshot
