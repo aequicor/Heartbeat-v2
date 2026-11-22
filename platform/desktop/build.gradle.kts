@@ -295,6 +295,11 @@ if (isWindows) {
     val runTmpDir = layout.buildDirectory.dir("run-tmp")
     val runDataDir = layout.buildDirectory.dir("run-data")
 
+    // runDev uses the installed JBR so ACP agents inherit the developer's process permissions.
+    tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
+        environment("HEARTBEAT_DATA_DIR", runDataDir.get().asFile.absolutePath)
+    }
+
     val launchApp = tasks.register<Exec>("runDistributableWritableTemp") {
         group = "compose desktop"
         description = "Runs the packaged desktop app with writable temp and data directories"
