@@ -16,6 +16,6 @@ internal class AcpConnectionCheckDataSourceImpl(private val api: AcpProbeApi) : 
         try {
             api.initialize(command, arguments, environment)
         } catch (failure: AcpProbeException) {
-            throw AcpConnectionCheckException(failure.started, failure)
+            throw AcpConnectionCheckException(failure.started, failure.message, failure)
         }
 }

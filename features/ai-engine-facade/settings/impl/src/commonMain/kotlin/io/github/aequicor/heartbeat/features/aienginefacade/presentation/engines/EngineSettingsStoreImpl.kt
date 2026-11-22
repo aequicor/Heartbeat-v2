@@ -448,7 +448,8 @@ internal class EngineSettingsStoreImpl(
     }
 
     private fun checkFailure(start: String, failure: kotlin.Throwable): AcpCheckState.Failed {
-        val started = (failure as? AcpConnectionCheckException)?.started == true
+        val checkError = failure as? AcpConnectionCheckException
+        val started = checkError?.started == true
         val message = if (started) {
             "Агент не завершил инициализацию ACP"
         } else {
@@ -461,11 +462,7 @@ internal class EngineSettingsStoreImpl(
             } else {
                 info(start, "Запрошен запуск программы")
             },
-            if (started) {
-                error("Не получен совместимый ответ ACP initialize")
-            } else {
-                error("Проверка завершилась до запуска агента")
-            },
+            error(checkError?.diagnostic ?: message),
         )
         return AcpCheckState.Failed(
             EngineOperationFailure(message, "Логи проверки ACP-подключения", entries),
