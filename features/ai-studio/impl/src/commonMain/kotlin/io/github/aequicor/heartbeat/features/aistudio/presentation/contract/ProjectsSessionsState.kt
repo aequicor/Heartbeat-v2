@@ -6,6 +6,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.DeletionError
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationKind
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationLoadError
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationRow
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.RenameError
@@ -23,6 +24,7 @@ public data class ProjectsSessionsState internal constructor(
     internal val projects: List<Project> = listOf(),
     internal val nextProjectCursor: PageCursor<ProjectId>? = null,
     internal val pages: ProjectsSessionsPages = ProjectsSessionsPages(),
+    internal val retryingPage: String? = null,
 ) {
 
     internal sealed interface Project {
@@ -78,9 +80,7 @@ public data class ProjectsSessionsState internal constructor(
 
     public fun rows(): List<NavigationRow> = buildList {
         for (project in projects) addProject(project)
-        if (nextProjectCursor != null) {
-            add(NavigationRow(id = "more-projects", title = "", kind = NavigationKind.MoreProjects, project = ""))
-        }
+        addPageRow("more-projects", NavigationKind.MoreProjects, "", nextProjectCursor != null)
     }
 
     private fun MutableList<NavigationRow>.addProject(project: Project) {
@@ -101,9 +101,7 @@ public data class ProjectsSessionsState internal constructor(
         if (!project.expanded) return
 
         for (session in project.sessions) addSession(session, projectKey)
-        if (project.nextSessionCursor != null) {
-            add(NavigationRow(id = "more:$projectKey", title = "", kind = NavigationKind.More, project = projectKey))
-        }
+        addPageRow("more:$projectKey", NavigationKind.More, projectKey, project.nextSessionCursor != null)
     }
 
     private fun MutableList<NavigationRow>.addSession(
@@ -112,6 +110,8 @@ public data class ProjectsSessionsState internal constructor(
         depth: Int = 0,
         lastChild: Boolean = false,
     ) {
+        val pageRowId = "more-children:${session.id}"
+        val expandable = session.children.isNotEmpty() || session.nextChildCursor != null || pageRowId in pages.failures
         add(
             NavigationRow(
                 id = session.id,
@@ -119,7 +119,7 @@ public data class ProjectsSessionsState internal constructor(
                 kind = NavigationKind.Chat,
                 project = project,
                 depth = depth,
-                expanded = session.expanded.takeIf { session.children.isNotEmpty() || session.nextChildCursor != null },
+                expanded = session.expanded.takeIf { expandable },
                 selected = session.id == selectedSessionId,
                 status = session.status,
                 lastChild = lastChild,
@@ -130,16 +130,23 @@ public data class ProjectsSessionsState internal constructor(
         session.children.forEachIndexed { index, child ->
             addSession(child, project, depth + 1, index == session.children.lastIndex)
         }
-        if (session.nextChildCursor != null) {
-            add(
-                NavigationRow(
-                    id = "more-children:${session.id}",
-                    title = "",
-                    kind = NavigationKind.MoreChildren,
-                    project = session.id,
-                ),
-            )
-        }
+        addPageRow(pageRowId, NavigationKind.MoreChildren, session.id, session.nextChildCursor != null, depth + 1)
+    }
+
+    private fun MutableList<NavigationRow>.addPageRow(
+        id: String,
+        kind: NavigationKind,
+        ownerId: String,
+        hasNextPage: Boolean,
+        depth: Int = 0,
+    ) {
+        val failure = pages.failures[id]
+        if (!hasNextPage && failure == null) return
+        add(NavigationRow(
+            id, "", kind, ownerId, depth,
+            page = (pages.loadedPageCounts[id] ?: 0) + 1,
+            loadError = failure?.let { NavigationLoadError(it.diagnostic, it.request.isFirstPage, id == retryingPage) },
+        ))
     }
 }
 

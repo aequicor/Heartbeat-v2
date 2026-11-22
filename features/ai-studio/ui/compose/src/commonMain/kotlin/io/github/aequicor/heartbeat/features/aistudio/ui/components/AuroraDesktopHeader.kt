@@ -1,7 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,7 +28,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
@@ -45,13 +45,12 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiSt
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Access
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState.Subagent
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.aurora_project_closed_icon
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.projects_sessions
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_menu_in_project
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -76,6 +75,7 @@ internal fun AuroraDesktopHeader(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val compact = maxWidth - edgeInset * 2 < AuroraLayout.HeaderMetricsCompactAt
         val inset = Modifier.padding(horizontal = edgeInset)
+        val projectWidth = minOf(maxWidth / 3, AuroraLayout.NavigationWidth / 2)
         Column(
             Modifier.fillMaxWidth().padding(top = AuroraLayout.HeaderTop),
             verticalArrangement = Arrangement.spacedBy(AuroraLayout.HeaderRowGap),
@@ -89,6 +89,9 @@ internal fun AuroraDesktopHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (showNavigation) AuroraHeaderNavigation { onAction(AiStudioAction.ExpandChats) }
+                AuroraDesktopProject(
+                    state.sessionBootstrap, chat, onAction, Modifier.widthIn(max = projectWidth),
+                )
                 AuroraTitleMenu(
                     chat, state.filesVisible, onAction, titleFocus,
                     onReady = { onTitleReady(titleFocus) }, modifier = Modifier.weight(1f),
@@ -112,6 +115,26 @@ internal fun AuroraDesktopHeader(
                 }
             }
             AuroraHeaderStorageError(state.navigationErrorText(), inset)
+        }
+    }
+}
+
+@Composable
+private fun AuroraDesktopProject(
+    bootstrap: SessionBootstrapState?,
+    chat: Chat,
+    onAction: (AiStudioAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (bootstrap == null) {
+        Box(
+            modifier.height(AuroraLayout.DesktopTarget)
+                .auroraFloatingHeaderSurface(AuroraColors.Pearl).padding(horizontal = AuroraLayout.Space),
+            contentAlignment = Alignment.CenterStart,
+        ) { AuroraStaticProject(chat.displayProject()) }
+    } else {
+        HbWindowClientArea { clientArea ->
+            AuroraProjectSelector(bootstrap, touch = false, onAction, modifier.then(clientArea))
         }
     }
 }
@@ -144,7 +167,7 @@ private fun AuroraTitleMenu(
     val actions = listOf(
         HbMenuAction(
             stringResource(Res.string.new_session),
-            { onAction(AiStudioAction.NewChat) },
+            { onAction(AiStudioAction.CreateSessionWithoutProject) },
             glyph = HbIconGlyph.Edit,
         ),
         HbMenuAction(
@@ -154,33 +177,30 @@ private fun AuroraTitleMenu(
     )
     var expanded by remember { mutableStateOf(false) }
     var truncated by remember(title) { mutableStateOf(false) }
-    HbWindowClientArea { clientArea ->
-        HbMenu(
-            expanded, onDismissRequest = { expanded = false }, actions = actions,
-            modifier = modifier.then(clientArea), presentation = HbMenuPresentation.AuroraMessage,
-        ) { trigger ->
-            HbTooltip(title, enabled = truncated && !expanded) {
-                AuroraHeaderButton(
-                    stringResource(Res.string.session_menu_in_project, title, chat.displayProject()),
-                    { expanded = true },
-                    trigger.focusRequester(titleFocus).fillMaxWidth().auroraFloatingHeaderSurface(AuroraColors.Pearl),
-                    radius = AuroraLayout.FloatingHeaderRadius,
-                    contentPadding = PaddingValues(horizontal = AuroraLayout.ContentInset),
-                ) {
-                    Image(
-                        painterResource(Res.drawable.aurora_project_closed_icon), null,
-                        Modifier.size(AuroraLayout.Glyph),
-                        colorFilter = ColorFilter.tint(AuroraColors.NavigationIcon),
-                    )
-                    Spacer(Modifier.width(AuroraLayout.Space))
-                    AuroraFadingText(
-                        title,
-                        HbTypography.PaneTitle.copy(color = AuroraColors.MessageInk),
-                        AuroraLayout.NavigationTitleFade, Modifier.weight(1f, fill = false),
-                        onOverflowChange = { truncated = it },
-                    )
-                    Spacer(Modifier.width(AuroraLayout.Space))
-                    HbIcon(HbIconGlyph.ChevronDown, tint = AuroraColors.MessageMuted, size = AuroraLayout.ContentInset)
+    Box(modifier.auroraFloatingHeaderSurface(AuroraColors.Pearl)) {
+        HbWindowClientArea { clientArea ->
+            HbMenu(
+                expanded, onDismissRequest = { expanded = false }, actions = actions,
+                presentation = HbMenuPresentation.AuroraMessage,
+            ) { trigger ->
+                HbTooltip(title, enabled = truncated && !expanded) {
+                    AuroraHeaderButton(
+                        stringResource(Res.string.session_menu_in_project, title, chat.displayProject()),
+                        { expanded = true },
+                        trigger.focusRequester(titleFocus).then(clientArea),
+                        contentPadding = PaddingValues(horizontal = AuroraLayout.ContentInset),
+                    ) {
+                        AuroraFadingText(
+                            title,
+                            HbTypography.PaneTitle.copy(color = AuroraColors.MessageInk),
+                            AuroraLayout.NavigationTitleFade, Modifier.weight(1f, fill = false),
+                            onOverflowChange = { truncated = it },
+                        )
+                        Spacer(Modifier.width(AuroraLayout.Space))
+                        HbIcon(
+                            HbIconGlyph.ChevronDown, tint = AuroraColors.MessageMuted, size = AuroraLayout.ContentInset,
+                        )
+                    }
                 }
             }
         }

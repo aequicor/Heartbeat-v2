@@ -8,6 +8,10 @@ kotlin {
     android { androidResources.enable = true }
     sourceSets.jvmMain.dependencies {
         compileOnly(libs.jcef.api)
+        implementation(libs.filekit.dialogs.compose)
+    }
+    sourceSets.androidMain.dependencies {
+        implementation(libs.androidx.activity.compose)
     }
     sourceSets.commonMain.dependencies {
         implementation(compose.components.resources)

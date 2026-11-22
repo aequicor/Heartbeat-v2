@@ -21,6 +21,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.Projects
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
@@ -56,15 +57,18 @@ class StudioRepositoryIntegrationTest {
             val connection = connection(driver)
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
             val path = "/work/first-directory".toPath()
-            val created = assertIs<ProjectCreationResult.Created>(graph.sessionBootstrap.registerProject("Alpha", path))
+            val directory = ProjectDirectory.Local(path)
+            val created = assertIs<ProjectCreationResult.Registered>(
+                graph.sessionBootstrap.registerProject(directory, "Alpha"),
+            )
 
             val project = created.project
             assertEquals("Alpha", project.immutableName)
             assertEquals(path, project.workingDirectory)
             assertEquals(listOf(), graph.catalog.listRootSessions(project.id, SessionStatus.ACTIVE).items)
 
-            val duplicate = graph.sessionBootstrap.createProject("/other/Alpha".toPath())
-            assertEquals(ProjectCreationResult.NameAlreadyExists("Alpha"), duplicate)
+            val duplicate = graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/other/Alpha".toPath()))
+            assertEquals(ProjectCreationResult.NameConflict("Alpha"), duplicate)
             assertEquals(
                 listOf(project, Project.WithoutDirectory(isExpanded = true)),
                 graph.catalog.listProjects(ProjectStatus.ACTIVE, 2).items,
@@ -75,7 +79,7 @@ class StudioRepositoryIntegrationTest {
             )
 
             val next = assertIs<SessionBootstrapResult.Created>(
-                graph.sessionBootstrap.startInProject(project.id, "Continue"),
+                graph.sessionBootstrap.createSession(project.id, "Continue"),
             )
             assertEquals(project, next.project)
             assertEquals(project.id, next.session.projectId)
@@ -96,13 +100,13 @@ class StudioRepositoryIntegrationTest {
         driver().use { driver ->
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
             val store = DefaultAiStudioStore(TestPreferences(), backgroundScope, graph.catalog)
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
-            val root = graph.sessionBootstrap.createSession(project.id, "Root", Start)
-            val child = graph.sessionBootstrap.createSession(project.id, "Child", Later, root.id)
-            val grandchild = graph.sessionBootstrap.createSession(project.id, "Grandchild", Latest, child.id)
-            val sibling = graph.sessionBootstrap.createSession(project.id, "Sibling", Latest, root.id)
+            val root = graph.repository.createSession(project.id, "Root", Start)
+            val child = graph.repository.createSession(project.id, "Child", Later, root.id)
+            val grandchild = graph.repository.createSession(project.id, "Grandchild", Latest, child.id)
+            val sibling = graph.repository.createSession(project.id, "Sibling", Latest, root.id)
 
             store.dispatch(AiStudioAction.DeleteSession(child.id.value.toString()))
             store.dispatch(AiStudioAction.DeleteSession(child.id.value.toString()))
@@ -129,13 +133,13 @@ class StudioRepositoryIntegrationTest {
             assertEquals(ProjectId.Ungrouped, project.id)
             assertEquals("Без проекта", project.title)
             val first = assertIs<SessionBootstrapResult.Created>(
-                graph.sessionBootstrap.startInProject(project.id, "First"),
+                graph.sessionBootstrap.createSession(project.id, "First"),
             )
             assertFailsWith<IllegalArgumentException> { graph.catalog.deleteProject(project) }
             assertFailsWith<IllegalArgumentException> { graph.catalog.renameProject(project, "Renamed") }
             assertFailsWith<IllegalArgumentException> { graph.catalog.setProjectArchived(project, isArchived = true) }
             val second = assertIs<SessionBootstrapResult.Created>(
-                graph.sessionBootstrap.startInProject(project.id, "Second"),
+                graph.sessionBootstrap.createSession(project.id, "Second"),
             )
             assertEquals(project.id, graph.catalog.findSession(first.session.id)?.projectId)
             assertEquals(project.id, graph.catalog.findSession(second.session.id)?.projectId)
@@ -154,8 +158,8 @@ class StudioRepositoryIntegrationTest {
     fun sessionFailureKeepsThePreviouslyRegisteredProject() = runTest {
         driver().use { driver ->
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
-            val project = assertIs<ProjectCreationResult.Created>(
-                graph.sessionBootstrap.createProject("/work/Alpha".toPath()),
+            val project = assertIs<ProjectCreationResult.Registered>(
+                graph.sessionBootstrap.registerProject(ProjectDirectory.Local("/work/Alpha".toPath())),
             ).project
             driver.execute(
                 null,
@@ -166,7 +170,7 @@ class StudioRepositoryIntegrationTest {
                 0,
             )
             assertFailsWith<StudioRepositoryException> {
-                graph.sessionBootstrap.startInProject(project.id, "Start")
+                graph.sessionBootstrap.createSession(project.id, "Start")
             }
             assertEquals(project, graph.projectDataSource.findById(project.id))
             assertEquals(
@@ -183,16 +187,16 @@ class StudioRepositoryIntegrationTest {
             driver.execute(null, "PRAGMA foreign_keys = ON", 0)
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
             val store = DefaultAiStudioStore(TestPreferences(), backgroundScope, graph.catalog)
-            val alpha = assertIs<ProjectCreationResult.Created>(
+            val alpha = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
-            val beta = assertIs<ProjectCreationResult.Created>(
+            val beta = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/beta".toPath(), name = "Beta"),
             ).project
-            val root = graph.sessionBootstrap.createSession(alpha.id, "Root", Start)
-            val child = graph.sessionBootstrap.createSession(alpha.id, "Child", Later, root.id)
+            val root = graph.repository.createSession(alpha.id, "Root", Start)
+            val child = graph.repository.createSession(alpha.id, "Child", Later, root.id)
             graph.catalog.setSessionArchived(child, isArchived = true, changedAt = Latest)
-            val unrelated = graph.sessionBootstrap.createSession(beta.id, "Unrelated", Start)
+            val unrelated = graph.repository.createSession(beta.id, "Unrelated", Start)
             driver.execute(
                 null,
                 """
@@ -226,12 +230,12 @@ class StudioRepositoryIntegrationTest {
     fun changingExpansionOnlyUpdatesTheAddressedNode() = runTest {
         driver().use { driver ->
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection(driver))
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
-            val root = graph.sessionBootstrap.createSession(project.id, "Root", Start)
-            val child = graph.sessionBootstrap.createSession(project.id, "Child", Later, root.id)
-            val sibling = graph.sessionBootstrap.createSession(project.id, "Sibling", Latest)
+            val root = graph.repository.createSession(project.id, "Root", Start)
+            val child = graph.repository.createSession(project.id, "Child", Later, root.id)
+            val sibling = graph.repository.createSession(project.id, "Sibling", Latest)
             assertEquals(true, project.isExpanded)
             assertEquals(true, root.isExpanded)
             assertEquals(true, child.isExpanded)
@@ -309,7 +313,7 @@ class StudioRepositoryIntegrationTest {
             val conflict = assertFailsWith<ProjectNameAlreadyExistsException> { dao.insert("Alpha", "/elsewhere") }
             assertEquals("Alpha", conflict.immutableName)
             assertEquals(
-                ProjectCreationResult.NameAlreadyExists("Alpha"),
+                ProjectCreationResult.NameConflict("Alpha"),
                 catalog.createProject("/elsewhere".toPath(), name = "Alpha"),
             )
             assertEquals(
@@ -327,21 +331,20 @@ class StudioRepositoryIntegrationTest {
             val connection = connection(driver)
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
             val catalog = graph.catalog
-            val bootstrap = graph.sessionBootstrap
             val dao = SqlDelightSessionDao(connection)
             val alpha = catalog.registerProjectFixture("/alpha", "Alpha")
             val beta = catalog.registerProjectFixture("/beta", "Beta")
-            val root = bootstrap.createSession(alpha.id, "Title provided by caller", Start)
-            val sibling = bootstrap.createSession(alpha.id, "Sibling", Start)
-            val child = bootstrap.createSession(alpha.id, "Child", Later, root.id)
-            val anotherChild = bootstrap.createSession(alpha.id, "Second child", Later, root.id)
-            val grandchild = bootstrap.createSession(alpha.id, "Grandchild", Start, child.id)
-            bootstrap.createSession(beta.id, "Other project", Later)
+            val root = graph.repository.createSession(alpha.id, "Title provided by caller", Start)
+            val sibling = graph.repository.createSession(alpha.id, "Sibling", Start)
+            val child = graph.repository.createSession(alpha.id, "Child", Later, root.id)
+            val anotherChild = graph.repository.createSession(alpha.id, "Second child", Later, root.id)
+            val grandchild = graph.repository.createSession(alpha.id, "Grandchild", Start, child.id)
+            graph.repository.createSession(beta.id, "Other project", Later)
             assertFailsWith<StudioRepositoryException> {
-                bootstrap.createSession(beta.id, "Wrong project", Start, root.id)
+                graph.repository.createSession(beta.id, "Wrong project", Start, root.id)
             }
             assertFailsWith<StudioRepositoryException> {
-                bootstrap.createSession(alpha.id, "Missing parent", Start, SessionId(Uuid.random()))
+                graph.repository.createSession(alpha.id, "Missing parent", Start, SessionId(Uuid.random()))
             }
             assertEquals("Title provided by caller", root.title)
             assertEquals(Start, root.createdAt)
@@ -390,7 +393,7 @@ class StudioRepositoryIntegrationTest {
         driver().use { driver ->
             val connection = connection(driver)
             val graph = createGraphFactory<StudioInteractorTestGraph.Factory>().create(connection)
-            val project = assertIs<ProjectCreationResult.Created>(
+            val project = assertIs<ProjectCreationResult.Registered>(
                 graph.catalog.createProject("/alpha".toPath(), name = "Alpha"),
             ).project
             val catalog = graph.catalog
@@ -401,7 +404,9 @@ class StudioRepositoryIntegrationTest {
 
             assertFailsWith<IllegalStateException> {
                 transaction.transaction {
-                    val session = bootstrap.createSession(project.id, "First", Start)
+                    val session = assertIs<SessionBootstrapResult.Created>(
+                        bootstrap.createSession(project.id, "First", Start),
+                    ).session
                     rolledBack = session.id
                     writeFirstMessage(driver, session.id)
                     error("Failure after writing the first message")
@@ -411,7 +416,9 @@ class StudioRepositoryIntegrationTest {
             assertEquals(0L, messageCount(driver))
 
             val committed = transaction.transactionWithResult {
-                val session = bootstrap.createSession(project.id, "First", Start)
+                val session = assertIs<SessionBootstrapResult.Created>(
+                    bootstrap.createSession(project.id, "First", Start),
+                ).session
                 writeFirstMessage(driver, session.id)
                 session
             }
@@ -447,7 +454,7 @@ class StudioRepositoryIntegrationTest {
     }
 
     private suspend fun ProjectsSessionsInteractor.registerProjectFixture(path: String, name: String) =
-        assertIs<ProjectCreationResult.Created>(createProject(path.toPath(), name = name)).project
+        assertIs<ProjectCreationResult.Registered>(createProject(path.toPath(), name = name)).project
 
     private fun connection(driver: SqlDriver) = object : DatabaseConnection {
         override val driver = driver

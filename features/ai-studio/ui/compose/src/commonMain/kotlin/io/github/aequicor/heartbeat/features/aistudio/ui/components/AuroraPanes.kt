@@ -106,7 +106,10 @@ internal fun AuroraChats(
                 AiStudioIcon(AiStudioGlyph.Settings, Modifier.size(AuroraLayout.Glyph), AuroraColors.Muted)
             }
         }
-        AuroraControl({ onAction(AiStudioAction.NewChat) }, Modifier.fillMaxWidth(), touch = touch, round = false) {
+        AuroraControl(
+            { onAction(AiStudioAction.CreateSessionWithoutProject) },
+            Modifier.fillMaxWidth(), touch = touch, round = false,
+        ) {
             HbIcon(HbIconGlyph.Plus, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
             AuroraText(stringResource(Res.string.new_session), Modifier.padding(start = AuroraLayout.Space))
         }

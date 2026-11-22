@@ -52,8 +52,22 @@ public data class AiStudioScreenState(
         val project: Project,
         val error: Error? = null,
         val pendingProject: PendingProject? = null,
+        val projectTitle: String? = null,
+        val projects: ProjectList? = null,
+        val operation: Operation? = null,
+        val id: String = "",
     ) {
         public data class PendingProject(val workingDirectoryPath: String, val name: String)
+
+        public data class ProjectChoice(val id: String, val title: String)
+
+        public sealed interface ProjectList {
+            public data object Loading : ProjectList
+            public data class Ready(val choices: List<ProjectChoice>) : ProjectList
+            public data object Failed : ProjectList
+        }
+
+        public enum class Operation { RegisteringProject, CreatingSession }
 
         public sealed interface Project {
             public data object Ungrouped : Project
@@ -217,12 +231,16 @@ public data class AiStudioScreenState(
         val selected: Boolean = false,
         val status: NavigationStatus? = null,
         val lastChild: Boolean = false,
+        val page: Int? = null,
+        val loadError: NavigationLoadError? = null,
     ) {
 
         public val isUntitled: Boolean get() = kind == NavigationKind.Chat && title == Chat.UntitledTitle
     }
 
     public enum class NavigationKind { Project, Chat, More, Section, MoreProjects, MoreChildren }
+
+    public data class NavigationLoadError(val diagnostic: String, val firstPage: Boolean, val retrying: Boolean)
 
     @Serializable
     public enum class NavigationStatus { Working, Attention, Unread }

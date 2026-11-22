@@ -190,10 +190,10 @@ class AuroraHeaderTest {
         try {
             scene.frame()
             assertNull(scene.text("Субагенты · 1"))
+            val titleBounds = assertNotNull(scene.desc(titleLabel)).boundsInRoot
             scene.press(Key.Tab)
             scene.press(Key.Tab)
             val subagents = assertNotNull(scene.desc("Субагенты · 1"))
-            val rightEdge = subagents.boundsInRoot.right
             assertEquals(32f, subagents.boundsInRoot.width)
             assertEquals(true, subagents.config.getOrNull(SemanticsProperties.Focused))
 
@@ -201,7 +201,7 @@ class AuroraHeaderTest {
             scene.frame()
             assertNull(scene.desc("Субагенты · 1"))
             val title = assertNotNull(scene.desc(titleLabel))
-            assertEquals(rightEdge, title.boundsInRoot.right)
+            assertEquals(titleBounds, title.boundsInRoot)
             assertEquals(true, title.config.getOrNull(SemanticsProperties.Focused))
         } finally {
             scene.close()

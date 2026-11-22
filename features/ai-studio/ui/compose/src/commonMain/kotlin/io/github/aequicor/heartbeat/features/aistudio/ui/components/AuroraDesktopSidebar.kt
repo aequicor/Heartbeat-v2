@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -80,6 +79,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_project_s
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.scroll_sessions
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessions
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessions_placeholder
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_needs_answer
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_new_result
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_working
@@ -98,17 +98,7 @@ internal fun AuroraDesktopSidebar(
     val list = rememberLazyListState()
     val selectedSessionFocus = rememberSelectedSessionFocus(list, state.navigation)
     Column(modifier.fillMaxHeight()) {
-        SidebarHeader(state.chatSearchVisible, onAction, onOpenSettings)
-        if (state.chatSearchVisible) {
-            Box(Modifier.width(AuroraLayout.NavigationWidth).padding(top = AuroraLayout.SmallGap)) {
-                AuroraSearch(
-                    stringResource(Res.string.search_sessions),
-                    state.chatSearch,
-                    { onAction(AiStudioAction.SearchChats(it)) },
-                    false,
-                )
-            }
-        }
+        SidebarHeader(state.chatSearchVisible, state.chatSearch, onAction, onOpenSettings)
         Box(Modifier.weight(1f).fillMaxWidth().padding(top = AuroraLayout.SmallGap, bottom = AuroraLayout.Space)) {
             LazyColumn(
                 Modifier.fillMaxHeight().fillMaxWidth(),
@@ -123,11 +113,7 @@ internal fun AuroraDesktopSidebar(
                     }
                     val rowModifier = Modifier.width(AuroraLayout.NavigationWidth).padding(top = gap)
                     if (row.kind.isPagination) {
-                        AuroraMoreChats(
-                            row.displayTitle(),
-                            { row.loadNextPage(projectsSessions) },
-                            rowModifier,
-                        )
+                        AuroraNavigationPage(row, list, touch = false, projectsSessions, rowModifier)
                     } else {
                         val focus = if (row.selected) Modifier.focusRequester(selectedSessionFocus) else Modifier
                         SidebarRow(row, onAction, projectsSessions, rowModifier, titleFocusModifier = focus)
@@ -147,6 +133,7 @@ internal fun AuroraDesktopSidebar(
 @Composable
 private fun SidebarHeader(
     searchVisible: Boolean,
+    query: String,
     onAction: (AiStudioAction) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -174,29 +161,19 @@ private fun SidebarHeader(
                 }
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = AuroraLayout.Space),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
+        AuroraActionSearchRow(
+            actionLabel = stringResource(Res.string.new_session),
+            searchLabel = stringResource(Res.string.search_sessions),
+            expanded = searchVisible,
+            appliedQuery = query,
+            onAction = { onAction(AiStudioAction.CreateSessionWithoutProject) },
+            onExpand = { onAction(AiStudioAction.ExpandChatSearch) },
+            onCollapse = { onAction(AiStudioAction.CollapseChatSearch) },
+            onSearch = { onAction(AiStudioAction.SearchChats(it)) },
+            modifier = Modifier.padding(vertical = AuroraLayout.Space),
+            searchPlaceholder = stringResource(Res.string.search_sessions_placeholder),
         ) {
-            AuroraControl(
-                { onAction(AiStudioAction.NewChat) },
-                Modifier.weight(1f),
-                background = AuroraColors.NavigationPrimaryAction,
-                focus = AuroraColors.NavigationOnPrimaryAction,
-                round = false, horizontalPadding = AuroraLayout.ChromeInset,
-                minimumTarget = AuroraLayout.NavigationRow,
-            ) {
-                Image(painterResource(Res.drawable.aurora_new_chat_icon), null, Modifier.size(AuroraLayout.Glyph))
-                BasicText(
-                    stringResource(Res.string.new_session),
-                    Modifier.padding(start = AuroraLayout.ControlGap)
-                        .padding(vertical = AuroraLayout.NavigationVerticalInset),
-                    style = HbTypography.Label.copy(color = AuroraColors.NavigationOnPrimaryAction),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            SidebarSearchButton(searchVisible, onAction)
+            Image(painterResource(Res.drawable.aurora_new_chat_icon), null, Modifier.size(AuroraLayout.Glyph))
         }
     }
 }
@@ -237,7 +214,7 @@ private fun SidebarRow(
             val indentation = when {
                 child -> AuroraLayout.NavigationChildIndent
                 expanded != null && session -> AuroraLayout.FrameStroke
-                project -> Dp.Hairline
+                project -> AuroraLayout.Space
                 else -> AuroraLayout.NavigationIndent
             }
             val open: () -> Unit = if (session) {
@@ -250,7 +227,7 @@ private fun SidebarRow(
         if (project) {
             SidebarAction(
                 stringResource(Res.string.new_project_session, row.displayTitle()),
-                { onAction(AiStudioAction.NewProjectChat(row.project)) },
+                { onAction(AiStudioAction.CreateSessionInProject(row.project)) },
                 Modifier.width(AuroraLayout.DesktopTarget),
             ) {
                 Image(

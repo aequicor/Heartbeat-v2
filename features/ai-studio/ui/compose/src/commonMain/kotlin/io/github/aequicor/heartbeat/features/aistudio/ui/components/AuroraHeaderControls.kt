@@ -74,6 +74,7 @@ internal fun AuroraHeaderButton(
     height: Dp = AuroraLayout.DesktopTarget,
     radius: Dp = AuroraLayout.SmallRadius,
     contentPadding: PaddingValues = PaddingValues(Dp.Hairline),
+    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -84,10 +85,10 @@ internal fun AuroraHeaderButton(
     Row(
         modifier.heightIn(min = height).widthIn(min = AuroraLayout.DesktopTarget)
             .clip(shape)
-            .then(if (hovered) Modifier.background(AuroraColors.NavigationHover) else Modifier)
+            .then(if (enabled && hovered) Modifier.background(AuroraColors.NavigationHover) else Modifier)
             .then(if (showFocus) Modifier.border(AuroraLayout.Stroke, AuroraColors.Primary, shape) else Modifier)
             .semantics { contentDescription = label }
-            .clickable(interactions, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(contentPadding)
             .padding(vertical = AuroraLayout.HeaderControlVerticalInset),
         verticalAlignment = Alignment.CenterVertically,

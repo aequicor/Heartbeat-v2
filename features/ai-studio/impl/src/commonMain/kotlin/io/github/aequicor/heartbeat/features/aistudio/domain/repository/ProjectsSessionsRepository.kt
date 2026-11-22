@@ -6,6 +6,7 @@ import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
-import okio.Path
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -31,9 +31,9 @@ internal class ProjectsSessionsRepository(
 
     fun observeChanges(): SharedFlow<ProjectsSessionsChange> = changes.asSharedFlow()
 
-    suspend fun registerProject(name: String, directory: Path): ProjectCreationResult {
-        val result = projectDataSource.create(name, directory)
-        if (result is ProjectCreationResult.Created) {
+    suspend fun registerProject(name: String, directory: ProjectDirectory): ProjectCreationResult {
+        val result = projectDataSource.register(name, directory)
+        if (result is ProjectCreationResult.Registered && result.created) {
             publish(ProjectsSessionsChange.ProjectAdded(result.project.id))
         }
         return result
@@ -42,8 +42,8 @@ internal class ProjectsSessionsRepository(
     suspend fun createSession(
         projectId: ProjectId,
         title: String,
-        createdAt: Instant,
-        parentSessionId: SessionId?,
+        createdAt: Instant = Clock.System.now(),
+        parentSessionId: SessionId? = null,
     ): Session {
         val change = sessionsDataSource.transaction {
             val session = sessionsDataSource.create(projectId, title, createdAt, parentSessionId)
@@ -57,12 +57,13 @@ internal class ProjectsSessionsRepository(
     suspend fun createSessionInActiveProject(
         projectId: ProjectId,
         title: String,
+        createdAt: Instant,
     ): ProjectsSessionsChange.SessionAdded? {
         val change = sessionsDataSource.transaction {
             val project = projectDataSource.findById(projectId) ?: return@transaction null
             if (project.status != ProjectStatus.ACTIVE) return@transaction null
 
-            val session = sessionsDataSource.create(projectId, title, Clock.System.now(), parentSessionId = null)
+            val session = sessionsDataSource.create(projectId, title, createdAt, parentSessionId = null)
             ProjectsSessionsChange.SessionAdded(session, project)
         } ?: return null
 

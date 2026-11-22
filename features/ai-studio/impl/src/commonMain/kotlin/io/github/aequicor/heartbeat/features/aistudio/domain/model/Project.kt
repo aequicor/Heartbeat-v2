@@ -20,14 +20,21 @@ internal sealed interface Project {
         override val id: ProjectId,
         val immutableName: String,
         override val title: String,
-        val workingDirectory: Path,
+        val directory: ProjectDirectory,
         override val status: ProjectStatus,
         val createdAt: Instant,
         val updatedAt: Instant,
         override val isExpanded: Boolean,
-    ) : Project
+    ) : Project {
+        val workingDirectory: Path? get() = (directory as? ProjectDirectory.Local)?.path
+    }
 
     companion object {
         const val UngroupedTitle = "Без проекта"
     }
+}
+
+internal sealed interface ProjectDirectory {
+    data class Local(val path: Path) : ProjectDirectory
+    data class DocumentTree(val uri: String) : ProjectDirectory
 }

@@ -4,13 +4,13 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.Page
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PageCursor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectCreationResult
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectDirectory
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectStatus
-import okio.Path
 
 internal interface ProjectDataSource {
 
-    suspend fun create(immutableName: String, workingDirectory: Path): ProjectCreationResult
+    suspend fun register(immutableName: String, directory: ProjectDirectory): ProjectCreationResult
 
     suspend fun findById(id: ProjectId): Project?
 
