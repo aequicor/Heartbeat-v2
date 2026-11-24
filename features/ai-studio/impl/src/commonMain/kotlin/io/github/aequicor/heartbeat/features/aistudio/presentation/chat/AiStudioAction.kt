@@ -68,12 +68,18 @@ public sealed interface AiStudioAction {
     public data class MoveQuestion(val requestId: String, val offset: Int) : AiStudioAction
     public data class SkipQuestion(val requestId: String) : AiStudioAction
     public data class SubmitAnswers(val requestId: String) : AiStudioAction
-    public data class AnswerPermission(val requestId: String, val allow: Boolean) : AiStudioAction
+    public data class AnswerPermission(val requestId: String, val allow: Boolean, val chatId: String? = null) : AiStudioAction
     public data class OpenFile(val id: String) : AiStudioAction
     public data class OpenResult(val id: String) : AiStudioAction
+    public data class OpenArtifact(val replyId: String, val fileId: String) : AiStudioAction
+    public data class SaveArtifact(val replyId: String, val fileId: String) : AiStudioAction
+    public data class ArtifactSaveFinished(val failed: Boolean) : AiStudioAction
     public data class ToggleWork(val id: String) : AiStudioAction
     public data class ToggleStep(val replyId: String, val stepId: String) : AiStudioAction
     public data class ToggleWorkEvent(val replyId: String, val stepId: String, val eventId: String) : AiStudioAction
+    public data class SetWorkExpanded(
+        val replyId: String, val expanded: Boolean, val stepId: String? = null, val eventId: String? = null,
+    ) : AiStudioAction
     public data object ExpandChats : AiStudioAction
     public data object CollapseChats : AiStudioAction
     public data class ToggleFiles(val visible: Boolean) : AiStudioAction
@@ -82,6 +88,7 @@ public sealed interface AiStudioAction {
     public data object CloseViewer : AiStudioAction
     public data object NewChat : AiStudioAction
     public data object Send : AiStudioAction
+    public data class SendChatDraft(val chatId: String) : AiStudioAction
     public data object CancelTurn : AiStudioAction
     public data class CancelChatTurn(val chatId: String) : AiStudioAction
 }

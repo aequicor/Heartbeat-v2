@@ -19,5 +19,8 @@ internal interface ChatEngineConversationDataSource {
     @Throwable(CancellationException::class)
     suspend fun cancel()
 
+    @Throwable(Exception::class, CancellationException::class)
+    suspend fun close()
+
     fun answerPermission(requestId: String, optionId: String)
 }

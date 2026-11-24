@@ -96,7 +96,14 @@ internal fun AuroraWorkspace(
         } else if (chatId != null) {
             AuroraChatHost(chatId) {
                 val chatAction: (AiStudioAction) -> Unit = { action ->
-                    onAction(if (action == AiStudioAction.CancelTurn) AiStudioAction.CancelChatTurn(chatId) else action)
+                    onAction(
+                        when (action) {
+                            AiStudioAction.Send -> AiStudioAction.SendChatDraft(chatId)
+                            AiStudioAction.CancelTurn -> AiStudioAction.CancelChatTurn(chatId)
+                            is AiStudioAction.AnswerPermission -> action.copy(chatId = chatId)
+                            else -> action
+                        },
+                    )
                 }
                 AuroraChatViewport(
                     state, draft, liveText, touch, chatAction, showNavigation, Dp(preferredWidth),
@@ -152,11 +159,14 @@ private fun AuroraChatViewport(
     val restoredOffset = if (state.restoreAnchor.messageId == null) 0 else state.restoreAnchor.offset
     val list = rememberLazyListState(state.restoreIndex, restoredOffset)
     val tailFollow = remember(list) { AuroraTailFollow(list) }
+    val documents = remember(list) { AuroraCompletedDocuments() }
+    val historyReady = rememberAuroraInitialHistory(state, documents)
     var topPx by remember { mutableIntStateOf(0) }
     var lowerPanelPx by remember { mutableIntStateOf(0) }
     val hasMessages = state.messages.isNotEmpty() || state.live != null
     val awayFromTail by remember(list) { derivedStateOf { list.canScrollBackward } }
     val bottomEdgePx = with(density) { AuroraLayout.DesktopComposerBottom.roundToPx() }
+    val sendFollowDistance = with(density) { AuroraLayout.SendFollowDistance.roundToPx() }
 
     TrackAuroraReading(chatId, state, list, tailFollow, onAction)
 
@@ -165,7 +175,7 @@ private fun AuroraChatViewport(
         val gutter = (maxWidth - corridor) / 2f
         val headerInset = (AuroraLayout.ContentInset - gutter).coerceAtLeast(Dp.Hairline)
         val historyPadding = with(density) { auroraHistoryPadding(touch, topPx.toDp(), lowerPanelPx.toDp()) }
-        if (hasMessages && topPx > 0 && lowerPanelPx > 0) {
+        if (hasMessages && historyReady && topPx > 0 && lowerPanelPx > 0) {
             val historyWithEdges = Modifier.align(Alignment.Center).fillMaxSize().auroraHistoryEdges(
                 topPx,
                 bottomHeightPx = if (!touch && awayFromTail) lowerPanelPx + bottomEdgePx else 0,
@@ -175,7 +185,7 @@ private fun AuroraChatViewport(
                 state, liveText, list, touch, onAction,
                 historyPadding,
                 historyWithEdges,
-                readingWidth = corridor, viewportHeight = maxHeight, tailFollow = tailFollow,
+                readingWidth = corridor, viewportHeight = maxHeight, tailFollow = tailFollow, preparedHistory = documents,
             )
             val trackPadding = auroraTrackPadding(touch, historyPadding, captionClearance, caption)
             AuroraChatScrollbar(list, touch, trackPadding, tailFollow::userScroll)
@@ -194,7 +204,10 @@ private fun AuroraChatViewport(
             onTail = tailFollow::returnToTail,
         ) { inlineTail, inlineStop ->
             AuroraLowerControls(
-                state, draft, list, inlineTail, touch, onAction,
+                state, draft, list, inlineTail, touch, { action ->
+                    if (action == AiStudioAction.Send) tailFollow.followOnSend(sendFollowDistance)
+                    onAction(action)
+                },
                 modifier = Modifier.align(Alignment.BottomCenter).zIndex(1f)
                     .auroraLowerLayout(touch, corridor),
                 maxPanelHeight = maxHeight * 0.76f, inlineRequestStop = inlineStop,
@@ -207,6 +220,27 @@ private fun AuroraChatViewport(
         }
         AuroraResizeHandles(touch, maxWidth, corridor, gutter, onWidthChange)
     }
+}
+
+@Composable
+private fun rememberAuroraInitialHistory(state: AiStudioScreenState, documents: AuroraCompletedDocuments): Boolean {
+    val hasHistory = state.messages.isNotEmpty()
+    val initialReplies = remember(documents, hasHistory) {
+        val newer = if (state.live == null) 1 else 2
+        val start = (state.restoreIndex - newer).coerceAtLeast(0)
+        state.messages.asSequence().drop(start).take(MaxCachedReplies)
+            .filterIsInstance<AiStudioScreenState.Reply>()
+            .filter { it.text.length <= MaxCachedReplyLength }
+            .mapNotNull { it.historyContent?.takeUnless { content -> content.plain } }
+            .toList()
+    }
+    val monospace = auroraCodeFontFamily()
+    var ready by remember(initialReplies, monospace) { mutableStateOf(initialReplies.isEmpty()) }
+    if (!ready) LaunchedEffect(documents, initialReplies, monospace) {
+        documents.prepareInitial(initialReplies, monospace)
+        ready = true
+    }
+    return ready
 }
 
 private fun auroraTrackPadding(

@@ -26,45 +26,11 @@ internal data class AuroraMessageReveal(
 )
 
 @Composable
-internal fun OpenMessageMenuOnBadgeHover(
-    hovered: Boolean,
-    expanded: Boolean,
-    interactive: Boolean,
-    onOpen: () -> Unit,
-) {
-    var handled by remember { mutableStateOf(false) }
-    if (hovered || handled) SideEffect(hovered, expanded, interactive, onOpen) {
-        when {
-            expanded -> Unit
-            !hovered -> handled = false
-            interactive && !handled -> {
-                handled = true
-                onOpen()
-            }
-        }
-    }
-}
-
-@Composable
-internal fun CloseMessageMenuOnHoverExit(
-    expanded: Boolean, overMenu: Boolean, overBadge: Boolean, overBubble: Boolean, onClose: () -> Unit,
-) {
-    if (expanded && !overMenu && !overBadge) {
-        LaunchedEffect(overBubble, onClose) {
-            // Allow crossing from the badge to the popup before its pointer enter arrives.
-            if (!overBubble) delay(HbMotions.Default.smallStateChangeMs.toLong())
-            onClose()
-        }
-    }
-}
-
-@Composable
 internal fun rememberMessageActionBadge(
     hovered: Boolean, overBubble: Boolean, pinned: Boolean, expanded: Boolean, touch: Boolean,
 ): AuroraMessageReveal {
     val admitted by rememberBadgeAdmission(hovered, overBubble, expanded)
-    val available = pinned || hovered && admitted
-    val visible = available && (!expanded || touch)
+    val visible = pinned || hovered && admitted
     val animated = !touch && !pinned && HbTheme.motion != HbMotionPreference.Reduced
     val opacity = remember { Animatable(if (visible) 1f else 0f) }
     val fading by remember(opacity) { derivedStateOf { opacity.value > 0f } }
@@ -76,7 +42,7 @@ internal fun rememberMessageActionBadge(
             opacity.snapTo(target)
         }
     }
-    return AuroraMessageReveal(available || expanded, visible || fading, opacity.asState())
+    return AuroraMessageReveal(visible || expanded, visible || fading, opacity.asState())
 }
 
 @Composable
@@ -86,7 +52,11 @@ private fun rememberBadgeAdmission(hovered: Boolean, overBubble: Boolean, expand
     if (hovered || admitted) LaunchedEffect(hovered, overBubble, expanded) {
         when {
             expanded -> Unit
-            !hovered -> admitted = false
+            !hovered -> {
+                // A focusable popup delays the underlying hover until its closing animation ends.
+                delay(HbMotions.Default.ordinaryTransitionMs.toLong())
+                admitted = false
+            }
             overBubble && !admitted -> {
                 delay(MessageHoverDelayMillis)
                 admitted = true

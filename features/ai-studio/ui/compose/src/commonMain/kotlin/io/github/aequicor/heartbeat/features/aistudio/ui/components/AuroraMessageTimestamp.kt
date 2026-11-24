@@ -32,6 +32,7 @@ internal fun AuroraMessageTimestamp(
     textSetsWidth: Boolean,
     modifier: Modifier = Modifier,
     bottomPadding: Dp? = null,
+    preferStatusWithTime: Boolean = false,
     status: @Composable () -> Unit = {},
     content: @Composable ((TextLayoutResult) -> Unit) -> Unit,
 ) {
@@ -49,8 +50,11 @@ internal fun AuroraMessageTimestamp(
         val delivery = statusSlot.singleOrNull()?.measure(loose)
         val textLayout = text.layout
         val bodyWidth = if (textSetsWidth && textLayout != null) text.occupiedWidth() else body.width
-        val width = constraints.constrainWidth(maxOf(bodyWidth, delivery?.width ?: 0))
         val stamp = timeSlot.singleOrNull()?.measure(loose)
+        val footerWidth = if (preferStatusWithTime && delivery != null && stamp != null) {
+            delivery.width + AuroraLayout.Space.roundToPx() + stamp.width
+        } else delivery?.width ?: 0
+        val width = constraints.constrainWidth(maxOf(bodyWidth, footerWidth))
         val fittingStamp = stamp?.takeIf { it.width <= width }
         // The message row uses this marker to place a wide stamp on its own opaque surface.
         val alignment: Map<AlignmentLine, Int> = if (stamp != null && fittingStamp == null) {

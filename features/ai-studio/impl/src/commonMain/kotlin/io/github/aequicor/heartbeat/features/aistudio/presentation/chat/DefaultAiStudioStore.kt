@@ -24,6 +24,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Message
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
@@ -80,7 +81,7 @@ internal class DefaultAiStudioStore(
         allowsFileImport = importAttachment != null,
     ))
     private val enginePicker = sessionBootstrap?.let {
-        BootstrapEnginePicker(it, scope, defaultDispatcher, screen, ::enqueue)
+        BootstrapEnginePicker(it, scope, defaultDispatcher, screen, ::enqueue, ::configurationApplied)
     }
     private val remoteTurns = turnInteractor?.let { RemoteChatTurns(it, scope, defaultDispatcher, ::enqueue) }
     private val editor = MutableStateFlow(Draft())
@@ -124,9 +125,11 @@ internal class DefaultAiStudioStore(
                 snapshots.write(
                     restored,
                     onSaved = {
-                        screen.update { if (it.storageError == SaveError) it.copy(storageError = null) else it }
+                        screen.update { if (it.storageError == WorkspaceSaveError) it.copy(storageError = null) else it }
                     },
-                    onFailure = ::reportStorageError,
+                    onFailure = {
+                        screen.update { if (it.storageError == null) it.copy(storageError = WorkspaceSaveError) else it }
+                    },
                 )
             }
             if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
@@ -169,13 +172,11 @@ internal class DefaultAiStudioStore(
                 editor.update { if (it.chatId == action.chatId) it.copy(text = action.text) else it }
                 saveRequests.trySend(Unit)
             }
-            AiStudioAction.Send -> {
-                val submitted = editor.value
-                enqueue { send(submitted) }
-            }
+            AiStudioAction.Send -> screen.value.chat?.id?.let(::submitChatDraft)
+            is AiStudioAction.SendChatDraft -> submitChatDraft(action.chatId)
             AiStudioAction.CancelTurn -> screen.value.chat?.id?.let(::requestTurnCancellation)
             is AiStudioAction.CancelChatTurn -> requestTurnCancellation(action.chatId)
-            is AiStudioAction.AnswerPermission -> screen.value.chat?.id?.let { id ->
+            is AiStudioAction.AnswerPermission -> (action.chatId ?: screen.value.chat?.id)?.let { id ->
                 enqueue { answerPermission(id, action) }
             }
             else -> enqueue { handle(action) }
@@ -189,8 +190,8 @@ internal class DefaultAiStudioStore(
     @Suppress("CyclomaticComplexMethod")
     private suspend fun handle(action: AiStudioAction) {
         when (action) {
-            is AiStudioAction.EditDraft, AiStudioAction.Send, AiStudioAction.CancelTurn, is AiStudioAction.CancelChatTurn,
-            is AiStudioAction.AnswerPermission,
+            is AiStudioAction.EditDraft, AiStudioAction.Send, is AiStudioAction.SendChatDraft,
+            AiStudioAction.CancelTurn, is AiStudioAction.CancelChatTurn, is AiStudioAction.AnswerPermission,
             -> Unit
             is AiStudioAction.ReadAt -> readAt(action)
             is AiStudioAction.LoadOlderMessages -> if (screen.value.chat?.id == action.chatId &&
@@ -215,7 +216,7 @@ internal class DefaultAiStudioStore(
                 enginePicker?.close()
                 screen.update { it.copy(sessionBootstrap = null) }
             }
-            is AiStudioAction.EnginePicker -> if (screen.value.sessionBootstrap != null) enginePicker?.handle(action)
+            is AiStudioAction.EnginePicker -> handleEnginePicker(action)
             is AiStudioAction.BootstrapProject -> {
                 val project = screen.value.sessionBootstrap?.project
                 updateBootstrapProject(screen, sessionBootstrap, defaultDispatcher, action)
@@ -243,6 +244,18 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.SearchFiles -> screen.update { workspaceFiles.search(it, action.text) }
             is AiStudioAction.OpenFile -> openViewer(workspaceFiles.find(action.id))
             is AiStudioAction.OpenResult -> openViewer(findMessage(action.id).let { (it as? Reply)?.result })
+            is AiStudioAction.OpenArtifact -> findArtifact(action.replyId, action.fileId)?.let { openViewer(it) }
+            is AiStudioAction.SaveArtifact -> if (screen.value.artifactToSave == null) {
+                val file = findArtifact(action.replyId, action.fileId) ?: return
+                val opened = screen.readStored { file.withContent(persistence) } ?: return
+                screen.update { it.copy(artifactToSave = opened) }
+            }
+            is AiStudioAction.ArtifactSaveFinished -> screen.update {
+                it.copy(
+                    artifactToSave = null,
+                    storageError = if (action.failed) "Не удалось сохранить вложение" else it.storageError,
+                )
+            }
             AiStudioAction.CloseViewer -> openViewer(null)
             is AiStudioAction.ToggleWork -> screen.update { it.copy(expandedWork = it.expandedWork.toggle(action.id)) }
             is AiStudioAction.ToggleStep -> screen.update {
@@ -251,11 +264,21 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.ToggleWorkEvent -> if (screen.value.chat != null) {
                 screen.toggleStoredEvent(selected, action, persistence, expandedReplies)
             }
+            is AiStudioAction.SetWorkExpanded -> if (screen.value.chat != null) {
+                screen.setWorkExpanded(selected, action, persistence, expandedReplies)
+            }
         }
     }
 
     private fun requestTurnCancellation(id: String) {
-        if (remoteTurns?.requestCancellation(id) != true) enqueue { turns[id]?.stop() }
+        val remote = remoteTurns
+        if (remote?.requestCancellation(id) != true) {
+            enqueue { turns[id]?.stop() }
+            return
+        }
+        screen.update {
+            if (it.chat?.id == id && remote.isStopping(id)) it.copy(activity = Activity.Stopping, request = null) else it
+        }
     }
 
     private suspend fun answerPermission(id: String, action: AiStudioAction.AnswerPermission) {
@@ -264,15 +287,18 @@ internal class DefaultAiStudioStore(
     }
 
     private suspend fun openChat(id: String, acknowledgeResult: Boolean = true) {
+        if (enginePicker?.isApplyingToChat == true) return
         val entry = workspace.chats.firstOrNull { it.summary.id == id } ?: return
-        val loaded = screen.readStored { persistence?.load(entry) ?: entry } ?: return
+        val localTurn = id in turns || remoteTurns?.isRunning(id) == true
+        val loaded = if (entry.payloadLoaded && localTurn) entry
+        else screen.readStored { persistence?.load(entry) ?: entry } ?: return
         enginePicker?.close()
         val target = if (acknowledgeResult) loaded.withReadResult() else loaded
         if (target !== entry) updateChat(id) { target }
         projectsSessionsStore?.dispatch(SessionAction.Select(id))?.getOrThrow()
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         workspace = workspace.copy(selectedId = id)
-        if (screen.value.chat?.id == id) {
+        if (screen.value.chat?.id == id && target.messages === entry.messages) {
             screen.update { withProjectsSessions(it.copy(chat = target.summary, sessionBootstrap = null)) }
             if (target !== loaded) save()
         } else {
@@ -322,6 +348,7 @@ internal class DefaultAiStudioStore(
                 activity = remoteTurns?.activity(id) ?: turn?.activity ?: Activity.Idle,
                 restoreAnchor = target.anchor,
                 restoreIndex = restoredIndex,
+                openedHistory = AiStudioScreenState.OpenedHistory(live?.id ?: messages.firstOrNull()?.id),
                 fileGroups = workspaceFiles.groups(it.fileSearch),
                 attachments = target.attachments,
                 viewer = null,
@@ -365,6 +392,7 @@ internal class DefaultAiStudioStore(
     }
 
     private suspend fun showSessionBootstrap(project: SessionBootstrapState.Project, title: String? = null) {
+        if (enginePicker?.isApplyingToChat == true) return
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         val bootstrap = SessionBootstrapState(project, projectTitle = title, id = nextId())
         screen.update {
@@ -491,6 +519,27 @@ internal class DefaultAiStudioStore(
         save()
     }
 
+    private fun handleEnginePicker(action: AiStudioAction.EnginePicker) {
+        val picker = enginePicker ?: return
+        val current = screen.value
+        if (current.sessionBootstrap != null || current.chatEnginePicker != null) {
+            picker.handle(action)
+        } else if (action is AiStudioAction.EnginePicker.Open) {
+            val chat = current.chat ?: return
+            val configuration = chat.configuration ?: return
+            if (remoteTurns?.isRunning(chat.id) != true) picker.startExisting(chat.id, configuration, action.step)
+        }
+    }
+
+    private fun configurationApplied(id: String, configuration: Selection) {
+        if (workspace.chats.none { it.summary.id == id }) return
+        updateChat(id) { it.copy(summary = it.summary.copy(configuration = configuration)) }
+        screen.update { current ->
+            if (current.chat?.id == id) current.copy(chat = chat(id).summary) else current
+        }
+        save()
+    }
+
     private fun attach(id: String) {
         val file = AuroraMock.inputs.firstOrNull { it.id == id } ?: return
         if (selected.attachments.none { it.id == id }) attachments(selected.attachments + file)
@@ -561,7 +610,13 @@ internal class DefaultAiStudioStore(
         save()
     }
 
+    private fun submitChatDraft(chatId: String) {
+        val draft = editor.value
+        if (draft.chatId == chatId) enqueue { send(draft) }
+    }
+
     private suspend fun send(draft: Draft) {
+        if (enginePicker?.isApplyingToChat == true) return
         val chat = selected
         val chatId = chat.summary.id
         val text = draft.text.trim()
@@ -586,22 +641,33 @@ internal class DefaultAiStudioStore(
     private suspend fun sendToEngine(remote: RemoteChatTurns, draft: Draft, text: String, chat: AuroraChat) {
         val id = chat.summary.id
         val files = screen.readStored { chat.attachments.map { it.withContent(persistence) } } ?: return
+        startEngineTurn(remote, id, RemoteChatTurns.Submission.New(text, files) { saveSubmittedDraft(draft, chat) })
+    }
+
+    private fun startEngineTurn(remote: RemoteChatTurns, id: String, submission: RemoteChatTurns.Submission) {
+        if (remote.isRunning(id)) return
         remote.start(
-            id, text, files,
-            saveDraft = { saveSubmittedDraft(draft, chat) },
+            id, submission,
             render = { update ->
                 if (workspace.chats.any { it.summary.id == id }) renderRemoteTurn(id, update)
             },
             complete = { outcome ->
-                val failure = outcome?.exceptionOrNull()
-                if (failure is StudioRepositoryException) reportStorageError()
-                if ((outcome == null || failure != null) && screen.value.chat?.id == id) {
-                    if (screen.value.live != null) renderer.reset()
-                    screen.update { it.copy(activity = Activity.Idle, live = null, request = null) }
+                if (workspace.chats.any { it.summary.id == id }) {
+                    if (outcome?.exceptionOrNull() is StudioRepositoryException) reportChatSaveError(id)
+                    val status = chat(id).summary.navigationStatus
+                    if (status == NavigationStatus.Working || status == NavigationStatus.Attention) finish(id)
                 }
             },
         )
-        screen.update { it.copy(activity = Activity.Sending) }
+        changeNavigationStatus(id, NavigationStatus.Working)
+        screen.update {
+            withProjectsSessions(it.copy(chat = selected.summary, activity = remote.activity(id) ?: Activity.Sending))
+        }
+    }
+
+    private fun reportChatSaveError(id: String) {
+        updateChat(id) { it.copy(summary = it.summary.copy(storageError = SaveError)) }
+        if (screen.value.chat?.id == id) screen.update { it.copy(chat = chat(id).summary) }
     }
 
     @Throwable(CancellationException::class)
@@ -630,22 +696,40 @@ internal class DefaultAiStudioStore(
     private fun renderRemoteTurn(id: String, turn: ChatTurn) {
         if (!chat(id).persistedThroughDomain) updateChat(id) { it.copy(persistedThroughDomain = true) }
         val visible = workspace.selectedId == id && screen.value.chat?.id == id
-        putMessage(id, turn.user.display())
-        val reply = turn.reply?.display() as? Reply
+        putMessage(id, turn.user.display() as User)
         if (!turn.running) {
-            finish(id, reply)
+            finish(id, turn.reply?.display() as? Reply)
             return
         }
-        if (!visible) return
+        val waiting = turn.permission != null && remoteTurns?.isStopping(id) != true
+        val status = if (waiting) NavigationStatus.Attention else NavigationStatus.Working
+        val navigationChanged = changeNavigationStatus(id, status)
+        if (navigationChanged) save()
+        if (!visible) {
+            if (navigationChanged) screen.update(::withProjectsSessions)
+            return
+        }
+        val reply = remoteTurns?.reply(id)
         if (reply != null) renderer.update(id, reply.id, reply.text)
         val messages = history(selected)
-        workspaceFiles.refresh(messages)
+        workspaceFiles.refresh(listOfNotNull(reply) + messages)
         screen.update {
-            it.copy(
-                messages = messages, live = reply, request = remoteTurns?.request(id),
+            val closedStages = reply?.let { current ->
+                val previous = it.live?.takeIf { old -> old.id == current.id }
+                current.steps.filter { step ->
+                    step.result != null && previous?.steps?.any { old -> old.id == step.id && old.result == null } == true
+                }.map { step -> "${current.id}/${step.id}" }.toSet()
+            }.orEmpty()
+            val next = it.copy(
+                chat = selected.summary, messages = messages, live = reply, request = remoteTurns?.request(id),
                 activity = remoteTurns?.activity(id) ?: Activity.Running, attachments = selected.attachments,
                 fileGroups = workspaceFiles.groups(it.fileSearch),
+                expandedSteps = it.expandedSteps - closedStages,
+                expandedEvents = if (closedStages.isEmpty()) it.expandedEvents else it.expandedEvents.filterNot { key ->
+                    closedStages.any { stage -> key.startsWith("$stage/") }
+                }.toSet(),
             )
+            if (navigationChanged) withProjectsSessions(next) else next
         }
     }
 
@@ -674,6 +758,12 @@ internal class DefaultAiStudioStore(
     private fun retry(id: String) {
         val message = findMessage(id)
         if ((message as? User)?.retryAllowed == false || (message as? Reply)?.retryAllowed == false) return
+        remoteTurns?.let { remote ->
+            if (message is User && message.delivery == Delivery.Failed && !message.answers) {
+                startEngineTurn(remote, workspace.selectedId, RemoteChatTurns.Submission.Retry(id))
+            }
+            return
+        }
         val turn = turns[workspace.selectedId]
         if (turn != null) {
             if (message is User && message.answers && message.delivery == Delivery.Failed) turn.retryAnswer(message)
@@ -712,6 +802,12 @@ internal class DefaultAiStudioStore(
 
     private fun findMessage(id: String?): Message? = screen.value.messages.firstOrNull { it.id == id }
 
+    private fun findArtifact(replyId: String, fileId: String): File? {
+        val reply = screen.value.live?.takeIf { it.id == replyId } ?: findMessage(replyId) as? Reply ?: return null
+        return reply.artifacts.firstOrNull { it.id == fileId } ?: reply.steps.asSequence()
+            .flatMap { it.events }.flatMap { it.files }.firstOrNull { it.id == fileId }
+    }
+
     internal fun nextId(): String {
         if (persistence != null) return kotlin.uuid.Uuid.random().toString()
         workspace = workspace.copy(serial = workspace.serial + 1)
@@ -731,12 +827,7 @@ internal class DefaultAiStudioStore(
     internal fun changed(chatId: String, structural: Boolean) {
         val turn = turns[chatId] ?: return
         rememberReply(chatId, turn.reply, deferSave = !structural)
-        if (structural) {
-            val status = turn.workState.toNavigationStatus()
-            if (chat(chatId).summary.navigationStatus != status) {
-                updateChat(chatId) { it.copy(summary = it.summary.copy(navigationStatus = status)) }
-            }
-        }
+        if (structural) changeNavigationStatus(chatId, turn.workState.toNavigationStatus())
         if (chatId != workspace.selectedId && structural) screen.update(::withProjectsSessions)
         if (chatId == workspace.selectedId) {
             requestRender(turn)
@@ -809,7 +900,7 @@ internal class DefaultAiStudioStore(
                 )
             }
             val updated = withProjectsSessions(next)
-            if (reply?.status == ReplyStatus.Completed) updated.collapseWork(reply.id) else updated
+            if (reply != null && reply.status != ReplyStatus.Working) updated.collapseWork(reply.id) else updated
         }
         // The completed screen revision already owns the full final document. Keep the last
         // live revision until a new turn/chat replaces it, so collectors cannot see a blank handoff.
@@ -819,6 +910,12 @@ internal class DefaultAiStudioStore(
     internal fun event(command: () -> Unit) = enqueue { command() }
 
     private fun chat(id: String): AuroraChat = workspace.chats.first { it.summary.id == id }
+
+    private fun changeNavigationStatus(id: String, status: NavigationStatus?): Boolean {
+        if (chat(id).summary.navigationStatus == status) return false
+        updateChat(id) { it.copy(summary = it.summary.copy(navigationStatus = status)) }
+        return true
+    }
 
     private fun updateChat(id: String, transform: (AuroraChat) -> AuroraChat) {
         workspace = workspace.copy(chats = workspace.chats.map { if (it.summary.id == id) transform(it) else it })
@@ -869,6 +966,7 @@ internal class DefaultAiStudioStore(
     private companion object {
         const val RestoreError = "Не удалось восстановить диалоги. Изменения в этом сеансе не сохраняются."
         const val SaveError = "Не удалось сохранить диалог"
+        const val WorkspaceSaveError = "Не удалось сохранить изменения в диалоге"
         const val SaveInterval = 150L
         const val MockTime = "14:04"
     }

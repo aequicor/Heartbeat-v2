@@ -70,8 +70,8 @@ private fun AuroraDraftAttachment(file: File, touch: Boolean, onAction: (AiStudi
         if (touch) Modifier.padding(horizontal = AuroraLayout.Space) else Modifier,
         label = "Убрать ${file.name}", touch = touch, background = AuroraColors.Canvas, round = false,
     ) {
-        if (!touch) {
-            HbIcon(HbIconGlyph.Document, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
+        AuroraAttachmentThumbnail(file.image, Modifier.size(AuroraLayout.MessageMenuBadge)) {
+            if (!touch) HbIcon(HbIconGlyph.Document, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
         }
         AuroraText(
             file.name,

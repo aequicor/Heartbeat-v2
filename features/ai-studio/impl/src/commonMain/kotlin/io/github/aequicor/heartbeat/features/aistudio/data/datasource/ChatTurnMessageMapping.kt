@@ -4,8 +4,10 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord.Part
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.isMarkdownAttachment
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.io.encoding.Base64
 
 internal fun ChatHistoryEntry.Message.toTurnRecord(): ChatTurnMessageRecord {
     val role = if (this is ChatHistoryEntry.User) "user" else "assistant"
@@ -27,6 +29,7 @@ internal fun ChatHistoryEntry.Message.toTurnRecord(): ChatTurnMessageRecord {
             is ChatHistoryEntry.Reply -> {
                 put("status", status.name)
                 put("retryAllowed", retryAllowed)
+                failure?.let { put("failure", it.name) }
             }
         }
     }
@@ -42,10 +45,15 @@ private fun ChatHistoryEntry.Message.parts(): List<Part> = buildList {
             for (step in steps) {
                 val parent = size
                 add(Part("step", body = step.details, title = step.title, status = step.status.name, header = step.header()))
-                for (event in step.events) add(event.toPart(parent))
+                for (event in step.events) {
+                    val eventPosition = size
+                    add(event.toPart(parent))
+                    event.files.forEach { add(it.toPart(parent = eventPosition)) }
+                }
                 step.result?.let { add(Part("text", parent = parent, body = it)) }
             }
             result?.let { add(it.toPart()) }
+            artifacts.forEach { add(it.toPart(AgentArtifactPart)) }
         }
     }
 }
@@ -81,6 +89,8 @@ private fun ChatHistoryEntry.Event.toPart(parent: Int): Part {
         put("details", "")
         put("kind", kind.name)
         put("status", status.name)
+        operation?.let { put("operation", it.name) }
+        command?.let { put("command", it) }
         detailLabel?.let { put("detailLabel", it) }
         detailsFormat?.let { put("detailsFormat", it.name) }
     }
@@ -90,17 +100,28 @@ private fun ChatHistoryEntry.Event.toPart(parent: Int): Part {
     )
 }
 
-private fun ChatAttachment.toPart(): Part {
+private fun ChatAttachment.toPart(partHeader: String? = null, parent: Int? = null): Part {
     val header = buildJsonObject {
         put("id", id)
         put("name", name)
         put("kind", kind)
         put("content", "")
+        mimeType?.let { put("mimeType", it) }
+        if (base64Encoded) put("base64Encoded", true)
         date?.let { put("date", it.header()) }
+        image?.let { image ->
+            put("image", buildJsonObject {
+                put("mimeType", image.mimeType)
+                image.thumbnail?.let { put("thumbnail", it) }
+            })
+        }
     }
+    val mimeType = mimeType ?: image?.mimeType ?: if (isMarkdownAttachment(name, kind)) "text/markdown" else "text/plain"
+    val size = size ?: if (image != null || base64Encoded) Base64.decode(content).size.toLong()
+    else content.encodeToByteArray().size.toLong()
     return Part(
-        "attachment", title = name,
-        attachment = ChatTurnMessageRecord.Attachment(storageId, name, content, header.toString()),
+        "attachment", title = name, header = partHeader, parent = parent,
+        attachment = ChatTurnMessageRecord.Attachment(storageId, name, mimeType, content, header.toString(), size),
     )
 }
 
@@ -112,3 +133,4 @@ private fun ChatAttachment.Date.header() = buildJsonObject {
 }
 
 private const val MessageSerialPrefix = "io.github.aequicor.heartbeat.features.aistudio.presentation.contract.AiStudioScreenState"
+internal const val AgentArtifactPart = """{"role":"agent_artifact"}"""

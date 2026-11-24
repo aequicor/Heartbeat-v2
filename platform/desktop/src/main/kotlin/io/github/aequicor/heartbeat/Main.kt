@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -28,7 +29,9 @@ import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import java.io.File
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
@@ -70,14 +73,24 @@ fun main() {
             )
         }
 
-        val onClose = {
-            lifecycle.destroy()
-            try {
-                runBlocking { graph.aiEngineFacade.dispose() }
-            } finally {
-                graph.databaseInitializer.close()
-                graph.appCoroutineScope.cancel()
-                exitApplication()
+        val shutdownScope = rememberCoroutineScope()
+        val onClose: () -> Unit = remember(graph, shutdownScope) {
+            var closing = false
+            {
+                if (!closing) {
+                    closing = true
+                    shutdownScope.launch {
+                        try {
+                            lifecycle.destroy()
+                            graph.aiEngineFacade.dispose()
+                        } finally {
+                            // Cancelled chat turns still commit their last received state.
+                            graph.appCoroutineScope.coroutineContext.job.cancelAndJoin()
+                            graph.databaseInitializer.close()
+                            exitApplication()
+                        }
+                    }
+                }
             }
         }
         val state = rememberWindowState(width = 1440.dp, height = 900.dp)

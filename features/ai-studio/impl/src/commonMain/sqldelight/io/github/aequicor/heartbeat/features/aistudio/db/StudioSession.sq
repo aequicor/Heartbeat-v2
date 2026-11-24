@@ -11,7 +11,8 @@ CREATE TABLE studio_session (
     is_expanded INTEGER NOT NULL DEFAULT 1,
     workspace_payload TEXT,
     workspace_summary TEXT,
-    work_state TEXT NOT NULL DEFAULT 'Idle'
+    work_state TEXT NOT NULL DEFAULT 'Idle',
+    work_state_owner TEXT
 );
 
 CREATE INDEX studio_session_root_page

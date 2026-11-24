@@ -19,5 +19,12 @@ internal data class ChatTurnMessageRecord(
         val attachment: Attachment? = null,
     )
 
-    data class Attachment(val existingId: String?, val name: String, val content: String, val header: String)
+    data class Attachment(
+        val existingId: String?,
+        val name: String,
+        val mimeType: String,
+        val content: String,
+        val header: String,
+        val size: Long,
+    )
 }

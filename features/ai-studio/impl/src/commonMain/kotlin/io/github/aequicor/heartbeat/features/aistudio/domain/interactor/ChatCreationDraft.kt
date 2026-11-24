@@ -17,7 +17,7 @@ internal interface ChatCreationDraft {
     suspend fun chooseModel(id: String): Result<Unit>
 
     @Throwable(CancellationException::class)
-    suspend fun chooseReasoning(id: String): Result<Unit>
+    suspend fun applyReasoning(id: String): Result<Unit>
 
     @Throwable(CancellationException::class)
     suspend fun apply(): Result<Unit>
@@ -29,5 +29,5 @@ internal interface ChatCreationDraft {
     suspend fun retry(): Result<Unit>
 
     @Throwable(CancellationException::class)
-    suspend fun create(prompt: String): Result<SessionBootstrapResult>
+    suspend fun create(prompt: String, firstAttachmentName: String? = null): Result<SessionBootstrapResult>
 }

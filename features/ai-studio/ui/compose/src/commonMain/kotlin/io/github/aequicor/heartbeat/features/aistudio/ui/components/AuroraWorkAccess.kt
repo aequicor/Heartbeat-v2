@@ -3,7 +3,8 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
@@ -21,26 +24,31 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToDown
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -49,6 +57,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.constrainWidth
@@ -56,8 +65,11 @@ import androidx.compose.ui.unit.offset
 import io.github.aequicor.heartbeat.designsystem.components.HbAuroraOutline
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
+import kotlinx.coroutines.CoroutineScope
 
 internal class AuroraWorkAccess(startedLive: Boolean) {
     val requester = FocusRequester()
@@ -66,7 +78,10 @@ internal class AuroraWorkAccess(startedLive: Boolean) {
         private set
     var restoringAfterToggle = false
     var headerHeight by mutableIntStateOf(0)
-    var displayedHistoryHeight = 0
+    val historyHeight = AuroraMeasuredHeight()
+    val answerHeight = AuroraMeasuredHeight()
+    val displayedHistoryHeight get() = historyHeight.displayed
+    private var pendingEvent: EventDisclosure? = null
     var continuedFromStream by mutableStateOf(startedLive)
         private set
 
@@ -80,15 +95,30 @@ internal class AuroraWorkAccess(startedLive: Boolean) {
 
     fun beforeToggle(
         id: String,
-        expanded: Boolean,
         clearance: State<Int>?,
         reflow: AuroraHistoryReflow?,
-        animated: Boolean,
+        scope: CoroutineScope,
     ) {
         restoringAfterToggle = true
         finishStreamResize()
-        reflow?.beforeToggle(id, expanded, displayedHistoryHeight, animated, clearance)
+        reflow?.beforeToggle(id, displayedHistoryHeight, answerHeight.displayed, clearance, scope)
     }
+
+    fun expectEventDisclosure(action: AiStudioAction.ToggleWorkEvent, expanded: Set<String>, scrollInput: Int) {
+        val key = "${action.replyId}/${action.stepId}/${action.eventId}"
+        pendingEvent = EventDisclosure(key, key !in expanded, scrollInput)
+    }
+
+    fun restoreEventAnchor(expanded: Set<String>, id: String, reflow: AuroraHistoryReflow?, scope: CoroutineScope) {
+        val request = pendingEvent ?: return
+        if (request.open != (request.key in expanded)) return
+        pendingEvent = null
+        if (reflow != null && request.scrollInput == reflow.tail.inputGeneration) {
+            reflow.beforeToggle(id, displayedHistoryHeight, answerHeight.displayed, null, scope)
+        }
+    }
+
+    private data class EventDisclosure(val key: String, val open: Boolean, val scrollInput: Int)
 }
 
 @Composable
@@ -101,24 +131,25 @@ internal fun AuroraReplyWork(
     reflow: AuroraHistoryReflow?,
     finalResize: Boolean,
     onResizeEnd: () -> Unit,
+    expandedThinking: Boolean,
     work: @Composable () -> Unit,
 ) {
-    val completed = reply.status == ReplyStatus.Completed
+    val finished = reply.status != ReplyStatus.Working
     val hasWork = reply.steps.isNotEmpty()
     val settled = !finalResize && focus.displayedHistoryHeight == 0
-    if (completed && !hasWork && settled) return
-    val resize = auroraWorkHeightMotion(
-        focus, finalResize, onResizeEnd, streaming = reply.status == ReplyStatus.Working,
-    ) { height, target ->
-        reflow?.workResized(reply.id, expanded, height, target)
+    if (finished && !hasWork && settled) return
+    val scope = rememberCoroutineScope()
+    val streaming = expandedThinking && reflow?.ownsWorkResize(reply.id) != true
+    val resize = auroraWorkHeightMotion(focus, finalResize, onResizeEnd, streaming) { height, target ->
+        reflow?.workResized(reply.id, height, target, scope)
     }
-    Column(resize) {
-        if (completed && hasWork && touch) {
+    Column(Modifier.trackReplyArrivalBlock().then(resize)) {
+        if (finished && hasWork && touch) {
             AuroraWorkHeader(reply.steps.size, expanded, onToggle, Modifier.focusRequester(focus.requester))
         }
-        if (hasWork && (!completed || expanded)) {
+        if (!finished || hasWork && expanded) {
             work()
-            if (completed) {
+            if (finished) {
                 Box(Modifier.fillMaxWidth().height(AuroraLayout.Stroke).background(AuroraColors.MessageDivider))
             }
         }
@@ -134,7 +165,11 @@ private fun AuroraWorkHeader(
 ) {
     val surface = if (expanded) Color.Transparent else AuroraColors.WorkAccess
     AuroraControl(onClick, modifier.fillMaxWidth(), touch = true, background = surface, round = false) {
-        AuroraWorkAccessLabel(auroraWorkTitle(count), expanded, touch = true)
+        AuroraWorkChevron(expanded, tint = AuroraColors.Muted)
+        AuroraWorkText(
+            auroraWorkTitle(count), AuroraWorkRole.Action,
+            Modifier.padding(start = AuroraLayout.Space), color = AuroraColors.WorkMuted,
+        )
     }
 }
 
@@ -160,9 +195,9 @@ internal fun rememberAuroraWorkReveal(
 }
 
 @Composable
-internal fun RestoreAuroraWorkFocus(access: AuroraWorkAccess, hasWork: Boolean, expanded: Boolean, completed: Boolean) {
-    val focusedAtCompletion = completed && access.focusWithinReply
-    SideEffect(expanded, completed) {
+internal fun RestoreAuroraWorkFocus(access: AuroraWorkAccess, hasWork: Boolean, expanded: Boolean, finished: Boolean) {
+    val focusedAtCompletion = finished && access.focusWithinReply
+    SideEffect(expanded, finished) {
         if (hasWork && (access.restoringAfterToggle || focusedAtCompletion)) access.requester.requestFocus()
         access.restoringAfterToggle = false
     }
@@ -198,7 +233,7 @@ internal fun AuroraReplyLayout(
 @Composable
 internal fun Modifier.auroraExpandedWorkSurface(headerHeight: Int): Modifier {
     val above = with(LocalDensity.current) {
-        if (headerHeight > 0) headerHeight.toDp() else AuroraLayout.DesktopWorkDisclosureTarget
+        if (headerHeight > 0) headerHeight.toDp() else AuroraLayout.DesktopWorkHeaderHeight
     }
     return layout { measurable, constraints ->
         // The header occupies the same space above the reply in hover and expanded states.
@@ -220,7 +255,7 @@ internal fun AuroraWorkKeyboardAccess(
     onToggle: () -> Unit,
 ) {
     Box(
-        Modifier.fillMaxWidth().heightIn(min = AuroraLayout.DesktopWorkDisclosureTarget)
+        Modifier.fillMaxWidth().heightIn(min = AuroraLayout.DesktopWorkHeaderHeight)
             .semantics {
                 contentDescription = title
                 stateDescription = if (expanded) "Развёрнуто" else "Свёрнуто"
@@ -228,17 +263,17 @@ internal fun AuroraWorkKeyboardAccess(
                 onClick { onToggle(); true }
             }
             .focusRequester(requester).onFocusChanged { onFocus(it.isFocused) }
-            .onKeyEvent { event ->
-                when (event.key) {
-                    Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                        if (event.type == KeyEventType.KeyUp) onToggle()
-                        true
-                    }
-                    else -> false
-                }
-            }
+            .toggleWorkOnKey(onToggle)
             .focusable(),
     )
+}
+
+@Composable
+internal fun auroraWorkHeaderMinWidth(title: String): Dp {
+    val text = rememberTextMeasurer().measure(title, style = HbTypography.Caption, maxLines = 1)
+    return with(LocalDensity.current) {
+        (text.size.width + AuroraLayout.Glyph.roundToPx() + AuroraLayout.Space.roundToPx() * 3).toDp()
+    }
 }
 
 @Composable
@@ -247,65 +282,93 @@ internal fun AuroraDesktopWorkHeader(
     expanded: Boolean,
     focusVisible: Boolean,
     interaction: MutableInteractionSource,
+    selection: SelectionState,
     reveal: AuroraMessageReveal,
     onToggle: () -> Unit,
+    onTextFocus: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    workMenu: AuroraWorkMenu? = null,
 ) {
     val headerInteraction = remember { MutableInteractionSource() }
     val hovered by headerInteraction.collectIsHoveredAsState()
-    val background = if (expanded) AuroraColors.AgentMessage else AuroraColors.WorkAccess
-    val outline = if (focusVisible) AuroraColors.Primary else AuroraColors.Line
+    val highlight = hovered || selection.selectedTexts.isNotEmpty()
+    val background = if (highlight) AuroraColors.WorkAccessHover else AuroraColors.WorkAccess
+    val outline = if (focusVisible) AuroraColors.Primary else AuroraColors.MessageOutline
     val stroke = if (focusVisible) AuroraLayout.FrameStroke else AuroraLayout.Stroke
     val toggle by rememberUpdatedState(onToggle)
+    // The overlay is outside the bubble's layout bounds. Pass its click to the same menu in root coordinates.
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val pointer = if (reveal.interactive) {
-        Modifier.pointerInput(Unit) { detectTapGestures(onTap = { toggle() }) }
+        Modifier.onGloballyPositioned { coordinates = it }.pointerInput(workMenu) {
+            awaitEachGesture {
+                // Observe taps before text selection handles the press. Drag consumption still cancels the tap.
+                // Compose's awaitFirstDown only accepts the primary mouse button on Desktop.
+                var down = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.changedToDown() }
+                while (down == null) {
+                    down = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.changedToDown() }
+                }
+                if (currentEvent.buttons.isSecondaryPressed) {
+                    val open = workMenu?.openAt
+                    val header = coordinates
+                    if (open != null && header?.isAttached == true) {
+                        down.consume()
+                        open(header.localToRoot(down.position))
+                    }
+                    return@awaitEachGesture
+                }
+                if (down.type == PointerType.Mouse && !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
+                waitForUpOrCancellation(PointerEventPass.Initial)?.let {
+                    it.consume()
+                    toggle()
+                }
+            }
+        }
     } else Modifier
-    val surface = if (!expanded || focusVisible) {
-        HbAuroraOutline(background, outline, AuroraLayout.MessageRadius, Dp.Hairline, stroke)
-    } else Modifier
+    val surface = HbAuroraOutline(background, outline, AuroraLayout.MessageRadius, Dp.Hairline, stroke)
     Row(
-        Modifier.fillMaxWidth().aboveMessage().heightIn(min = AuroraLayout.DesktopWorkDisclosureTarget)
+        Modifier.fillMaxWidth().aboveMessage().heightIn(min = AuroraLayout.DesktopWorkHeaderHeight)
             .then(modifier)
             .graphicsLayer { alpha = reveal.opacity.value }
             .then(surface)
-            .drawBehind {
-                if (hovered) {
-                    inset(AuroraLayout.SmallGap.toPx()) {
-                        drawRoundRect(
-                            AuroraColors.WorkHover, cornerRadius = CornerRadius(AuroraLayout.SmallRadius.toPx()),
-                        )
-                    }
-                }
-            }
-            .hoverable(interaction)
+            .hoverable(interaction, enabled = reveal.interactive)
             .hoverable(headerInteraction, enabled = reveal.interactive)
             .then(pointer)
+            .toggleWorkOnKey(onToggle)
             .semantics { hideFromAccessibility() }
             .padding(horizontal = AuroraLayout.Space, vertical = AuroraLayout.SmallGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AuroraWorkAccessLabel(title, expanded, touch = false)
+        AuroraWorkChevron(expanded, tint = AuroraColors.DesktopInk)
+        val inset = Modifier.padding(start = AuroraLayout.Space)
+        if (reveal.interactive) {
+            SelectionContainer(modifier = inset.onFocusChanged { onTextFocus(it.isFocused) }, state = selection) {
+                AuroraWorkText(title, AuroraWorkRole.Summary, color = AuroraColors.DesktopInk, maxLines = 1)
+            }
+        } else AuroraWorkText(title, AuroraWorkRole.Summary, inset, color = AuroraColors.DesktopInk, maxLines = 1)
     }
 }
 
-@Composable
-private fun AuroraWorkAccessLabel(title: String, expanded: Boolean, touch: Boolean) {
-    AuroraWorkChevron(expanded, tint = if (touch) AuroraColors.Muted else AuroraColors.DesktopInk)
-    AuroraWorkText(
-        title, AuroraWorkRole.Action,
-        Modifier.padding(start = AuroraLayout.Space),
-        color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopInk,
-    )
+private fun Modifier.toggleWorkOnKey(onToggle: () -> Unit): Modifier = onKeyEvent { event ->
+    when (event.key) {
+        Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+            if (event.type == KeyEventType.KeyUp) onToggle()
+            true
+        }
+        else -> false
+    }
 }
 
-internal fun auroraWorkTitle(count: Int): String {
+internal fun auroraWorkTitle(count: Int): String =
+    if (count == 0) "Ход работы" else "Ход работы · ${auroraWorkCount(count, "этап", "этапа", "этапов")}"
+
+internal fun auroraWorkCount(count: Int, one: String, few: String, many: String): String {
     val units = when {
-        count % 100 in 11..14 -> "этапов"
-        count % 10 == 1 -> "этап"
-        count % 10 in 2..4 -> "этапа"
-        else -> "этапов"
+        count % 100 in 11..14 -> many
+        count % 10 == 1 -> one
+        count % 10 in 2..4 -> few
+        else -> many
     }
-    return "Ход работы · $count $units"
+    return "$count $units"
 }
 
 private fun Modifier.aboveMessage() = layout { measurable, constraints ->

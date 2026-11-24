@@ -153,11 +153,13 @@ private fun AuroraRichBlock(
             AuroraRichBlocks(prepared.children.single(), touch, streaming, bodyStyle = bodyStyle)
         }
         is ReplyBlock.ListBlock -> AuroraRichList(block, prepared.children, touch, streaming, bodyStyle)
-        is ReplyBlock.Table -> AuroraRichTable(requireNotNull(prepared.table), touch)
-        is ReplyBlock.Rule -> Spacer(
-            Modifier.fillMaxWidth().height(AuroraLayout.Stroke).background(AuroraColors.MessageDivider),
-        )
-        is ReplyBlock.Code, is ReplyBlock.Diagram -> AuroraSourceBlock(block, touch, streaming, prepared.code)
+        is ReplyBlock.Table -> AuroraReplyArrivalBlock { AuroraRichTable(requireNotNull(prepared.table), touch) }
+        is ReplyBlock.Rule -> AuroraReplyArrivalBlock {
+            Spacer(Modifier.fillMaxWidth().height(AuroraLayout.Stroke).background(AuroraColors.MessageDivider))
+        }
+        is ReplyBlock.Code, is ReplyBlock.Diagram -> AuroraReplyArrivalBlock {
+            AuroraSourceBlock(block, touch, streaming, prepared.code)
+        }
     }
 }
 

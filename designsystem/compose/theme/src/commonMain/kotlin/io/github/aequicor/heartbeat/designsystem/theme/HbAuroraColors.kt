@@ -59,7 +59,7 @@ object HbAuroraColors {
     val DesktopWorkMuted = text.muted
     val MessageInk = text.primary
     val MessageActionSurface = Color(0xFFC6DDBE)
-    val MessageActionBadge = MessageActionSurface.copy(alpha = 0.92f)
+    val MessageActionBadge = MessageActionSurface
     val MessageActionOutline = Color(0x40506E4B)
     val MessageActionHover = Color(0x1A506E4B)
     val MessageActionError = Color(0xFF962218)
@@ -106,5 +106,6 @@ object HbAuroraColors {
     val WorkRunning = Color(0xFF76747C)
     val WorkHistory = Color(0xFFF0F2EB)
     val WorkAccess = Color(0xFFF4F4F1)
+    val WorkAccessHover = Color(0xFFE8E7E6)
     val WorkHover = Color(0xFFF4F3F2)
 }

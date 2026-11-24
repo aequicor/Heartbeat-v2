@@ -5,6 +5,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
 
@@ -14,14 +15,16 @@ internal fun AuroraWorkResult(
     content: ReplyHistoryContent?,
     touch: Boolean,
     modifier: Modifier = Modifier,
+    color: Color = AuroraColors.WorkInk,
+    contentModifier: Modifier = Modifier,
 ) {
     val selection = rememberSelectionState()
     val markdown = content?.takeUnless { it.plain }
     val width = if (markdown == null) Modifier else WorkMarkdownIntrinsicSize
     SelectionContainer(state = selection, modifier = modifier) {
-        Column {
+        Column(contentModifier) {
             AuroraMarkdownContent(text, markdown, selection,
-                auroraMessageStyle().copy(color = AuroraColors.WorkInk), touch, width)
+                auroraMessageStyle().copy(color = color), touch, width)
         }
     }
 }

@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,8 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
+private const val BadgeExpansionMillis = 160
+
 /** A desktop menu can replace its badge or fade in at a separate pointer anchor. */
 data class HbMenuMotion(
     val replaceTrigger: Boolean,
@@ -40,14 +43,17 @@ data class HbMenuMotion(
 
 internal class HbMenuVisual(val progress: () -> Float) {
     var anchor by mutableStateOf(IntOffset.Zero)
+    var entries: List<HbMenuEntry> = emptyList()
     val visible by derivedStateOf { progress() > 0f }
 }
 
 @Composable
 internal fun rememberHbMenuVisual(expanded: Boolean, motion: HbMenuMotion?): HbMenuVisual? {
     if (motion == null || HbTheme.motion == HbMotionPreference.Reduced) return null
+    val animation = if (motion.replaceTrigger) tween<Float>(BadgeExpansionMillis, easing = LinearOutSlowInEasing)
+    else tween(HbMotions.Default.ordinaryTransitionMs)
     val progress = animateFloatAsState(
-        if (expanded) 1f else 0f, tween(HbMotions.Default.ordinaryTransitionMs), label = "Message menu",
+        if (expanded) 1f else 0f, animation, label = "Message menu",
     )
     return remember(progress) { HbMenuVisual { progress.value } }
 }
@@ -63,8 +69,11 @@ internal fun HbMenuPopupVisual(
         DisposableEffect(motion.onHover) { onDispose { motion.onHover(false) } }
         Modifier.trackMenuHover(motion.onHover)
     } else Modifier
-    val animation = if (visual == null) Modifier else Modifier.graphicsLayer { alpha = visual.progress() }
-        .then(if (motion?.replaceTrigger == true) Modifier.clipFromBadge(visual) else Modifier)
+    val animation = when {
+        visual == null -> Modifier
+        motion?.replaceTrigger == true -> Modifier.clipFromBadge(visual)
+        else -> Modifier.graphicsLayer { alpha = visual.progress() }
+    }
     val accessibility = if (expanded) Modifier else Modifier.semantics { hideFromAccessibility() }
     val items = if (visual == null || motion?.replaceTrigger != true) Modifier else Modifier.graphicsLayer {
         alpha = (visual.progress() * 4f - 3f).coerceIn(0f, 1f)

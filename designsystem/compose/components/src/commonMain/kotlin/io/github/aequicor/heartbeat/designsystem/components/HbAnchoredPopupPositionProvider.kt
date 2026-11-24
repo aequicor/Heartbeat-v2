@@ -22,8 +22,12 @@ internal class HbAnchoredPopupPositionProvider(
     private val alignEnd: Boolean = false,
     private val pointerAnchor: IntOffset? = null,
     private val overlapAnchor: Boolean = false,
+    private val badgeSize: Int? = null,
     private val onAnchorInPopup: (IntOffset) -> Unit = {},
+    private val holdPosition: () -> Boolean = { false },
 ) : PopupPositionProvider {
+
+    private var lastPosition: IntOffset? = null
 
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -31,7 +35,17 @@ internal class HbAnchoredPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val anchor = pointerAnchor?.let { IntRect(anchorBounds.topLeft + it, IntSize.Zero) } ?: anchorBounds
+        val previous = lastPosition
+        if (previous != null && holdPosition()) return previous
+        val anchor = when {
+            pointerAnchor != null -> IntRect(anchorBounds.topLeft + pointerAnchor, IntSize.Zero)
+            badgeSize != null -> {
+                val width = minOf(anchorBounds.width, badgeSize)
+                val height = minOf(anchorBounds.height, badgeSize)
+                IntRect(anchorBounds.center - IntOffset(width / 2, height / 2), IntSize(width, height))
+            }
+            else -> anchorBounds
+        }
         val below = if (overlapAnchor) anchor.top else anchor.bottom
         val above = if (overlapAnchor) anchor.bottom else anchor.top
         val spaceBelow = windowSize.height - below - gap
@@ -56,6 +70,7 @@ internal class HbAnchoredPopupPositionProvider(
             x = x.coerceIn(0, maxX),
             y = y.coerceIn(0, maxY),
         )
+        lastPosition = position
         onAnchorInPopup(anchor.center - position)
         return position
     }

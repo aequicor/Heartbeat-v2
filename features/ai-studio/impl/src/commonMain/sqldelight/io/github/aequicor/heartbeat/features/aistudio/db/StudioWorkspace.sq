@@ -18,7 +18,7 @@ JOIN studio_project AS project ON project.id = session.project_id
 ORDER BY session.updated_at_seconds DESC, session.updated_at_nanos DESC, session.id ASC;
 
 selectWorkspacePayload:
-SELECT session.workspace_payload, chat.engine_id, chat.model_name, chat.reasoning_level
+SELECT session.workspace_payload, session.work_state, chat.engine_id, chat.model_name, chat.reasoning_level
 FROM studio_session AS session LEFT JOIN chat ON chat.session_id = session.id
 WHERE session.id = :id;
 
@@ -30,11 +30,30 @@ INSERT INTO studio_session(
 
 updateWorkspaceSession:
 UPDATE studio_session SET workspace_payload = :payload, workspace_summary = :summary
-WHERE id = :id;
+WHERE id = :id AND (work_state_owner IS NULL OR work_state_owner = :writer_owner);
 
 updateWorkspaceSessionWorkState:
-UPDATE studio_session SET work_state = :work_state WHERE id = :id AND work_state = :previous_work_state;
+UPDATE studio_session
+SET work_state = :work_state,
+    work_state_owner = CASE WHEN :work_state IN ('Working', 'Demand') THEN :writer_owner ELSE NULL END
+WHERE id = :id AND work_state = :previous_work_state
+    AND (work_state_owner IS NULL OR work_state_owner = :writer_owner);
+
+selectActiveWorkOwners:
+SELECT DISTINCT work_state_owner
+FROM studio_session
+WHERE work_state IN ('Working', 'Demand') AND work_state_owner IS NOT NULL;
+
+selectActiveWorkOwner:
+SELECT work_state_owner FROM studio_session
+WHERE id = :id AND work_state IN ('Working', 'Demand') AND work_state_owner IS NOT NULL;
+
+resetInterruptedWorkState:
+UPDATE studio_session SET work_state = 'Idle', work_state_owner = NULL
+WHERE id = :id AND work_state_owner = :ended_owner AND work_state IN ('Working', 'Demand');
 
 resetInterruptedWorkStates:
-UPDATE studio_session SET work_state = 'Idle' WHERE work_state IN ('Working', 'Demand');
+UPDATE studio_session SET work_state = 'Idle', work_state_owner = NULL
+WHERE work_state IN ('Working', 'Demand')
+    AND (work_state_owner IS NULL OR work_state_owner IN :ended_owners);
 

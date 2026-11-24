@@ -46,6 +46,9 @@ kotlin {
     sourceSets.commonTest.dependencies {
         implementation(libs.kotlinx.coroutines.test)
     }
+    sourceSets.jvmMain.dependencies {
+        implementation(libs.skiko.awt)
+    }
     sourceSets.jvmTest.dependencies {
         implementation(libs.sqldelight.sqlite.driver)
     }

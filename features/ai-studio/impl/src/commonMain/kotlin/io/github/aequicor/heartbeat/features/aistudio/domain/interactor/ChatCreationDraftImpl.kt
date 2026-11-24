@@ -35,25 +35,29 @@ internal class ChatCreationDraftImpl(
     private val sessions: SessionsDataSource,
     private val engines: ChatEngineDataSource,
     private val repository: ProjectsSessionsRepository,
+    initial: ChatDraftState = ChatDraftState(),
+    private val applyToChat: (suspend (ChatConfiguration) -> Unit)? = null,
 ) : ChatCreationDraft {
 
     private val mutex = Mutex()
-    private val current = MutableStateFlow(ChatDraftState())
+    private val current = MutableStateFlow(initial)
     override val state = current.asStateFlow()
     private var candidate: PreparedChatSession? = null
     private var accepted: PreparedChatSession? = null
-    private var restoreDefaults = true
+    private var restoreDefaults = applyToChat == null
     private val restoring = MutableStateFlow<Job?>(null)
     private var retryOperation: (suspend () -> Unit)? = null
     private var created = false
 
     suspend fun observeCatalog(): Unit = coroutineScope {
-        val saved = runCatching { sessions.lastConfiguration() }.rethrowCancellation().getOrNull()
+        val saved = if (applyToChat == null) {
+            runCatching { sessions.lastConfiguration() }.rethrowCancellation().getOrNull()
+        } else null
         engines.engines.collect { choices ->
             mutex.withLock {
                 current.value = current.value.copy(engines = choices)
                 val selected = current.value.confirmed
-                if (selected != null && choices.none { it.id == selected.engine.id }) {
+                if (applyToChat == null && selected != null && choices.none { it.id == selected.engine.id }) {
                     release(accepted)
                     accepted = null
                     current.value = current.value.copy(confirmed = null)
@@ -88,10 +92,11 @@ internal class ChatCreationDraftImpl(
         configure(id, level?.id, confirm = false)
     }
 
-    override suspend fun chooseReasoning(id: String) = command {
+    override suspend fun applyReasoning(id: String) = command {
         val editing = requireNotNull(current.value.editing)
         val choice = requireNotNull(current.value.options?.reasoning?.choice(id))
         current.value = current.value.copy(editing = editing.copy(level = choice))
+        configure(editing.model?.id, choice.id, confirm = true)
     }
 
     override suspend fun apply() = command {
@@ -104,13 +109,13 @@ internal class ChatCreationDraftImpl(
 
     override suspend fun retry() = mutex.withLock { retryOperation?.let { perform(it) } ?: Result.success(Unit) }
 
-    override suspend fun create(prompt: String): Result<SessionBootstrapResult> = mutex.withLock {
+    override suspend fun create(prompt: String, firstAttachmentName: String?): Result<SessionBootstrapResult> = mutex.withLock {
         runCatching {
-            if (!ChatPrompt.canSend(prompt, hasAttachments = false, hasActiveTurn = false)) {
+            if (!ChatPrompt.canSend(prompt, hasAttachments = firstAttachmentName != null, hasActiveTurn = false)) {
                 return@runCatching SessionBootstrapResult.EmptyPrompt
             }
-            val title = ChatPrompt.title(prompt)
-            check(!created && candidate == null)
+            val title = ChatPrompt.title(prompt, firstAttachmentName)
+            check(applyToChat == null && !created && candidate == null)
             val session = checkNotNull(accepted)
             val config = checkNotNull(current.value.confirmed).configuration()
             check(session.isAvailable && session.settings.model.matches(config.model) &&
@@ -161,6 +166,7 @@ internal class ChatCreationDraftImpl(
         val next = current.value.copy(editing = selection, options = options, busy = false, failed = false)
         if (confirm && next.canConfirm && options.model.matches(selection.model?.id) &&
             options.reasoning.matches(selection.level?.id)) {
+            applyToChat?.invoke(selection.configuration())
             release(accepted)
             accepted = session
             candidate = null

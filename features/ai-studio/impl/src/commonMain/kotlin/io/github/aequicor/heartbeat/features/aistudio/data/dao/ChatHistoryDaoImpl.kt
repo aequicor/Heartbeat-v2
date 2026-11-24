@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
+
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
@@ -11,6 +13,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
@@ -22,15 +25,19 @@ internal class ChatHistoryDaoImpl(
     private val connection: DatabaseConnection,
     @Named("io") private val ioDispatcher: CoroutineDispatcher,
     @Named("studio-chat-writes") private val writeLock: Mutex,
+    private val draftOwnership: ChatDraftOwnership,
 ) : ChatHistoryDao {
 
     @Throwable(DaoException::class, CancellationException::class)
-    override suspend fun page(sessionId: String, before: Long?, limit: Int): List<ChatEntryRecord> = read {
+    override suspend fun page(
+        sessionId: String, before: Long?, limit: Int, interruption: ChatInterruptionLabels,
+    ): List<ChatEntryRecord> = read {
         val chatId = chatForSession(sessionId).executeAsOne()
+        if (before == null) writeLock.withLock { recoverInterruptedDrafts(chatId, draftOwnership, interruption) }
         transactionWithResult {
             selectHistoryPage(chatId, before, limit.toLong()).executeAsList().map { row ->
                 val deferred = historyUsesPreview(row.status)
-                val query = if (deferred) selectPreviewParts(row.revision_id, ::Message_part) else selectParts(row.revision_id)
+                val query = selectHistoryParts(row.revision_id, deferred)
                 val parts = query.executeAsList().map { part ->
                     val attachment = part.attachment_id?.let { id ->
                         if (deferred) attachmentHeader(id) { key, size, json ->
@@ -61,10 +68,6 @@ internal class ChatHistoryDaoImpl(
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun file(id: String): ChatEntryRecord.Attachment = read { fullAttachment(id) }
 
-    private fun ChatQueries.fullAttachment(id: String): ChatEntryRecord.Attachment = selectAttachment(id).executeAsOne().let {
-        ChatEntryRecord.Attachment(it.id, checkNotNull(it.size_bytes), it.presentation, checkNotNull(it.inline_text))
-    }
-
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun partBody(id: Long): String = read { selectPartBody(id).executeAsOne().body.orEmpty() }
 
@@ -73,7 +76,7 @@ internal class ChatHistoryDaoImpl(
         revisionForEdit(chatId, revisionId, ChatEntryRecord::Revision).executeAsOne()
     }
 
-    private suspend fun <T> read(query: ChatQueries.() -> T): T = withContext(ioDispatcher) {
+    private suspend fun <T> read(query: suspend ChatQueries.() -> T): T = withContext(ioDispatcher) {
         accessStudioDatabase("Read chat history") { ChatQueries(connection.driver).query() }
     }
 
@@ -127,6 +130,25 @@ internal class ChatHistoryDaoImpl(
 }
 
 internal fun historyUsesPreview(status: String): Boolean = status != "draft"
+
+internal fun ChatQueries.fullAttachment(id: String, forRetry: Boolean = false): ChatEntryRecord.Attachment =
+    selectAttachment(id).executeAsOne().let {
+        val content = checkNotNull(it.inline_text)
+        if (forRetry) ChatImage.forMimeType(it.mime_type)?.decode(content)
+        ChatEntryRecord.Attachment(it.id, checkNotNull(it.size_bytes), it.presentation, content, it.mime_type)
+    }
+
+internal fun ChatQueries.selectHistoryParts(revision: Long, deferred: Boolean) =
+    if (deferred) {
+        selectPreviewParts((ReasoningPreviewLength + 1).toString(), revision, ::Message_part)
+    } else {
+        selectParts(revision)
+    }
+
+internal fun String.reasoningPreview(): String =
+    if (length <= ReasoningPreviewLength) this else take(ReasoningPreviewLength - 1).trimEnd { it.isHighSurrogate() } + "…"
+
+private const val ReasoningPreviewLength = 256
 
 internal fun ChatQueries.applyEdit(chatId: String, position: Long, revision: Long, keepContinuation: Boolean) {
     selectRevision(revision, chatId, position)

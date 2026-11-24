@@ -2,13 +2,14 @@ package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 
 internal interface ChatHistoryDao {
 
     @Throwable(DaoException::class, CancellationException::class)
-    suspend fun page(sessionId: String, before: Long?, limit: Int): List<ChatEntryRecord>
+    suspend fun page(sessionId: String, before: Long?, limit: Int, interruption: ChatInterruptionLabels): List<ChatEntryRecord>
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun position(sessionId: String, messageId: String): Long?

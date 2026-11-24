@@ -124,7 +124,7 @@ internal class ReplyMarkdownReader(
             Element.AUTOLINK, GfmToken.GFM_AUTOLINK -> listOf(autolink(text))
             Token.BLOCK_QUOTE, Token.HARD_LINE_BREAK -> listOf()
             Token.HTML_TAG -> listOf(ReplyInline(text))
-            else -> listOf(ReplyInline(EntityConverter.replaceEntities(text, true, true)))
+            else -> listOf(ReplyInline(plainInlineText(text)))
         }
     }
 
@@ -178,6 +178,11 @@ private val headingLevels = mapOf(
 
 private val listMarkers = setOf(Token.LIST_BULLET, Token.LIST_NUMBER, GfmToken.CHECK_BOX)
 private val linkTypes = setOf(Element.INLINE_LINK, Element.SHORT_REFERENCE_LINK, Element.FULL_REFERENCE_LINK)
+private val escapedHtmlCharacter = Regex("&(?:amp|quot|lt|gt);")
+private val htmlCharacters = mapOf("&amp;" to "&", "&quot;" to "\"", "&lt;" to "<", "&gt;" to ">")
+
+private fun plainInlineText(text: String): String =
+    escapedHtmlCharacter.replace(EntityConverter.replaceEntities(text, true, true)) { htmlCharacters.getValue(it.value) }
 
 private fun String.safeLink(): String? = takeIf {
     val scheme = substringBefore(':').lowercase()

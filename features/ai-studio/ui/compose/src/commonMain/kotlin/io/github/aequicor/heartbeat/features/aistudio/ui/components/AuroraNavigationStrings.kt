@@ -20,7 +20,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AiStudioScreenState.navigationErrorText(): String? =
-    renameErrorText(renameError) ?: deletionErrorText(deletionError) ?: storageError
+    renameErrorText(renameError) ?: deletionErrorText(deletionError) ?: chat?.storageError ?: storageError
 
 @Composable
 private fun renameErrorText(error: RenameError?): String? = when (error) {

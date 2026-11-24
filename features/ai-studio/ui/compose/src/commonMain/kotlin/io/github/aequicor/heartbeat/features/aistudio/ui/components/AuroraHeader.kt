@@ -84,7 +84,7 @@ private fun AuroraTouchHeader(
         ) {
             if (state.sessionBootstrap != null || chat.configuration != null) {
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                    AuroraChatEngineParameters(state.sessionBootstrap?.picker, chat.configuration, true, onAction)
+                    AuroraChatEngineParameters(state.sessionBootstrap?.picker ?: state.chatEnginePicker, chat.configuration, true, onAction)
                     AuroraAccessMenu(chat.access, onAction, touch = true)
                 }
             } else AuroraTouchParameters(chat, onAction, Modifier.weight(1f))

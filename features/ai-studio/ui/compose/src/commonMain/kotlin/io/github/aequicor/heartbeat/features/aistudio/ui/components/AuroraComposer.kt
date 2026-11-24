@@ -177,8 +177,7 @@ internal fun AuroraBootstrapComposer(
                     onAction(action)
                 }
             },
-            sendBlocked = field.text.isBlank() || bootstrap.operation != null ||
-                bootstrap.picker.confirmed == null || bootstrap.picker.step != null,
+            sendBlocked = bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null,
             importingAttachment = bootstrap.id in state.importingAttachmentsFor,
             attachmentError = state.attachmentErrorFor == bootstrap.id,
             attach = {
@@ -252,13 +251,9 @@ private fun AuroraComposer(
 
 @Composable
 private fun AuroraComposerActivity(activity: Activity) {
-    val label = when (activity) {
-        Activity.Stopping -> "Останавливаем…"
-        Activity.Sending -> "Отправляем…"
-        else -> return
-    }
+    if (activity != Activity.Stopping) return
     AuroraText(
-        label,
+        "Останавливаем…",
         Modifier.padding(start = AuroraLayout.ContentInset, top = AuroraLayout.SmallGap)
             .semantics { liveRegion = LiveRegionMode.Polite },
         small = true, color = AuroraColors.Muted,

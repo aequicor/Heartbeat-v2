@@ -43,7 +43,7 @@ private fun File.toRow(date: FileDate?): FileRow {
         else -> "${(size.toDouble() / Mebibyte).roundToInt()} МБ"
     }
     val dateLabel = date?.let { "${it.day} ${months[it.month - 1].second}, ${it.time}" }
-    return FileRow(openId, name, extension, sizeLabel, dateLabel)
+    return FileRow(openId, name, extension, sizeLabel, dateLabel, image)
 }
 
 internal fun List<FileGroup>.filterFiles(query: String): List<FileGroup> {

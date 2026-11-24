@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aurora-DS: tool execution glyph. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="16dp"
+    android:viewportWidth="14"
+    android:viewportHeight="16">
+    <path android:pathData="M1.89974,2.6665H11.8997C12.6361,2.6665 13.2331,3.26346 13.2331,3.99984V11.9998C13.2331,12.7362 12.6361,13.3332 11.8997,13.3332H1.89974C1.16336,13.3332 0.566406,12.7362 0.566406,11.9998V3.99984C0.566406,3.26346 1.16336,2.6665 1.89974,2.6665Z"
+        android:strokeColor="#FF000000" android:strokeWidth="1.13333" android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:pathData="M3.2334,6L5.2334,8L3.2334,10M6.90007,10H10.2334"
+        android:strokeColor="#FF000000" android:strokeWidth="1.13333" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

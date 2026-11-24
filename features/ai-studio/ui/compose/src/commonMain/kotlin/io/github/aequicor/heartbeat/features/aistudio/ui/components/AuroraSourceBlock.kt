@@ -48,6 +48,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -69,6 +70,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as Colors
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyBlock
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyCodeKind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyDiagramKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -309,12 +311,13 @@ private fun SourceControls(source: BlockSource, view: BlockView, preview: Previe
 }
 
 @Composable
-private fun AuroraCodeViewport(
+internal fun AuroraCodeViewport(
     code: AuroraPreparedCode, wrap: Boolean, touch: Boolean, modal: Boolean,
     horizontal: ScrollState, vertical: LazyListState, streaming: Boolean,
+    decoratedViewportWidth: Dp? = null, separatorBeforeLine: Int? = null,
 ) {
     // Keep a growing or long source individually addressable by its logical line index.
-    val compact = if (streaming) null else code.compact
+    val compact = if (streaming || decoratedViewportWidth != null) null else code.compact
     val rows = compact ?: code.lines
     val textStyle = HbTypography.Code.copy(color = Colors.MessageInk)
     val measurer = rememberTextMeasurer()
@@ -325,16 +328,34 @@ private fun AuroraCodeViewport(
     Column(Modifier.fillMaxWidth()) {
         Box(if (modal) Modifier.weight(1f, fill = false) else Modifier) {
             val canScroll = vertical.canScrollForward || vertical.canScrollBackward
+            val gutter = if (canScroll) AuroraLayout.ContentInset else Dp.Hairline
             val scroll = if (wrap) Modifier else Modifier.horizontalScroll(horizontal)
             val height = if (modal) Modifier.fillMaxHeight() else
                 Modifier.heightIn(max = AuroraLayout.CodeViewportHeight)
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().then(height)
-                    .padding(end = if (canScroll) AuroraLayout.ContentInset else Dp.Hairline)
+                    .padding(end = gutter)
                     .then(scroll).then(if (wrap) Modifier else Modifier.widthIn(min = naturalWidth)), state = vertical,
             ) {
                 items(rows.size) { index ->
-                    AuroraReplyText(rows[index], style = textStyle, softWrap = wrap, revealKey = "code/$index")
+                    val row = if (decoratedViewportWidth != null && separatorBeforeLine == null) {
+                        val kind = code.highlights?.get(index)?.highlights?.firstOrNull()?.kind
+                        val surface = when (kind) {
+                            ReplyCodeKind.DiffAdd -> Colors.DiffAddedSurface
+                            ReplyCodeKind.DiffDelete -> Colors.DiffDeletedSurface
+                            else -> Color.Transparent
+                        }
+                        val width = if (wrap) Modifier.fillMaxWidth() else Modifier.widthIn(
+                            min = maxOf(decoratedViewportWidth - gutter, naturalWidth + AuroraLayout.Space * 2),
+                        )
+                        width.background(surface).padding(horizontal = AuroraLayout.Space)
+                    } else Modifier
+                    if (index == separatorBeforeLine && decoratedViewportWidth != null) {
+                        Spacer(Modifier.fillMaxWidth()
+                            .widthIn(min = maxOf(decoratedViewportWidth - gutter, naturalWidth))
+                            .height(AuroraLayout.Stroke).background(Colors.WorkDivider))
+                    }
+                    AuroraReplyText(rows[index], row, style = textStyle, softWrap = wrap, revealKey = "code/$index")
                 }
             }
             Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {

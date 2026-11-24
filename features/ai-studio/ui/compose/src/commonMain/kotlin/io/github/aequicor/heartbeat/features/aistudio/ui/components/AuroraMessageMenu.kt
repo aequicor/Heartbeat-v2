@@ -26,6 +26,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +49,8 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -86,46 +89,53 @@ internal fun AuroraMessageMenu(
     selection: SelectionState,
     modifier: Modifier = Modifier,
     liveText: StateFlow<LiveText>? = null,
+    workMenu: AuroraWorkMenu? = null,
+    workAction: HbMenuAction? = null,
     content: @Composable (hoverOverMenu: Boolean) -> Unit,
 ) {
-    val actions = auroraMessageActions(message, onAction, liveText)
+    val actions = auroraMessageActions(message, touch, onAction, liveText) + listOfNotNull(workAction)
     val user = message is User
     val hitArea = remember { MessageMenuHitArea() }
     val menu = remember { MessageMenuState() }
     val expanded = menu.expanded
-    val onContextMenu = menu.openAtPointer.takeIf { !touch && actions.isNotEmpty() }
+    val onContextMenu by rememberUpdatedState(onAction)
+    val hasContext = !touch && (actions.isNotEmpty() || workMenu != null)
+    val openContext = remember(hitArea, menu, workMenu, hasContext) {
+        if (hasContext) { root: Offset ->
+            val anchor = hitArea.anchorAt(root - hitArea.rootOrigin)
+            menu.showAtPointer(anchor, listOfNotNull(workMenu?.actionAt(root, onContextMenu)))
+        } else null
+    }
+    SideEffect { workMenu?.openAt = openContext }
     val touchAtEdge = touch && !hitArea.outsideFits
     SideEffect(expanded) {
         if (expanded && touchAtEdge) selection.clear()
     }
-    CloseMessageMenuOnHoverExit(
-        expanded && menu.openedByHover, hitArea.popupHovered, hitArea.overBadge, hitArea.overMessage, menu.close,
-    )
-
     AuroraMessageMenuLayout(
         user, touch, readingWidth, hitArea,
         bubble = {
             val atEdge = if (touchAtEdge && actions.isNotEmpty()) Modifier.openMenuOnHold(menu.open)
             else Modifier
-            Box(atEdge) { content(hitArea.hoveredOutsideBubble && actions.isNotEmpty()) }
+            Box(atEdge) { content((hitArea.hoveredOutsideBubble || expanded) && actions.isNotEmpty()) }
         },
         menu = {
-            if (actions.isNotEmpty()) {
+            val menuActions = menu.contextActions + actions
+            if (menuActions.isNotEmpty()) {
                 HbMenu(
-                    expanded, menu.close, actions,
+                    expanded, menu.close, menuActions,
                     presentation = if (touch) {
                         HbMenuPresentation.AuroraTouchMessage
                     } else HbMenuPresentation.AuroraDesktopMessageActions,
                     alignEnd = user,
-                    restoreTriggerFocus = !touchAtEdge,
+                    restoreTriggerFocus = !touchAtEdge && menu.pointerAnchor == null,
                     pointerAnchor = menu.pointerAnchor,
                     motion = HbMenuMotion(
                         replaceTrigger = menu.pointerAnchor == null,
                         hoverMenu = menu.openedByHover,
-                        onHover = hitArea.trackPopupHover,
                     ).takeUnless { touch },
                 ) { trigger ->
-                    AuroraMessageMenuTrigger(hitArea, expanded, touch, menu.open, menu.openOnHover, menu.close, trigger)
+                    val toggle = if (expanded) menu.close else menu.open
+                    AuroraMessageMenuTrigger(hitArea, expanded, touch, toggle, menu.open, trigger)
                 }
             }
         },
@@ -139,7 +149,8 @@ internal fun AuroraMessageMenu(
                 )
             }
         },
-        modifier = modifier.trackMessageMenuPointer(hitArea, onContextMenu),
+        modifier = modifier.onGloballyPositioned { hitArea.rootOrigin = it.positionInRoot() }
+            .trackMessageMenuPointer(hitArea, openContext, menu.openOnHover.takeIf { !touch && actions.isNotEmpty() }),
     )
 }
 
@@ -150,15 +161,18 @@ private class MessageMenuState {
         private set
     var openedByHover by mutableStateOf(false)
         private set
-
-    val open: () -> Unit = { show(null, byHover = false) }
+    var contextActions by mutableStateOf(emptyList<HbMenuAction>())
+        private set
+    val open: () -> Unit = { show(null) }
     val openOnHover: () -> Unit = { show(null, byHover = true) }
-    val openAtPointer: (IntOffset) -> Unit = { show(it, byHover = false) }
     val close: () -> Unit = { expanded = false }
 
-    private fun show(anchor: IntOffset?, byHover: Boolean) {
+    fun showAtPointer(anchor: IntOffset, actions: List<HbMenuAction>) = show(anchor, context = actions)
+
+    private fun show(anchor: IntOffset?, byHover: Boolean = false, context: List<HbMenuAction> = emptyList()) {
         pointerAnchor = anchor
         openedByHover = byHover
+        contextActions = context
         expanded = true
     }
 }
@@ -199,7 +213,6 @@ private fun AuroraMessageMenuLayout(
             messageMenuBounds(width, bodyX, 0, body.width, body.height, mirror),
             messageMenuBounds(width, bounds.x, bounds.y, target, target, mirror),
             bounds.available,
-            AuroraLayout.MessageMenuBadge.toPx() / 2,
         )
         val extra = stamp?.let { gap + it.height } ?: 0
         layout(width, body.height + extra) {
@@ -218,9 +231,8 @@ private fun AuroraMessageMenuTrigger(
     hitArea: MessageMenuHitArea,
     expanded: Boolean,
     touch: Boolean,
+    toggle: () -> Unit,
     onOpen: () -> Unit,
-    onHoverOpen: () -> Unit,
-    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val keyboard = remember { MutableInteractionSource() }
@@ -228,19 +240,19 @@ private fun AuroraMessageMenuTrigger(
     val focusVisible = focused && HbFocusIndication.keyboardNavigation
     val outside = hitArea.outsideFits
     val desktopHover = outside && !touch
-    val badgeHovered = desktopHover && hitArea.overBadge
     val reveal = rememberMessageActionBadge(
-        hovered = desktopHover && (hitArea.hovered || hitArea.overBadge),
+        hovered = desktopHover && hitArea.hovered,
         overBubble = desktopHover && hitArea.overMessage,
         pinned = focusVisible || outside && touch,
         expanded = expanded,
         touch = touch,
     )
-    OpenMessageMenuOnBadgeHover(badgeHovered, expanded, reveal.interactive, onHoverOpen)
+    SideEffect {
+        hitArea.opensOnBadgeEnter = desktopHover && reveal.interactive && !expanded
+    }
     val pointer = if (reveal.interactive) {
-        Modifier.pointerInput(expanded, onOpen, onClose) {
-            val click = if (expanded) onClose else onOpen
-            detectTapGestures(onTap = { click() })
+        Modifier.pointerInput(toggle) {
+            detectTapGestures(onTap = { toggle() })
         }
     } else Modifier
     Box(
@@ -284,7 +296,7 @@ private fun AuroraMessageMenuGlyph(touch: Boolean, focusVisible: Boolean) {
             .background(AuroraColors.MessageActionBadge, CircleShape).then(focus),
         contentAlignment = Alignment.Center,
     ) {
-        HbIcon(HbIconGlyph.ChevronDown, tint = AuroraColors.MessageInk, size = AuroraLayout.Glyph)
+        HbIcon(HbIconGlyph.ChevronDown, tint = AuroraColors.MessageInk, size = AuroraLayout.MessageMenuChevron)
     }
 }
 
@@ -313,32 +325,20 @@ private class MessageMenuHitArea {
     private var messageBounds = Rect.Zero
     private var connectedBounds = Rect.Zero
     private var triggerBounds = Rect.Zero
-    private var badgeRadius = 0f
+    private var overBadge = false
+    var rootOrigin = Offset.Zero
+    var opensOnBadgeEnter = false
     var outsideFits by mutableStateOf(false)
         private set
     var hovered by mutableStateOf(false)
         private set
     var overMessage by mutableStateOf(false)
         private set
-    var overBadge by mutableStateOf(false)
-        private set
-    var popupHovered by mutableStateOf(false)
-        private set
-    val hoveredOutsideBubble get() = hovered && !overMessage || popupHovered
+    val hoveredOutsideBubble get() = hovered && !overMessage
 
-    val trackPopupHover: (Boolean) -> Unit = { hovered ->
-        popupHovered = hovered
-        if (hovered) {
-            overMessage = false
-            overBadge = false
-            this.hovered = false
-        }
-    }
-
-    fun place(message: Rect, trigger: Rect, outside: Boolean, radius: Float) {
+    fun place(message: Rect, trigger: Rect, outside: Boolean) {
         messageBounds = message
         triggerBounds = trigger
-        badgeRadius = radius
         connectedBounds = Rect(
             left = minOf(message.left, trigger.left),
             top = trigger.top,
@@ -348,25 +348,27 @@ private class MessageMenuHitArea {
         outsideFits = outside
     }
 
-    fun move(point: Offset) {
+    fun move(point: Offset): Boolean {
         overMessage = messageBounds.contains(point)
         hovered = overMessage || outsideFits && connectedBounds.contains(point)
-        overBadge = isOnBadge(point)
+        val wasOverBadge = overBadge
+        overBadge = triggerBounds.contains(point)
+        return overBadge && !wasOverBadge
     }
 
-    fun leave() {
+    fun leave(point: Offset) {
         overMessage = false
         hovered = false
-        overBadge = false
+        // A modal popup can send an exit without moving the pointer off the badge.
+        if (!triggerBounds.contains(point)) overBadge = false
     }
 
-    fun contextAnchor(point: Offset): IntOffset? {
-        if (!messageBounds.contains(point)) return null
+    fun containsMessage(point: Offset): Boolean = messageBounds.contains(point)
+
+    fun anchorAt(point: Offset): IntOffset {
         val relative = point - triggerBounds.topLeft
         return IntOffset(relative.x.roundToInt(), relative.y.roundToInt())
     }
-
-    private fun isOnBadge(point: Offset) = outsideFits && (point - triggerBounds.center).getDistance() <= badgeRadius
 }
 
 private fun messageMenuBounds(
@@ -378,20 +380,25 @@ private fun messageMenuBounds(
 
 private fun Modifier.trackMessageMenuPointer(
     hitArea: MessageMenuHitArea,
-    onContextMenu: ((IntOffset) -> Unit)?,
-): Modifier = pointerInput(hitArea, onContextMenu) {
+    onContextMenu: ((Offset) -> Unit)?,
+    onBadgeEnter: (() -> Unit)?,
+): Modifier = pointerInput(hitArea, onContextMenu, onBadgeEnter) {
     awaitPointerEventScope {
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             val mouse = event.changes.firstOrNull { it.type == PointerType.Mouse } ?: continue
             when (event.type) {
-                PointerEventType.Exit -> hitArea.leave()
-                PointerEventType.Enter, PointerEventType.Move, PointerEventType.Scroll -> hitArea.move(mouse.position)
-                PointerEventType.Press -> if (onContextMenu != null && event.buttons.isSecondaryPressed) {
-                    hitArea.contextAnchor(mouse.position)?.let { anchor ->
-                        mouse.consume()
-                        onContextMenu(anchor)
-                    }
+                PointerEventType.Exit -> hitArea.leave(mouse.position)
+                PointerEventType.Enter, PointerEventType.Move -> {
+                    val enteredBadge = hitArea.move(mouse.position)
+                    if (enteredBadge && hitArea.opensOnBadgeEnter && !mouse.pressed) onBadgeEnter?.invoke()
+                }
+                PointerEventType.Scroll -> hitArea.move(mouse.position)
+                PointerEventType.Press -> if (onContextMenu != null && event.buttons.isSecondaryPressed &&
+                    hitArea.containsMessage(mouse.position)
+                ) {
+                    mouse.consume()
+                    onContextMenu(hitArea.rootOrigin + mouse.position)
                 }
                 else -> Unit
             }
@@ -426,13 +433,13 @@ private suspend fun AwaitPointerEventScope.awaitMenuLongPressRelease(id: Pointer
 @Suppress("DEPRECATION")
 @Composable
 private fun auroraMessageActions(
-    message: Message, onAction: (AiStudioAction) -> Unit, liveText: StateFlow<LiveText>?,
+    message: Message, touch: Boolean, onAction: (AiStudioAction) -> Unit, liveText: StateFlow<LiveText>?,
 ): List<HbMenuAction> {
     val clipboard = LocalClipboardManager.current
     val hasStream = liveText != null && remember(liveText, message.id) {
         liveText.map { it.textFor(message.id) != null }.distinctUntilChanged()
     }.collectAsState(liveText.value.textFor(message.id) != null).value
-    return remember(message, onAction, clipboard, hasStream, liveText) {
+    return remember(message, touch, onAction, clipboard, hasStream, liveText) {
         buildList {
             val text = when (message) {
                 is User -> message.text
@@ -453,10 +460,11 @@ private fun auroraMessageActions(
                 is Reply -> message.retryAllowed
             }
             if (message.failed && retryAllowed) {
-                add(HbMenuAction("Повторить отправку", { onAction(AiStudioAction.Retry(message.id)) },
+                val label = if (!touch && message is User) "Отправить повторно" else "Повторить отправку"
+                add(HbMenuAction(label, { onAction(AiStudioAction.Retry(message.id)) },
                     glyph = HbIconGlyph.Retry, destructive = true))
             }
-            if (message is Reply && message.result != null) {
+            if (touch && message is Reply && message.result != null) {
                 add(HbMenuAction("Открыть результат", { onAction(AiStudioAction.OpenResult(message.id)) },
                     glyph = HbIconGlyph.FolderOpen))
             }

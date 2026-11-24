@@ -5,7 +5,13 @@ public sealed interface SessionEvent {
         val text: String,
         val turnId: String? = null,
         val attachments: List<String> = listOf(),
+        val promptFiles: List<PromptFile> = listOf(),
     ) : SessionEvent
+
+    public sealed interface PromptFile {
+        public data class Text(val content: String) : PromptFile
+        public data class Image(val mimeType: String, val base64: String) : PromptFile
+    }
     public data object Cancel : SessionEvent
     public data class AnswerPermission(val requestId: String, val optionId: String) : SessionEvent
 

@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.syncPart
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.AgentArtifactPart
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Delivery
@@ -12,12 +13,13 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEvent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.json.Json
+import kotlin.io.encoding.Base64
 import kotlin.uuid.Uuid
 
 internal fun Message.header(): String = Json.encodeToString<Message>(
     when (this) {
         is User -> copy(text = "", files = listOf())
-        is Reply -> copy(steps = listOf(), text = "", interim = null, result = null)
+        is Reply -> copy(steps = listOf(), text = "", interim = null, result = null, artifacts = listOf())
     },
 )
 
@@ -46,7 +48,8 @@ internal fun ChatQueries.writeParts(revision: Long, message: Message) {
         Message_part(0, revision, parent, position++, kind, title, status, body, toolId, attachment, metadata),
     )
 
-    fun filePart(file: File) = part("attachment", title = file.name, attachment = storeAttachment(file))
+    fun filePart(file: File, metadata: String? = null, parent: Long? = null) =
+        part("attachment", title = file.name, attachment = storeAttachment(file), metadata = metadata, parent = parent)
 
     when (message) {
         is User -> {
@@ -62,17 +65,19 @@ internal fun ChatQueries.writeParts(revision: Long, message: Message) {
                 )
                 for (event in step.events) {
                     val kind = event.partKind()
-                    part(
+                    val eventPart = part(
                         kind, event.details, parent, event.title,
                         event.status.name, toolId = event.id.takeIf { kind == "tool_call" },
-                        metadata = Json.encodeToString(event.copy(details = "")),
+                        metadata = Json.encodeToString(event.copy(details = "", files = emptyList())),
                     )
+                    event.files.forEach { filePart(it, parent = eventPart) }
                 }
                 if (step.result != null) part("text", step.result, parent)
             }
             if (message.interim != null) part("text", message.interim, title = "interim")
             if (message.text.isNotEmpty()) part("text", message.text)
-            if (message.result != null) filePart(message.result)
+            message.result?.let { filePart(it) }
+            message.artifacts.forEach { filePart(it, AgentArtifactPart) }
         }
     }
     if (remaining.isNotEmpty()) deletePartsFrom(revision, remaining.first().position)
@@ -80,8 +85,7 @@ internal fun ChatQueries.writeParts(revision: Long, message: Message) {
 
 private fun WorkEvent.partKind(): String = if (kind == WorkEventKind.Thinking) "reasoning" else "tool_call"
 
-// Aurora's existing file picker supplies embedded text. Keep those bytes durable and share
-// an attachment only when both its metadata and content match the earlier version.
+// Share an attachment only when both its metadata and content match the earlier version.
 private fun ChatQueries.storeAttachment(file: File): String {
     if (file.storedAttachmentId != null) return file.storedAttachmentId
     val metadata = Json.encodeToString(file.copy(content = ""))
@@ -90,9 +94,11 @@ private fun ChatQueries.storeAttachment(file: File): String {
 
 private fun ChatQueries.insertFile(file: File, metadata: String): String {
     val id = Uuid.random().toString()
-    val mime = if (file.isMarkdown) "text/markdown" else "text/plain"
+    val mime = file.mimeType ?: file.image?.mimeType ?: if (file.isMarkdown) "text/markdown" else "text/plain"
+    val size = file.storedSizeBytes ?: if (file.base64Encoded || file.image != null) Base64.decode(file.content).size.toLong()
+    else file.content.encodeToByteArray().size.toLong()
     insertInlineAttachment(
-        id, file.name, mime, file.content.encodeToByteArray().size.toLong(),
+        id, file.name, mime, size,
         "sqlite:attachment/$id", metadata, file.content,
     )
     return id

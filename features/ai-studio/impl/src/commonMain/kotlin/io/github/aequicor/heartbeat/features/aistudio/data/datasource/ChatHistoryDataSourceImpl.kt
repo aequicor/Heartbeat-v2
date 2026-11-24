@@ -3,9 +3,13 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatHistoryDao
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatHistoryDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedReasoningTitle
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedSendError
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedToolSummary
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
@@ -15,7 +19,7 @@ internal class ChatHistoryDataSourceImpl(private val dao: ChatHistoryDao) : Chat
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun page(sessionId: String, before: Long?, limit: Int) =
-        accessStudioRepository { dao.page(sessionId, before, limit).map(ChatEntryRecord::toDomain) }
+        accessStudioRepository { dao.page(sessionId, before, limit, interruptionLabels).map(ChatEntryRecord::toDomain) }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun position(sessionId: String, messageId: String) =
@@ -43,3 +47,5 @@ internal class ChatHistoryDataSourceImpl(private val dao: ChatHistoryDao) : Chat
     override suspend fun editText(chatId: String, revisionId: Long, text: String, keepContinuation: Boolean) =
         accessStudioRepository { dao.editText(chatId, revisionId, text, keepContinuation) }
 }
+
+private val interruptionLabels = ChatInterruptionLabels(InterruptedSendError, InterruptedReasoningTitle, InterruptedToolSummary)

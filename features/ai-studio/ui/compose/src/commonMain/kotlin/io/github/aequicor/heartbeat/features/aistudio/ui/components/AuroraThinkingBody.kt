@@ -82,13 +82,14 @@ private class ThinkingText(
 
 private fun splitThinkingText(source: String, prefix: List<String>, tailStart: Int): ThinkingText {
     val blocks = prefix.toMutableList()
+    val lastContent = source.indexOfLast { !it.isWhitespace() }
     var start = tailStart
     var cursor = tailStart
     var lines = 0
     while (cursor < source.length) {
         val newline = source.indexOf('\n', cursor)
-        // Keep a trailing blank line in the existing text node until another line is appended.
-        if (newline < 0 || newline == source.lastIndex) break
+        // Keep trailing blank lines in the last selectable node until more content arrives.
+        if (newline < 0 || newline >= lastContent) break
         lines++
         if (lines >= ThinkingLinesPerBlock && source.getOrNull(newline - 1) != '\r') {
             // SelectionContainer inserts this same newline when copying across the two nodes.

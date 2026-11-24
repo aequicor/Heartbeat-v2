@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -37,6 +38,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPanelD
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraViewer
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraTouchFilesFrame
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberArtifactSaveLauncher
 import kotlinx.coroutines.flow.StateFlow
 
 /** Displays the prepared Aurora workspace and forwards interactions to its Decompose component. */
@@ -53,6 +55,10 @@ internal fun AiStudioScreen(
     modifier: Modifier = Modifier,
 ) {
     BindAuroraDiagramContext()
+    val saveArtifact = rememberArtifactSaveLauncher { failed -> onAction(AiStudioAction.ArtifactSaveFinished(failed)) }
+    LaunchedEffect(state.artifactToSave) {
+        state.artifactToSave?.let(saveArtifact)
+    }
     val previews = remember(state.chat?.id) { AuroraDiagramPreviews() }
     val touch = HbSizes.minimumTarget >= AuroraLayout.TouchTarget
     val caption = HbWindowCaption.current

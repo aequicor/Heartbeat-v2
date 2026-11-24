@@ -16,19 +16,25 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWo
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatConversationDao
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatConversationDaoImpl
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatDraftOwnership
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatHistoryDao
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatHistoryDaoImpl
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ProjectDao
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SessionDao
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SqlDelightProjectDao
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SqlDelightSessionDao
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.chatDraftOwnership
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.ChatConversationDataSourceImpl
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.ChatEngineDataSourceImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractorImpl
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ApplyChatConfigurationUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ApplyChatConfigurationUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCaseImpl
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.PrepareChatContextUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.PrepareChatContextUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SendChatMessageUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SendChatMessageUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineDataSource
@@ -56,6 +62,11 @@ public interface DefaultAiStudioInteractorBindings {
         internal fun provideChatWriteLock(): Mutex = Mutex()
 
         @Provides
+        @SingleIn(AppScope::class)
+        internal fun provideChatDraftOwnership(connection: DatabaseConnection): ChatDraftOwnership =
+            chatDraftOwnership(connection)
+
+        @Provides
         internal fun provideHistoryDataSource(impl: ChatHistoryDataSourceImpl): ChatHistoryDataSource = impl
 
         @Provides
@@ -79,6 +90,13 @@ public interface DefaultAiStudioInteractorBindings {
 
         @Provides
         internal fun provideImportChatAttachmentUseCase(impl: ImportChatAttachmentUseCaseImpl): ImportChatAttachmentUseCase = impl
+
+        @Provides
+        internal fun providePrepareChatContextUseCase(impl: PrepareChatContextUseCaseImpl): PrepareChatContextUseCase = impl
+
+        @Provides
+        internal fun provideApplyChatConfigurationUseCase(impl: ApplyChatConfigurationUseCaseImpl): ApplyChatConfigurationUseCase =
+            impl
 
         @Provides
         internal fun provideSendChatMessageUseCase(impl: SendChatMessageUseCaseImpl): SendChatMessageUseCase = impl

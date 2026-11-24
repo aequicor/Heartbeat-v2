@@ -5,6 +5,7 @@ import dev.zacsweers.metro.Named
 import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.di.AppScope
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatDraftOwnership
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.accessStudioDatabase
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.SelectWorkspaceSessions
@@ -36,7 +37,8 @@ import kotlin.uuid.Uuid
 internal class StudioWorkspacePersistence(
     private val connection: DatabaseConnection,
     @Named("io") private val ioDispatcher: CoroutineDispatcher,
-    @Named("studio-chat-writes") private val writeLock: Mutex = Mutex(),
+    @Named("studio-chat-writes") private val writeLock: Mutex,
+    private val draftOwnership: ChatDraftOwnership,
 ) : StudioWorkspaceMetadata {
 
     private val restoreLock = Mutex()
@@ -48,7 +50,7 @@ internal class StudioWorkspacePersistence(
     override suspend fun restore(legacy: suspend () -> AuroraWorkspace): AuroraWorkspace = withContext(ioDispatcher) {
         workspaceOperation("Restore studio workspace") {
             restoreLock.withLock {
-                val stored = read(resetInterruptedWork = !recoveredWork) ?: run {
+                val stored = writeLock.withLock { read(resetInterruptedWork = !recoveredWork) } ?: run {
                     import(legacy())
                     checkNotNull(read())
                 }
@@ -69,20 +71,31 @@ internal class StudioWorkspacePersistence(
             workspaceOperation("Save studio workspace") {
                 val workspaceQueries = queries
                 val history = ChatQueries(connection.driver)
+                val writer by lazy(LazyThreadSafetyMode.NONE) { draftOwnership.claim()?.toString() }
                 workspaceQueries.transaction {
                     for (chat in workspace.chats.filter(AuroraChat::payloadLoaded)) {
                         val id = chat.summary.id
-                        val chatId = history.chatForSession(id).executeAsOneOrNull() ?: continue
-                        if (!chat.persistedThroughDomain) history.saveHistory(chatId, chat, previousChats[id])
-                        workspaceQueries.updateWorkspaceSession(
+                        val workState = chat.summary.workState
+                        val previousState = previousWorkStates[id] ?: SessionWorkState.Idle
+                        val writerOwner = if (workState.isActive || previousState.isActive) writer else null
+                        val saved = workspaceQueries.updateWorkspaceSession(
                             payload = Json.encodeToString(chat.copy(messages = listOf(), interrupted = null)),
                             summary = Json.encodeToString(chat.summary),
                             id = id,
-                        )
-                        val workState = chat.summary.workState
-                        val previousState = previousWorkStates[id] ?: SessionWorkState.Idle
+                            writer_owner = writerOwner,
+                        ).value
+                        if (saved == 0L) continue
+                        if (!chat.persistedThroughDomain) {
+                            val chatId = history.chatForSession(id).executeAsOneOrNull()
+                            if (chatId != null) history.saveHistory(chatId, chat, previousChats[id])
+                        }
                         if (workState != previousState) {
-                            workspaceQueries.updateWorkspaceSessionWorkState(workState.name, id, previousState.name)
+                            workspaceQueries.updateWorkspaceSessionWorkState(
+                                work_state = workState.name,
+                                writer_owner = writerOwner,
+                                id = id,
+                                previous_work_state = previousState.name,
+                            )
                         }
                     }
                     workspaceQueries.upsertWorkspaceMetadata(metadata)
@@ -92,52 +105,67 @@ internal class StudioWorkspacePersistence(
     }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
-    override suspend fun loadMetadata(chat: AuroraChat): AuroraChat {
-        if (chat.payloadLoaded) return chat
-        return readStored("Read studio session content") { history ->
-            val sessionId = chat.summary.id
-            val record = queries.selectWorkspacePayload(sessionId).executeAsOne()
-            val saved = record.workspace_payload?.let { Json.decodeFromString<AuroraChat>(it) } ?: chat
-            val labels = saved.summary.configuration
-            val configuration = record.engine_id?.let { engine ->
-                Selection(
-                    engine.asChoice(labels?.engine),
-                    record.model_name?.asChoice(labels?.model),
-                    record.reasoning_level?.asChoice(labels?.level),
-                )
+    override suspend fun loadMetadata(chat: AuroraChat): AuroraChat = withContext(ioDispatcher) {
+        if (chat.payloadLoaded && !chat.summary.workState.isActive) return@withContext chat
+        writeLock.withLock {
+            workspaceOperation("Read studio session content") {
+                val workspaceQueries = queries
+                val sessionId = chat.summary.id
+                val owner = workspaceQueries.selectActiveWorkOwner(sessionId).executeAsOneOrNull()
+                if (owner != null && hasEnded(owner)) workspaceQueries.resetInterruptedWorkState(sessionId, owner)
+                workspaceQueries.transactionWithResult { readChatMetadata(workspaceQueries, chat) }
             }
-            val summary = chat.summary.copy(configuration = configuration)
-            val chatId = history.chatForSession(sessionId).executeAsOne()
-            if (saved.messages.isNotEmpty() || saved.interrupted != null) {
-                history.saveHistory(chatId, saved, previous = null)
-                val metadata = saved.copy(messages = listOf(), interrupted = null)
-                queries.updateWorkspaceSession(
-                    Json.encodeToString(metadata), Json.encodeToString(chat.summary), sessionId,
-                )
-            }
-            saved.copy(summary = summary, messages = emptyList(), interrupted = null, payloadLoaded = true)
         }
     }
 
-    private suspend fun <T> readStored(operation: String, block: (ChatQueries) -> T): T = withContext(ioDispatcher) {
-        writeLock.withLock {
-            workspaceOperation(operation) {
+    private fun readChatMetadata(workspaceQueries: StudioWorkspaceQueries, chat: AuroraChat): AuroraChat {
+        val sessionId = chat.summary.id
+        val record = workspaceQueries.selectWorkspacePayload(sessionId).executeAsOne()
+        val navigationStatus = SessionWorkState.valueOf(record.work_state).toNavigationStatus()
+        if (chat.payloadLoaded) {
+            if (navigationStatus == chat.summary.navigationStatus) return chat
+            return chat.copy(summary = chat.summary.copy(navigationStatus = navigationStatus))
+        }
+        val saved = record.workspace_payload?.let { Json.decodeFromString<AuroraChat>(it) } ?: chat
+        val labels = saved.summary.configuration
+        val configuration = record.engine_id?.let { engine ->
+            Selection(
+                engine.asChoice(labels?.engine),
+                record.model_name?.asChoice(labels?.model),
+                record.reasoning_level?.asChoice(labels?.level),
+            )
+        }
+        val summary = chat.summary.copy(configuration = configuration, navigationStatus = navigationStatus)
+        if (saved.messages.isNotEmpty() || saved.interrupted != null) {
+            val metadata = saved.copy(messages = listOf(), interrupted = null)
+            val migrated = workspaceQueries.updateWorkspaceSession(
+                Json.encodeToString(metadata), Json.encodeToString(summary), sessionId, writer_owner = null,
+            ).value
+            if (migrated == 1L) {
                 val history = ChatQueries(connection.driver)
-                history.transactionWithResult { block(history) }
+                history.saveHistory(history.chatForSession(sessionId).executeAsOne(), saved, previous = null)
             }
         }
+        return saved.copy(summary = summary, messages = emptyList(), interrupted = null, payloadLoaded = true)
     }
 
     private fun read(resetInterruptedWork: Boolean = false): AuroraWorkspace? =
         accessStudioDatabase("Read studio workspace") {
             val workspaceQueries = queries
+            val endedOwners = if (resetInterruptedWork) {
+                workspaceQueries.selectActiveWorkOwners().executeAsList().filter(::hasEnded)
+            } else {
+                emptyList()
+            }
             workspaceQueries.transactionWithResult {
+                if (resetInterruptedWork) workspaceQueries.resetInterruptedWorkStates(endedOwners)
                 val metadata = workspaceQueries.selectWorkspaceMetadata().executeAsOneOrNull()
                     ?: return@transactionWithResult null
-                if (resetInterruptedWork) workspaceQueries.resetInterruptedWorkStates()
                 decode(metadata, workspaceQueries.selectWorkspaceSessions().executeAsList())
             }
         }
+
+    private fun hasEnded(owner: String): Boolean = Uuid.parseOrNull(owner)?.let(draftOwnership::ended) == true
 
     private fun import(workspace: AuroraWorkspace) {
         val projectId = ProjectId.Ungrouped.value.toString()

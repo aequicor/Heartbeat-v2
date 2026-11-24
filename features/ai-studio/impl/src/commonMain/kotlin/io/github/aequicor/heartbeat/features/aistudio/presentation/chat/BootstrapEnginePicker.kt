@@ -9,6 +9,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootst
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction.EnginePicker
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Choice
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Failure
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Selection
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState.Project
@@ -31,6 +32,7 @@ internal class BootstrapEnginePicker(
     private val defaultDispatcher: CoroutineDispatcher,
     private val screen: MutableStateFlow<AiStudioScreenState>,
     private val enqueue: (suspend () -> Unit) -> Unit,
+    private val onConfigurationApplied: (String, Selection) -> Unit,
 ) {
 
     private var lifetime: Job? = null
@@ -40,23 +42,50 @@ internal class BootstrapEnginePicker(
     private var draft: ChatCreationDraft? = null
     private var step: Step? = null
     private var dismissed = false
-    private var applying = false
+    private var applyAttempt: Any? = null
+    private var failedApply = false
+    private var optionLoad: OptionLoad? = null
+    private var existingChat: String? = null
+    private var existingConfiguration: Selection? = null
+
+    val isApplyingToChat: Boolean get() = existingChat != null && applyAttempt != null
 
     fun start() {
-        close()
         val bootstrap = screen.value.sessionBootstrap ?: return
         val project = when (val target = bootstrap.project) {
             Project.Ungrouped -> ProjectId.Ungrouped
             is Project.Existing -> ProjectId.parse(target.id)
         }
+        startDraft { use -> interactor.withDraft(project, use) }
+    }
+
+    fun startExisting(chatId: String, configuration: Selection, openAt: Step) {
+        startDraft(chatId, configuration, openAt) { use -> interactor.withChatConfigurationDraft(chatId, use) }
+    }
+
+    private fun startDraft(
+        chatId: String? = null,
+        configuration: Selection? = null,
+        openAt: Step? = null,
+        withDraft: suspend (suspend (ChatCreationDraft) -> Unit) -> Result<Unit>,
+    ) {
+        close()
+        existingChat = chatId
+        existingConfiguration = configuration
         dismissed = false
+        step = openAt
         val commands = Channel<Job>(Channel.UNLIMITED)
         queue = commands
-        publish(ChatEnginePickerState())
+        publish(ChatEnginePickerState(confirmed = configuration, step = openAt, loading = openAt != null))
         lifetime = scope.launch {
-            withContext(defaultDispatcher) {
-                interactor.withDraft(project) { active ->
-                    enqueue { if (queue === commands) draft = active }
+            val opened = withContext(defaultDispatcher) {
+                withDraft { active ->
+                    enqueue {
+                        if (queue === commands) {
+                            draft = active
+                            if (openAt != null) handle(EnginePicker.Open(openAt)) else render(active.state.value)
+                        }
+                    }
                     coroutineScope {
                         launch {
                             active.state.collect {
@@ -65,6 +94,12 @@ internal class BootstrapEnginePicker(
                         }
                         for (command in commands) command.join()
                     }
+                }
+            }
+            if (opened.isFailure) enqueue {
+                if (queue === commands && existingChat != null) {
+                    draft = null
+                    publish(ChatEnginePickerState(confirmed = existingConfiguration, step = step, failure = Failure.LoadOptions))
                 }
             }
         }
@@ -78,44 +113,83 @@ internal class BootstrapEnginePicker(
         lifetime?.cancel()
         draft = null
         step = null
-        applying = false
+        applyAttempt = null
+        failedApply = false
+        optionLoad = null
         dismissed = true
+        existingChat = null
+        existingConfiguration = null
+        screen.update { it.copy(chatEnginePicker = null) }
     }
 
     fun handle(action: EnginePicker) {
-        val active = draft ?: return
+        if (isApplyingToChat) return
+        val active = draft ?: run {
+            when (action) {
+                EnginePicker.Dismiss -> close()
+                EnginePicker.Back -> when (step) {
+                    Step.Reasoning -> reopenExisting(Step.Model)
+                    Step.Model -> reopenExisting(Step.Engine)
+                    Step.Engine, null -> close()
+                }
+                EnginePicker.Retry -> reopenExisting(step ?: Step.Engine)
+                else -> Unit
+            }
+            return
+        }
         val state = active.state.value
         when (action) {
             is EnginePicker.Open -> {
                 dismissed = false
-                step = if (state.confirmed == null) Step.Engine else action.step
                 val confirmed = state.confirmed
-                if (confirmed != null && step != Step.Engine) request(replace = true) { chooseEngine(confirmed.engine.id) }
-                else request(replace = true) { discardChanges() }
+                step = if (confirmed == null) Step.Engine else action.step
+                optionLoad = confirmed?.takeIf { action.step != Step.Engine }?.let { OptionLoad(action.step, it) }
+                request(replace = true) {
+                    val discarded = discardChanges()
+                    if (discarded.isSuccess && confirmed != null && action.step != Step.Engine) chooseEngine(confirmed.engine.id)
+                    else discarded
+                }
             }
             is EnginePicker.Engine -> {
+                val engine = state.engines.firstOrNull { it.id == action.id } ?: return
                 step = Step.Model
                 dismissed = false
+                optionLoad = OptionLoad(Step.Model, ChatDraftState.Selection(engine))
                 request(replace = true) { chooseEngine(action.id) }
             }
             is EnginePicker.Model -> {
+                val selection = state.editing ?: return
+                val model = state.options?.model?.choices?.firstOrNull { it.id == action.id } ?: return
                 step = Step.Reasoning
+                val level = selection.level.takeIf { selection.model?.id == model.id }
+                optionLoad = OptionLoad(Step.Reasoning, selection.copy(model = model, level = level), model.id)
                 request(replace = true) { chooseModel(action.id) }
             }
-            is EnginePicker.Reasoning -> request { chooseReasoning(action.id) }
-            EnginePicker.Apply -> {
-                applying = true
-                request { apply() }
+            is EnginePicker.Reasoning -> {
+                request(finishesApply = true) { applyReasoning(action.id) }
+                return
             }
-            EnginePicker.Retry -> request { retry() }
-            EnginePicker.Back -> when (screen.value.sessionBootstrap?.picker?.step) {
+            EnginePicker.Apply -> {
+                request(finishesApply = true) { apply() }
+                return
+            }
+            EnginePicker.Retry -> {
+                request(finishesApply = failedApply) { retry() }
+                return
+            }
+            EnginePicker.Back -> when ((screen.value.sessionBootstrap?.picker ?: screen.value.chatEnginePicker)?.step) {
                 Step.Reasoning -> {
-                    cancelRequests()
-                    step = if (state.options?.model == null) Step.Engine else Step.Model
+                    val options = state.options
+                    step = if (options != null && options.model == null) Step.Engine else Step.Model
+                    if (step == Step.Engine) {
+                        cancelRequests()
+                        optionLoad = null
+                    }
                 }
                 Step.Model -> {
                     cancelRequests()
                     step = Step.Engine
+                    optionLoad = null
                 }
                 Step.Engine, null -> dismiss()
             }
@@ -124,40 +198,84 @@ internal class BootstrapEnginePicker(
         render(state)
     }
 
+    private fun reopenExisting(at: Step) {
+        val chatId = existingChat ?: return
+        startExisting(chatId, existingConfiguration ?: return, at)
+    }
+
     private fun dismiss() {
+        if (existingChat != null) {
+            close()
+            return
+        }
         dismissed = true
         step = null
+        optionLoad = null
         request(replace = true) { discardChanges() }
     }
 
     private fun cancelRequests() {
         requests?.cancel()
         requests = SupervisorJob(lifetime)
-        applying = false
+        applyAttempt = null
+        failedApply = false
     }
 
-    private fun request(replace: Boolean = false, operation: suspend ChatCreationDraft.() -> Result<Unit>) {
+    private fun request(
+        replace: Boolean = false,
+        finishesApply: Boolean = false,
+        operation: suspend ChatCreationDraft.() -> Result<Unit>,
+    ) {
         if (replace) cancelRequests()
         val target = draft ?: return
         val parent = requests ?: return
+        val attempt = if (finishesApply) Any().also { applyAttempt = it } else null
         val command = scope.launch(parent, start = CoroutineStart.LAZY) {
-            withContext(defaultDispatcher) { target.operation() }
+            val result = withContext(defaultDispatcher) { target.operation() }
+            if (attempt != null) enqueue { finishApply(attempt, target, result) }
+        }
+        if (attempt != null) command.invokeOnCompletion { failure ->
+            if (failure != null) enqueue { finishApply(attempt, target, Result.failure(failure)) }
         }
         if (queue.trySend(command).isSuccess) lastRequest = command else command.cancel()
+        if (attempt != null) render(target.state.value)
     }
 
-    suspend fun create(prompt: String): Result<SessionBootstrapResult>? {
+    suspend fun create(prompt: String, firstAttachmentName: String?): Result<SessionBootstrapResult>? {
         lastRequest?.join()
-        return withContext(defaultDispatcher) { draft?.create(prompt) }
+        return withContext(defaultDispatcher) { draft?.create(prompt, firstAttachmentName) }
     }
 
-    private fun render(state: ChatDraftState) {
-        if (screen.value.sessionBootstrap == null) return
-        val editing = state.editing
-        if (editing == null && state.confirmed != null && applying && !state.busy) {
+    private fun finishApply(attempt: Any, target: ChatCreationDraft, result: Result<Unit>) {
+        if (applyAttempt !== attempt || draft !== target) return
+        applyAttempt = null
+        val state = target.state.value
+        val saved = state.confirmed
+        failedApply = result.isFailure && state.failed
+        if (result.isSuccess && state.editing == null && saved != null) {
+            val chatId = existingChat
+            if (chatId != null) {
+                onConfigurationApplied(chatId, saved.display())
+                close()
+                return
+            }
             step = null
-            applying = false
         }
+        render(state)
+    }
+
+    private fun render(snapshot: ChatDraftState) {
+        if (screen.value.sessionBootstrap == null && existingChat == null) return
+        val target = optionLoad?.selection?.engine?.id
+        if (target != null && snapshot.engines.none { it.id == target }) {
+            optionLoad = null
+            step = Step.Engine
+        }
+        val load = optionLoad
+        val state = if (load != null && step == load.step && load.awaits(snapshot)) {
+            snapshot.copy(editing = load.selection, options = null, busy = true, failed = false)
+        } else snapshot
+        val editing = state.editing
         val displayedStep = when {
             dismissed -> null
             step == Step.Engine || editing == null -> step
@@ -166,16 +284,45 @@ internal class BootstrapEnginePicker(
             editing.model == null -> Step.Model
             else -> step ?: Step.Reasoning
         }
+        val applying = applyAttempt != null
+        val showingModelsDuringReasoningLoad = displayedStep == Step.Model && load?.step == Step.Reasoning &&
+            state.options?.model != null
+        val failure = when {
+            applying || !state.failed || displayedStep == null || displayedStep == Step.Engine -> null
+            failedApply && displayedStep == Step.Reasoning -> Failure.ApplyConfiguration
+            failedApply || showingModelsDuringReasoningLoad -> null
+            else -> Failure.LoadOptions
+        }
         publish(ChatEnginePickerState(
-            engines = state.engines.map { it.display() }, confirmed = state.confirmed?.display(), step = displayedStep,
+            engines = state.engines.map { it.display() },
+            confirmed = existingConfiguration ?: state.confirmed?.display(), step = displayedStep,
             engine = editing?.engine?.display(), models = state.options?.model?.choices?.map { it.display() },
             model = editing?.model?.display(), levels = state.options?.reasoning?.choices?.map { it.display() },
-            level = editing?.level?.display(), loading = state.busy, failed = state.failed, canApply = state.canConfirm,
+            level = editing?.level?.display(),
+            loading = applying || (state.busy && !showingModelsDuringReasoningLoad) ||
+                (displayedStep != null && displayedStep != Step.Engine && editing == null && !state.failed),
+            failure = failure, canApply = !applying && state.canConfirm,
         ))
     }
 
     private fun publish(picker: ChatEnginePickerState) {
-        screen.update { it.copy(sessionBootstrap = it.sessionBootstrap?.copy(picker = picker)) }
+        screen.update {
+            if (existingChat != null) it.copy(chatEnginePicker = picker)
+            else it.copy(sessionBootstrap = it.sessionBootstrap?.copy(picker = picker))
+        }
+    }
+
+    private class OptionLoad(
+        val step: Step,
+        val selection: ChatDraftState.Selection,
+        val modelId: String? = null,
+    ) {
+
+        fun awaits(state: ChatDraftState): Boolean {
+            val editing = state.editing ?: return true
+            return editing.engine.id != selection.engine.id ||
+                (modelId != null && !state.failed && editing.model?.id != modelId)
+        }
     }
 }
 

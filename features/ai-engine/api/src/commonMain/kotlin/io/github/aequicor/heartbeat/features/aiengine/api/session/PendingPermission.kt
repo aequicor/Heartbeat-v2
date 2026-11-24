@@ -5,4 +5,5 @@ public data class PendingPermission(
     val toolCallEntryId: String,
     val description: String,
     val options: List<PermissionOption>,
+    val tool: SessionTimelineItem.ToolCall? = null,
 )

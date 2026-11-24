@@ -1,7 +1,9 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConversationRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
@@ -12,5 +14,11 @@ internal interface ChatConversationDao {
     suspend fun find(sessionId: String): ChatConversationRecord?
 
     @Throwable(DaoException::class, CancellationException::class)
+    suspend fun updateConfiguration(sessionId: String, expected: ChatConversationRecord, configuration: ChatConfigRecord): Boolean
+
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun save(sessionId: String, messages: List<ChatTurnMessageRecord>)
+
+    @Throwable(DaoException::class, CancellationException::class)
+    suspend fun reserveRetry(sessionId: String, messageId: String): ChatEntryRecord?
 }

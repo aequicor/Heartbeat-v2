@@ -30,4 +30,5 @@ public enum class HbIconGlyph {
     Shield,
     ShieldAlert,
     Message,
+    Terminal,
 }

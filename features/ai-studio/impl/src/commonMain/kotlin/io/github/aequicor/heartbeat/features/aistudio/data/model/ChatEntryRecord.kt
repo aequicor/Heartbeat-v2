@@ -10,7 +10,7 @@ internal data class ChatEntryRecord(
         val header: String?, val attachment: Attachment?, val deferred: Boolean,
     )
 
-    data class Attachment(val id: String, val size: Long, val header: String?, val content: String?)
+    data class Attachment(val id: String, val size: Long, val header: String?, val content: String?, val mimeType: String? = null)
 
     data class Revision(val role: String, val status: String, val hasAttachments: Boolean)
 }

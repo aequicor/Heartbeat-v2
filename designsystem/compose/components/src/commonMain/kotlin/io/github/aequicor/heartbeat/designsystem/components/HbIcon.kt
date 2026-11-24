@@ -33,6 +33,7 @@ import io.github.aequicor.heartbeat.designsystem.resources.ic_plus
 import io.github.aequicor.heartbeat.designsystem.resources.ic_search
 import io.github.aequicor.heartbeat.designsystem.resources.ic_send
 import io.github.aequicor.heartbeat.designsystem.resources.ic_stop
+import io.github.aequicor.heartbeat.designsystem.resources.ic_terminal
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import org.jetbrains.compose.resources.DrawableResource
@@ -88,4 +89,5 @@ private val glyphAssets: Map<HbIconGlyph, DrawableResource> = mapOf(
     HbIconGlyph.Shield to Res.drawable.ic_lucide_shield,
     HbIconGlyph.ShieldAlert to Res.drawable.ic_lucide_shield_alert,
     HbIconGlyph.Message to Res.drawable.ic_message_outline,
+    HbIconGlyph.Terminal to Res.drawable.ic_terminal,
 )

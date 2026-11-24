@@ -1,13 +1,17 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.isMarkdownAttachment
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlin.io.encoding.Base64
 
 /** Prepared state of the Aurora workspace. History is ordered from newest to oldest. */
 public data class AiStudioScreenState(
@@ -40,11 +44,16 @@ public data class AiStudioScreenState(
     val deletionError: DeletionError? = null,
     val renameError: RenameError? = null,
     val sessionBootstrap: SessionBootstrapState? = null,
+    val chatEnginePicker: ChatEnginePickerState? = null,
     val olderMessagesBefore: Long? = null,
     val allowsFileImport: Boolean = false,
     val importingAttachmentsFor: Set<String> = emptySet(),
     val attachmentErrorFor: String? = null,
+    val openedHistory: OpenedHistory? = null,
+    val artifactToSave: File? = null,
 ) {
+
+    public data class OpenedHistory(val newestMessageId: String?)
 
     public enum class DeletionError { Project, Session }
 
@@ -60,7 +69,7 @@ public data class AiStudioScreenState(
         val levels: List<Choice>? = null,
         val level: Choice? = null,
         val loading: Boolean = false,
-        val failed: Boolean = false,
+        val failure: Failure? = null,
         val canApply: Boolean = false,
     ) {
 
@@ -71,6 +80,8 @@ public data class AiStudioScreenState(
         public data class Selection(val engine: Choice, val model: Choice?, val level: Choice?)
 
         public enum class Step { Engine, Model, Reasoning }
+
+        public enum class Failure { LoadOptions, ApplyConfiguration }
     }
 
     public data class SessionBootstrapState(
@@ -228,6 +239,7 @@ public data class AiStudioScreenState(
         val mockSubagent: Boolean = false,
         val configuration: ChatEnginePickerState.Selection? = null,
         val projectId: String? = null,
+        @Transient val storageError: String? = null,
     ) {
 
         public val isUntitled: Boolean get() = title == UntitledTitle
@@ -331,6 +343,8 @@ public data class AiStudioScreenState(
         val result: File? = null,
         val promptId: String? = null,
         val retryAllowed: Boolean = true,
+        val failure: ReplyFailure? = null,
+        val artifacts: List<File> = listOf(),
     ) : Message {
         @Transient
         public val interimContent: ReplyHistoryContent? = interim?.let { ReplyHistoryContent(it) }
@@ -342,6 +356,9 @@ public data class AiStudioScreenState(
 
     @Serializable
     public enum class ReplyStatus { Working, Completed, Stopped, Failed }
+
+    @Serializable
+    public enum class ReplyFailure { RateLimited }
 
     @Serializable
     public data class Step(
@@ -368,6 +385,9 @@ public data class AiStudioScreenState(
         val detailLabel: String? = null,
         val detailsFormat: DetailFormat = restoredDetailsFormat(id, kind, detailLabel),
         @Transient internal val storedBodyId: Long? = null,
+        val operation: ToolOperation? = null,
+        val command: String? = null,
+        val files: List<File> = listOf(),
     ) {
         @Transient
         public var markdownDetails: ReplyHistoryContent? = when {
@@ -385,6 +405,16 @@ public data class AiStudioScreenState(
                 }
             }
         }
+
+        public val visibleTitle: String?
+            get() = if (kind == WorkEventKind.Thinking && !title.isNullOrBlank()) {
+                when (status) {
+                    StepStatus.Current -> "Думает..."
+                    StepStatus.Done -> "Размышления"
+                    StepStatus.Stopped -> "Размышления прерваны"
+                    StepStatus.Failed -> title
+                }
+            } else title
 
         public val preview: String
             get() = if (kind == WorkEventKind.Thinking) summary.ifBlank { emptyThinking } else summary
@@ -412,7 +442,10 @@ public data class AiStudioScreenState(
     public enum class WorkEventKind { File, Search, Thinking, Check }
 
     @Serializable
-    public enum class DetailFormat { Plain, Markdown }
+    public enum class ToolOperation { READ, EDIT, DELETE, MOVE, SEARCH, EXECUTE, THINK, FETCH, SWITCH_MODE, OTHER }
+
+    @Serializable
+    public enum class DetailFormat { Plain, Markdown, Code, Diff }
 
     @Serializable
     public enum class StepStatus(public val label: String) {
@@ -431,21 +464,47 @@ public data class AiStudioScreenState(
         val date: FileDate? = null,
         @Transient internal val storedAttachmentId: String? = null,
         @Transient internal val storedSizeBytes: Long? = null,
+        val image: ImageAttachment? = null,
+        val mimeType: String? = null,
+        val base64Encoded: Boolean = false,
     ) {
         public val openId: String get() = storedAttachmentId ?: id
 
-        public val isMarkdown: Boolean
-            get() = kind.equals("Markdown", ignoreCase = true) ||
-                name.substringAfterLast('.', "").lowercase() in MarkdownExtensions
+        public val isPatch: Boolean get() = kind == "Патч" || mimeType == "text/x-diff" || mimeType == "text/x-patch"
+        private val isTextFile: Boolean get() = !base64Encoded || mimeType?.startsWith("text/") == true || isPatch
+        public val canPreview: Boolean get() = image != null || isTextFile
+        public val isMarkdown: Boolean get() = isTextFile && image == null && isMarkdownAttachment(name, kind)
+
+        public fun previewText(): String? {
+            if (!isTextFile) return null
+            return if (!base64Encoded) content else try {
+                Base64.decode(content).decodeToString(throwOnInvalidSequence = true)
+            } catch (_: IllegalArgumentException) {
+                null
+            } catch (_: CharacterCodingException) {
+                null
+            }
+        }
+
+        public fun imageBytes(): ByteArray? {
+            val format = ChatImage.forMimeType(image?.mimeType) ?: return null
+            return try {
+                format.decode(content)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
 
         @Transient
         public val markdownContent: ReplyHistoryContent? =
-            if (isMarkdown) ReplyHistoryContent(content, markdown = true) else null
+            if (isMarkdown) previewText()?.let { ReplyHistoryContent(it, markdown = true) } else null
+    }
 
-        public companion object {
+    @Serializable
+    public data class ImageAttachment(val mimeType: String, val thumbnail: String? = null) {
+        public fun thumbnailBytes(): ByteArray? = thumbnail?.let { ChatPng.decodeOrNull(it, thumbnail = true) }
 
-            private val MarkdownExtensions = setOf("md", "markdown")
-        }
+        public fun acceptsDimensions(width: Int, height: Int): Boolean = ChatImage.acceptsDimensions(width, height)
     }
 
     @Serializable
@@ -459,6 +518,7 @@ public data class AiStudioScreenState(
         val extension: String?,
         val size: String,
         val date: String?,
+        val image: ImageAttachment? = null,
     ) {
         val accessibilityLabel: String = listOfNotNull(name, size, date).joinToString(", ")
     }

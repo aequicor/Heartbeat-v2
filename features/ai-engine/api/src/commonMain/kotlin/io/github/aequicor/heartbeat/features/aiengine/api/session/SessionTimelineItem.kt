@@ -20,6 +20,13 @@ public sealed interface SessionTimelineItem {
         val title: String,
         val status: ToolCallStatus,
         val output: List<ToolOutput> = listOf(),
+        val kind: ToolCallKind? = null,
+        val command: String? = null,
+        val paths: List<String> = listOf(),
+        val inputPath: String? = null,
+        val workingDirectory: String? = null,
+        val requestedAccess: String? = null,
+        val searchPattern: String? = null,
     ) : SessionTimelineItem
 
     public data class ContextCompaction(

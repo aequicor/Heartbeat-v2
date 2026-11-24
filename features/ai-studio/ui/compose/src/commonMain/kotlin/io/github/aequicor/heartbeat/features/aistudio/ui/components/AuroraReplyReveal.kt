@@ -1,34 +1,153 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.withSave
+import androidx.compose.ui.graphics.withSaveLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import kotlin.math.ceil
+import kotlin.math.floor
 
 @Suppress("CompositionLocalAllowlist", "NoNonPrivateGlobalVariables")
 internal val LocalReplyRevealBlock = staticCompositionLocalOf { 0 }
+
+@Suppress("CompositionLocalAllowlist", "NoNonPrivateGlobalVariables")
+internal val LocalAuroraReplyArrival = staticCompositionLocalOf<ReplyArrivalPaint?> { null }
+
+@Composable
+internal fun Modifier.auroraReplySurfaceArrival(touch: Boolean): Modifier {
+    val arrival = LocalAuroraReplyArrival.current ?: return this
+    val origin = remember { mutableStateOf(Offset.Unspecified) }
+    return onGloballyPositioned { origin.value = it.positionInRoot() }.drawWithCache {
+        val mask = Path()
+        val radius = AuroraLayout.MessageRadius.toPx()
+        val side = (if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset).toPx()
+        val bottom = (if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageVerticalInset).toPx()
+        val stroke = AuroraLayout.Stroke.toPx()
+        onDrawWithContent {
+            val front = arrival.front()
+            if (!front.isFinite()) {
+                drawContent()
+                return@onDrawWithContent
+            }
+            val position = origin.value
+            if (position == Offset.Unspecified) return@onDrawWithContent
+            val extent = arrival.visibleExtent(front) ?: return@onDrawWithContent
+            val left = if (layoutDirection == LayoutDirection.Rtl) {
+                (extent.left - position.x - side).coerceIn(0f, (size.width - 2 * radius).coerceAtLeast(0f))
+            } else 0f
+            val right = if (layoutDirection == LayoutDirection.Ltr) {
+                (extent.right - position.x + side).coerceAtLeast(2 * radius).coerceAtMost(size.width)
+            } else size.width
+            val height = (extent.bottom - position.y + bottom).coerceAtLeast(2 * radius).coerceAtMost(size.height)
+            val width = right - left
+            if (height == size.height && width == size.width) drawContent()
+            else if (width > stroke && height > stroke) {
+                // Keep the reverse list's anchor while drawing only the area occupied by the reveal.
+                mask.reset()
+                mask.addRoundRect(RoundRect(Rect(left, 0f, right, height), CornerRadius(radius)))
+                clipPath(mask) {
+                    this@onDrawWithContent.drawContent()
+                    drawRoundRect(
+                        HbAuroraColors.MessageOutline, Offset(left + stroke / 2, stroke / 2),
+                        Size(width - stroke, height - stroke), CornerRadius(radius - stroke / 2), style = Stroke(stroke),
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal class ReplyArrivalPaint(val isActive: () -> Boolean = { true }, val front: () -> Float) {
+    private val edges = mutableStateListOf<(Float) -> Rect?>()
+
+    fun attach(edge: (Float) -> Rect?) { edges.add(edge) }
+    fun detach(edge: (Float) -> Rect?) { edges.remove(edge) }
+
+    fun visibleExtent(front: Float): Rect? = edges.fold(null as Rect?) { extent, edge ->
+        val next = edge(front)
+        when {
+            next == null -> extent
+            extent == null -> next
+            else -> Rect(
+                minOf(extent.left, next.left), minOf(extent.top, next.top),
+                maxOf(extent.right, next.right), maxOf(extent.bottom, next.bottom),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RegisterReplyArrivalEdge(arrival: ReplyArrivalPaint, edge: (Float) -> Rect?) {
+    DisposableEffect(arrival, edge) {
+        arrival.attach(edge)
+        onDispose { arrival.detach(edge) }
+    }
+}
+
+/** A rule, table or source block needs its measured width as soon as it enters the reveal. */
+@Composable
+internal fun AuroraReplyArrivalBlock(content: @Composable () -> Unit) {
+    if (LocalAuroraReplyArrival.current == null) {
+        content()
+        return
+    }
+    Box(Modifier.trackReplyArrivalBlock()) { content() }
+}
+
+@Composable
+internal fun Modifier.trackReplyArrivalBlock(): Modifier {
+    val arrival = LocalAuroraReplyArrival.current ?: return this
+    val bounds = remember { mutableStateOf<Rect?>(null) }
+    RegisterReplyArrivalEdge(arrival, remember(bounds) {
+        { front -> bounds.value?.takeIf { !it.isEmpty && front > it.top }?.let { it.copy(bottom = minOf(front, it.bottom)) } }
+    })
+    return onGloballyPositioned {
+        val position = it.positionInRoot()
+        bounds.value = Rect(position, Size(it.size.width.toFloat(), it.size.height.toFloat()))
+    }
+}
 
 @Suppress("CompositionLocalAllowlist")
 private val LocalReplyReveal = staticCompositionLocalOf<ReplyRevealContext?> { null }
@@ -57,6 +176,7 @@ private const val InitialTextOpacity = .15f
 
 private data class RevealKey(val block: Int, val part: Any)
 private class RevealRange(val start: Int, val end: Int, var time: Long)
+private class RevealMask(val range: RevealRange, val path: Path)
 private class RevealRevision(
     val text: String, val ranges: List<RevealRange>, val appended: List<RevealRange> = listOf(),
 ) {
@@ -189,33 +309,134 @@ internal fun AuroraReplyText(
     val revision = reveal?.prepare(key, revealSource, context.active)
     if (revision != null) SideEffect { reveal.commit(key, revision) }
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
-    val fade = if (revision == null || revision.ranges.isEmpty()) Modifier else Modifier
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-            drawContent()
-            val measured = layout.value
-            if (context.active && measured != null && !revision.finished) {
-                val now = reveal.time
-                revision.finished = revision.ranges.all { now - it.time >= HbMotions.Default.smallStateChangeMs }
-                for (range in revision.ranges) {
-                    val progress = ((now - range.time).toFloat() / HbMotions.Default.smallStateChangeMs)
-                        .coerceIn(0f, 1f)
-                    val start = (range.start - revealOffset).coerceIn(0, text.length)
-                    val end = (range.end - revealOffset).coerceIn(0, text.length)
-                    val hidden = if (now < range.time) 1f else (1f - InitialTextOpacity) * (1f - progress)
-                    if (start < end && hidden > 0f) drawPath(
-                        measured.getPathForRange(start, end),
-                        HbAuroraColors.ContentMask.copy(alpha = hidden),
-                        blendMode = BlendMode.DstOut,
-                    )
-                }
+    val paint = LocalAuroraReplyArrival.current
+    val arrival = if (paint == null) Modifier else {
+        val origin = remember { mutableStateOf(Offset.Unspecified) }
+        RegisterReplyArrivalEdge(paint, remember(layout, origin) {
+            { front ->
+                val position = origin.value
+                if (position == Offset.Unspecified) null
+                else layout.value?.revealedExtent(front - position.y)?.translate(position)
             }
-        }
-    BasicText(text, modifier.then(fade), style, softWrap = softWrap, maxLines = maxLines, overflow = overflow,
+        })
+        Modifier.onGloballyPositioned { origin.value = it.positionInRoot() }
+            .drawArrivalGlyphs(layout, paint.front) { origin.value.y }
+    }
+    val fade = if (revision == null || revision.ranges.isEmpty()) Modifier
+    else Modifier.drawReplyReveal(reveal, revision, layout, revealOffset, text.length)
+    BasicText(text, modifier.then(arrival).then(fade), style, softWrap = softWrap, maxLines = maxLines, overflow = overflow,
         onTextLayout = {
         layout.value = it
         onTextLayout(it)
     })
+}
+
+private fun Modifier.drawArrivalGlyphs(
+    layout: State<TextLayoutResult?>,
+    glyphFront: () -> Float,
+    top: () -> Float,
+): Modifier = drawWithCache {
+    val measured = layout.value
+    val prefix = Path()
+    onDrawWithContent {
+        val revealed = glyphFront() - top()
+        if (measured == null || revealed >= measured.size.height) {
+            drawContent()
+        } else if (revealed > 0f && measured.lineCount > 0) {
+            val line = measured.getLineForVerticalPosition(revealed)
+            val lineTop = measured.getLineTop(line)
+            val start = measured.getLineStart(line)
+            val cursor = measured.arrivalCursor(line, revealed)
+            prefix.reset()
+            if (line > 0) prefix.addRect(Rect(0f, 0f, size.width, lineTop))
+            if (cursor > start) prefix.addPath(measured.getPathForRange(start, cursor))
+            clipPath(prefix) { this@onDrawWithContent.drawContent() }
+        }
+    }
+}
+
+private fun TextLayoutResult.arrivalCursor(line: Int, front: Float): Int {
+    val start = getLineStart(line)
+    val end = getLineEnd(line, visibleEnd = true)
+    val top = getLineTop(line)
+    val fraction = ((front - top) / (getLineBottom(line) - top)).coerceIn(0f, 1f)
+    val cursor = start + ((end - start) * fraction).toInt()
+    return if (cursor > start && layoutInput.text[cursor - 1].isHighSurrogate()) cursor - 1 else cursor
+}
+
+private fun TextLayoutResult.revealedExtent(front: Float): Rect? {
+    if (front <= 0f || lineCount == 0) return null
+    val line = getLineForVerticalPosition(front)
+    val start = getLineStart(line)
+    val cursor = arrivalCursor(line, front)
+    val partial = if (cursor > start) getPathForRange(start, cursor).getBounds().takeUnless { it.isEmpty } else null
+    var left = partial?.left ?: Float.POSITIVE_INFINITY
+    var right = partial?.right ?: Float.NEGATIVE_INFINITY
+    var bottom = if (partial != null) getLineBottom(line) else 0f
+    for (index in 0 until line) {
+        if (getLineEnd(index, visibleEnd = true) == getLineStart(index)) continue
+        left = minOf(left, getLineLeft(index))
+        right = maxOf(right, getLineRight(index))
+        bottom = maxOf(bottom, getLineBottom(index))
+    }
+    return if (right > left) Rect(left, getLineTop(0), right, bottom) else null
+}
+
+private fun Modifier.drawReplyReveal(
+    reveal: ReplyReveal,
+    revision: RevealRevision,
+    layout: State<TextLayoutResult?>,
+    offset: Int,
+    length: Int,
+): Modifier = drawWithCache {
+    val measured = layout.value
+    val masks = if (measured == null) emptyList() else revision.ranges.mapNotNull { range ->
+        val start = (range.start - offset).coerceIn(0, length)
+        val end = (range.end - offset).coerceIn(0, length)
+        if (start >= end) null else RevealMask(range, measured.getPathForRange(start, end)).takeUnless { it.path.isEmpty }
+    }
+    val bounds = masks.takeIf { it.isNotEmpty() }?.let {
+        val rows = masks.map { mask -> mask.path.getBounds() }
+        Rect(0f, floor(rows.minOf { row -> row.top }), size.width, ceil(rows.maxOf { row -> row.bottom }))
+    }
+    val layer = Paint()
+    val eraser = Paint().apply {
+        color = HbAuroraColors.ContentMask
+        blendMode = BlendMode.DstOut
+        isAntiAlias = false
+    }
+    val duration = HbMotions.Default.smallStateChangeMs
+    onDrawWithContent {
+        if (bounds == null || revision.finished) {
+            drawContent()
+            return@onDrawWithContent
+        }
+        val now = reveal.time
+        revision.finished = revision.ranges.all { now - it.time >= duration }
+        if (revision.finished) {
+            drawContent()
+            return@onDrawWithContent
+        }
+        // Keep the already visible lines on the native text canvas.
+        drawIntoCanvas { canvas ->
+            canvas.withSave {
+                canvas.clipRect(bounds, ClipOp.Difference)
+                drawContent()
+            }
+            canvas.withSave {
+                canvas.clipRect(bounds)
+                canvas.withSaveLayer(bounds, layer) {
+                    drawContent()
+                    for (mask in masks) {
+                        val elapsed = now - mask.range.time
+                        if (elapsed >= duration) continue
+                        eraser.alpha = if (elapsed < 0) 1f else (1f - InitialTextOpacity) * (1f - elapsed.toFloat() / duration)
+                        canvas.drawPath(mask.path, eraser)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

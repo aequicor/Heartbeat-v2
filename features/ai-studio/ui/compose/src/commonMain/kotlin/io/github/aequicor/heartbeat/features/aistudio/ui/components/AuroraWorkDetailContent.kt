@@ -21,7 +21,9 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 internal fun AuroraWorkDetailContent(event: WorkEvent, touch: Boolean, selection: SelectionState) {
     val color = if (touch) AuroraColors.WorkInk else AuroraColors.DesktopInk
     if (event.details.isBlank()) {
-        AuroraWorkText(event.detailText, AuroraWorkRole.Detail, WorkDetailWidth, color = color)
+        if (event.command == null || event.status == StepStatus.Current) {
+            AuroraWorkText(event.detailText, AuroraWorkRole.Detail, WorkDetailWidth, color = color)
+        }
         return
     }
     key(event.id) {
@@ -31,6 +33,8 @@ internal fun AuroraWorkDetailContent(event: WorkEvent, touch: Boolean, selection
                     event.detailText, event.markdownDetails, selection, HbTypography.Detail.copy(color = color), touch,
                     WorkMarkdownIntrinsicSize, streaming = event.status == StepStatus.Current,
                 )
+                event.detailsFormat == DetailFormat.Code ->
+                    AuroraReplyText(event.detailText, WorkDetailWidth, HbTypography.Code.copy(color = color))
                 !touch && event.kind == WorkEventKind.Thinking ->
                     AuroraThinkingBody(event.id, event.detailText, selection)
                 event.kind == WorkEventKind.Thinking -> {

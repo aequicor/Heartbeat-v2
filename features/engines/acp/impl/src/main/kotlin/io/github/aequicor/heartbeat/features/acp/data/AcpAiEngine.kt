@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,7 +67,7 @@ internal class AcpAiEngine(
                 if (!disposed) {
                     when (event) {
                         AiEngineEvent.Connect -> connect()
-                        AiEngineEvent.Disconnect -> disconnect(AiEngineState.NotInitialized)
+                        AiEngineEvent.Disconnect -> closeConnection()
                         is AiEngineEvent.AuthorizationCompleted -> authorizationCompleted(event.result)
                     }
                 }
@@ -94,25 +95,67 @@ internal class AcpAiEngine(
 
     override suspend fun getOrCreateSession(config: SessionConfig, existing: SessionKey?): Session = request { active ->
         require(existing == null || existing.engine.id == key.id) { "Session belongs to another engine" }
-        existing?.let(openSessions::get) ?: openSession(active, config, existing)
+        val cached = existing?.let(openSessions::get)
+        if (cached != null) {
+            if (cached.state.value.status != SessionStatus.Closed) return@request cached
+            releaseClosedSession(active, cached)
+        }
+        openSession(active, config, existing)
     }
 
     override suspend fun closeSession(key: SessionKey) {
         lifecycle.withLock {
-            val session = openSessions.remove(key) ?: return
+            val session = openSessions[key] ?: return
             val active = checkNotNull(connection)
             session.terminate(SessionStatus.Closed, cancelTurn = true)
-            active.forget(session)
-            sessionStatuses.update { it - key }
-            withinRequestTimeout { active.closeSession(session.key.id) }
+            withinRequestTimeout { releaseClosedSession(active, session) }
         }
+    }
+
+    private suspend fun releaseClosedSession(active: AcpConnection, session: AcpSession) {
+        // Keep a locally closed session until the agent acknowledges release so a failed close can be retried.
+        val key = session.key
+        active.closeSession(key.id)
+        openSessions.remove(key)
+        active.forget(session)
+        sessionStatuses.update { it - key }
     }
 
     override suspend fun dispose() {
         lifecycle.withLock {
             disposed = true
+            try {
+                closeConnection()
+            } finally {
+                scope.cancel()
+            }
+        }
+    }
+
+    private suspend fun closeConnection() {
+        try {
+            val active = connection ?: return
+            openSessions.values.forEach { it.terminate(SessionStatus.Closed, cancelTurn = true) }
+            withTimeoutOrNull(2.seconds) {
+                coroutineScope {
+                    for (session in openSessions.values) {
+                        launch { flushSession(active, session.key.id) }
+                    }
+                }
+            }
+        } finally {
             disconnect(AiEngineState.NotInitialized)
-            scope.cancel()
+        }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Shutdown must also release an unresponsive or closed agent.
+    private suspend fun flushSession(active: AcpConnection, id: String) {
+        try {
+            active.closeSession(id)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Keep closing other sessions and stop the process even if this one fails.
         }
     }
 
@@ -200,7 +243,11 @@ internal class AcpAiEngine(
     }
 
     private fun newSession(active: AcpConnection, key: SessionKey, replay: Boolean): AcpSession =
-        AcpSession(key, currentKey, active.protocol, scope, replay) { status ->
+        AcpSession(
+            key, currentKey, active.protocol, scope, replay,
+            dshAgent = active.agent.agentInfo?.name == "deepseek-harness-acp",
+            imagePrompts = active.agent.agentCapabilities.promptCapabilities.image,
+        ) { status ->
             sessionStatuses.update { if (key in it) it + (key to status) else it }
         }
 

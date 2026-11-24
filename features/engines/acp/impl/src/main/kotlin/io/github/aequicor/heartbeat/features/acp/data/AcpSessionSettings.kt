@@ -27,6 +27,7 @@ internal class AcpSessionSettings(
 
     private var options: List<SessionConfigOption>? = null
     private var legacy: SessionModelState? = null
+    private val unconfirmed = mutableSetOf<String>()
     var current = SessionSettings()
         private set
 
@@ -38,6 +39,7 @@ internal class AcpSessionSettings(
 
     fun update(values: List<SessionConfigOption>) = synchronized(lock) {
         options = values
+        values.forEach { unconfirmed.remove(it.id.value) }
         refresh()
     }
 
@@ -46,22 +48,29 @@ internal class AcpSessionSettings(
             checkAvailable()
             val selector = listOfNotNull(current.model, current.reasoning).first { it.id == id }
             require(selector.choices.any { it.id == value })
-            if (selector.current == value) return current
+            if (selector.current == value && id !in unconfirmed) return current
             id == LegacyModelSelector && options.orEmpty().none { it.id.value == id }
         }
-        withinRequestTimeout {
-            if (legacyModel) {
-                V1.SessionSetModel(protocol, SetSessionModelRequest(sessionId, ModelId(value)))
-                synchronized(lock) {
-                    legacy = legacy?.copy(currentModelId = ModelId(value))
-                    refresh()
+        try {
+            withinRequestTimeout {
+                if (legacyModel) {
+                    V1.SessionSetModel(protocol, SetSessionModelRequest(sessionId, ModelId(value)))
+                    synchronized(lock) {
+                        legacy = legacy?.copy(currentModelId = ModelId(value))
+                        unconfirmed.remove(id)
+                        refresh()
+                    }
+                } else {
+                    val request = SetSessionConfigOptionRequest(
+                        sessionId, SessionConfigId(id), SessionConfigOptionValue.StringValue(value),
+                    )
+                    update(V1.SessionSetConfigOption(protocol, request).configOptions)
                 }
-            } else {
-                val request = SetSessionConfigOptionRequest(
-                    sessionId, SessionConfigId(id), SessionConfigOptionValue.StringValue(value),
-                )
-                update(V1.SessionSetConfigOption(protocol, request).configOptions)
             }
+        } catch (failure: Exception) {
+            // A failed request can leave the cached value behind the agent's setting.
+            synchronized(lock) { unconfirmed.add(id) }
+            throw failure
         }
         return synchronized(lock) {
             checkAvailable()

@@ -9,6 +9,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSettings
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions
@@ -20,7 +21,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 @Inject
-internal class ChatEngineDataSourceImpl(private val facade: AiEngineFacade) : ChatEngineDataSource {
+internal class ChatEngineDataSourceImpl(
+    private val facade: AiEngineFacade,
+    private val attachments: ChatAttachmentDataSource,
+) : ChatEngineDataSource {
 
     override val engines = facade.availableEngines.map { keys -> keys.map { ChatEngineOptions.Choice(it.id, it.name) } }
 
@@ -46,7 +50,7 @@ internal class ChatEngineDataSourceImpl(private val facade: AiEngineFacade) : Ch
         val key = SessionKey(engine.key, sessionId, workingDirectory = directory)
         val session = engine.getOrCreateSession(SessionConfig(directory), existing = key)
         check(session.key == key) { "The engine returned another session" }
-        return ChatEngineConversationDataSourceImpl(session)
+        return ChatEngineConversationDataSourceImpl(session, attachments) { engine.closeSession(session.key) }
     }
 
     private suspend fun connect(engineId: String): AiEngine {
@@ -63,7 +67,10 @@ internal class ChatEngineDataSourceImpl(private val facade: AiEngineFacade) : Ch
     }
 }
 
-internal fun SessionSettings.toDomain() = ChatEngineOptions(model?.toDomain(), reasoning?.toDomain())
+internal fun SessionSettings.toDomain() = ChatEngineOptions(
+    model?.toDomain(),
+    reasoning?.takeIf { it.choices.isNotEmpty() }?.toDomain(),
+)
 
 private fun SessionSettings.Selector.toDomain() = ChatEngineOptions.Selector(
     id, current, choices.map { ChatEngineOptions.Choice(it.id, it.name) },

@@ -7,7 +7,15 @@ internal data class ChatTurn(
     val running: Boolean = true,
 ) {
 
-    data class Permission(val id: String, val title: String, val options: List<Option>)
+    data class Permission(
+        val id: String,
+        val title: String,
+        val options: List<Option>,
+        val paths: List<String>,
+        val command: String?,
+        val workingDirectory: String?,
+        val requestedAccess: String?,
+    )
 
     data class Option(val id: String, val label: String, val kind: String)
 }

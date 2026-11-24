@@ -16,4 +16,12 @@ internal interface SendChatMessageUseCase {
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>
+
+    @Throwable(CancellationException::class)
+    suspend fun retry(
+        sessionId: String,
+        messageId: String,
+        started: suspend (ChatEngineConversationDataSource) -> Boolean,
+        update: suspend (ChatTurn) -> Unit,
+    ): Result<Unit>
 }

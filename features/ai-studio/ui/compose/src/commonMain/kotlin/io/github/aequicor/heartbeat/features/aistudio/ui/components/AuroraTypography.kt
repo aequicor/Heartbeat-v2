@@ -23,7 +23,7 @@ internal fun auroraLabelStyle(color: Color): TextStyle = HbTypography.Label.copy
 internal fun auroraTimestampStyle(): TextStyle = HbTypography.Metadata.copy(color = AuroraColors.MessageMuted)
 
 internal enum class AuroraWorkRole {
-    Action, Summary, Detail, Metadata,
+    Action, StageTitle, Summary, Detail, Metadata,
 }
 
 @Composable
@@ -36,6 +36,7 @@ internal fun AuroraWorkText(
 ) {
     val style = when (role) {
         AuroraWorkRole.Action -> HbTypography.Label
+        AuroraWorkRole.StageTitle -> HbTypography.PaneTitle
         AuroraWorkRole.Summary -> HbTypography.Caption
         AuroraWorkRole.Metadata -> HbTypography.Metadata
         AuroraWorkRole.Detail -> HbTypography.Detail

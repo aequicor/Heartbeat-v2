@@ -11,7 +11,7 @@ internal data class ChatHistoryEntry(
     val recoveredMessage: Message
         get() = when (message) {
             is User -> if (message.delivery == Delivery.Sending) {
-                message.copy(delivery = Delivery.Failed, error = "Отправка прервана при закрытии приложения")
+                message.copy(delivery = Delivery.Failed, error = InterruptedSendError, retryAllowed = false)
             } else message
             is Reply -> if (message.status == ReplyStatus.Working) {
                 message.copy(status = ReplyStatus.Stopped, steps = message.steps.map(Step::stop))
@@ -50,6 +50,8 @@ internal data class ChatHistoryEntry(
         val steps: List<Step>,
         val result: ChatAttachment?,
         val retryAllowed: Boolean = true,
+        val failure: ReplyFailure? = null,
+        val artifacts: List<ChatAttachment> = emptyList(),
     ) : Message
 
     data class Step(
@@ -62,9 +64,13 @@ internal data class ChatHistoryEntry(
         val events: List<Event>,
     ) {
 
-        fun stop(): Step = if (status == StepStatus.Current) {
-            copy(status = StepStatus.Stopped, events = events.map(Event::stop))
-        } else this
+        fun stop(): Step {
+            if (status != StepStatus.Current && events.none { it.status == StepStatus.Current }) return this
+            return copy(
+                status = if (status == StepStatus.Current) StepStatus.Stopped else status,
+                events = events.map(Event::stop),
+            )
+        }
     }
 
     data class Event(
@@ -77,12 +83,15 @@ internal data class ChatHistoryEntry(
         val detailLabel: String?,
         val detailsFormat: DetailFormat?,
         val bodyId: Long?,
+        val operation: ToolOperation? = null,
+        val command: String? = null,
+        val files: List<ChatAttachment> = emptyList(),
     ) {
 
         fun stop(): Event = when {
             status != StepStatus.Current -> this
-            kind == EventKind.Thinking -> copy(status = StepStatus.Stopped, title = "Размышления прерваны")
-            else -> copy(status = StepStatus.Stopped, summary = "Остановлено")
+            kind == EventKind.Thinking -> copy(status = StepStatus.Stopped, title = InterruptedReasoningTitle)
+            else -> copy(status = StepStatus.Stopped, summary = InterruptedToolSummary)
         }
     }
 
@@ -90,11 +99,15 @@ internal data class ChatHistoryEntry(
 
     enum class ReplyStatus { Working, Completed, Stopped, Failed }
 
+    enum class ReplyFailure { RateLimited }
+
     enum class StepStatus { Current, Done, Stopped, Failed }
 
     enum class EventKind { File, Search, Thinking, Check }
 
-    enum class DetailFormat { Plain, Markdown }
+    enum class ToolOperation { READ, EDIT, DELETE, MOVE, SEARCH, EXECUTE, THINK, FETCH, SWITCH_MODE, OTHER }
+
+    enum class DetailFormat { Plain, Markdown, Code, Diff }
 
     enum class Scenario { Standard, SendFailure, DecisionFailure, RunFailure, Optional, Stream }
 
@@ -113,3 +126,7 @@ internal data class ChatHistoryEntry(
         }
     }
 }
+
+internal const val InterruptedSendError = "Отправка прервана при закрытии приложения"
+internal const val InterruptedReasoningTitle = "Размышления прерваны"
+internal const val InterruptedToolSummary = "Остановлено"

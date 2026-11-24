@@ -14,6 +14,7 @@ internal class ReplyRenderStream(
     private var generation = 0
     private var timer: Job? = null
     private var parser = ReplyMarkdownParser()
+    private var previousSource = ""
     private var shown = ""
     private var pending: String? = null
 
@@ -22,7 +23,14 @@ internal class ReplyRenderStream(
             reset()
             owner = turn
             replyId = id
+        } else if (!source.startsWith(previousSource)) {
+            val hadVisibleText = shown.isNotEmpty()
+            reset()
+            owner = turn
+            replyId = id
+            if (hadVisibleText) publish(LiveText())
         }
+        previousSource = source
         val ready = readyReplyMarkdown(source)
         if (ready == shown || ready == pending) return
         if (ready.isEmpty() || (shown.isEmpty() && ready.isBlank())) return
@@ -59,6 +67,7 @@ internal class ReplyRenderStream(
         timer = null
         pending = null
         shown = ""
+        previousSource = ""
         owner = null
         replyId = null
         parser = ReplyMarkdownParser()

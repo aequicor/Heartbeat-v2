@@ -108,7 +108,7 @@ internal fun AuroraDesktopHeader(
                 verticalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
             ) {
                 if (state.sessionBootstrap != null || chat.configuration != null) {
-                    AuroraChatEngineParameters(state.sessionBootstrap?.picker, chat.configuration, false, onAction)
+                    AuroraChatEngineParameters(state.sessionBootstrap?.picker ?: state.chatEnginePicker, chat.configuration, false, onAction)
                 } else AuroraExecutionParameters(chat, onAction)
                 AuroraAccessMenu(chat.access, onAction)
                 if (chat.contextPercent != null || chat.quota != null) {

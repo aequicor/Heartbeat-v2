@@ -1,11 +1,23 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.Composable
@@ -21,29 +33,54 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
+import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyFailure
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyDocument
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
+import kotlin.math.abs
 
 private const val StreamResizeMillis = 120
 
-internal class ArchiveReveal {
+internal class ArchiveReveal(
+    val initialOffset: Int,
+    val reserveSpace: Boolean,
+    private val onPlaced: () -> Unit,
+) {
     var isPlaced by mutableStateOf(false)
         private set
 
     fun markPlaced() {
+        if (isPlaced) return
         isPlaced = true
+        onPlaced()
     }
 }
 
@@ -58,15 +95,21 @@ internal fun AuroraReplyAnswer(
     onResizeEnd: () -> Unit,
     viewportHeight: Dp = Dp.Hairline,
     archiveReveal: ArchiveReveal? = null,
+    keepStartDuringResize: Boolean = false,
+    anchoredHeight: AuroraMeasuredHeight? = null,
+    onAnchoredHeight: (Int, Int) -> Unit = { _, _ -> },
 ) {
-    val hasAnswer = reply.text.isNotEmpty() || reply.result != null
-    val hasWork = reply.steps.isNotEmpty()
+    val hasAnswer = reply.text.isNotEmpty() || reply.hasFiles
     val showAnswer = reply.status != ReplyStatus.Working || liveText != null || hasAnswer
-    val width = if (hasWork && reply.status == ReplyStatus.Working) Modifier.fillMaxWidth() else Modifier
     // Use the placed archive body as the starting size for subsequent resize animations.
     val opening = archiveReveal?.takeUnless { it.isPlaced }
-    val immediate = opening != null || liveText != null || finalResize
-    val size = if (immediate) width else width.auroraHeightMotion(StreamResizeMillis, false, onResizeEnd)
+    val immediate = opening != null || liveText != null || finalResize || keepStartDuringResize
+    val size = when {
+        anchoredHeight != null ->
+            auroraMeasuredHeightMotion(anchoredHeight, StreamResizeMillis, onResizeEnd, immediate, onAnchoredHeight)
+        immediate -> Modifier
+        else -> Modifier.auroraHeightMotion(StreamResizeMillis, false, onResizeEnd)
+    }
     val finishResize by rememberUpdatedState(onResizeEnd)
     LaunchedEffect(finalResize) {
         if (finalResize) withFrameNanos { finishResize() }
@@ -74,8 +117,7 @@ internal fun AuroraReplyAnswer(
     AuroraReplyReveal(liveText != null) {
         Box(size, propagateMinConstraints = true) {
             if (showAnswer) {
-                val wide = hasWork && (reply.status != ReplyStatus.Completed || !hasAnswer)
-                AuroraReplyContent(reply, touch, onAction, liveText, selection, wide, viewportHeight, opening)
+                AuroraReplyContent(reply, touch, onAction, liveText, selection, viewportHeight, opening)
             }
         }
     }
@@ -88,31 +130,34 @@ private fun AuroraReplyContent(
     onAction: (AiStudioAction) -> Unit,
     liveText: StateFlow<LiveText>?,
     selection: SelectionState,
-    wide: Boolean,
     viewportHeight: Dp,
     archiveReveal: ArchiveReveal?,
 ) {
     val current = liveText?.collectAsState()?.value?.takeIf { it.replyId == reply.id }
     val text = if (liveText == null) reply.text else current?.text ?: reply.text
     val working = reply.status == ReplyStatus.Working
-    // The timeline owns the thinking bubble's insets until an answer actually exists.
-    if (reply.workingWithoutResult && text.isEmpty()) return
+    if (working && text.isEmpty() && !reply.hasFiles) {
+        if (reply.steps.isEmpty() && reply.interim == null) AuroraPendingReply(touch)
+        return
+    }
     val textPresent = reply.text.isNotEmpty()
     val simple = reply.historyContent?.plain != false
     val inline = liveText == null && reply.inlineAnswerTime
-    val width = if (wide || working) Modifier.fillMaxWidth() else Modifier
     val horizontalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset
     val verticalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageVerticalInset
-    val padding = width.padding(
-        start = horizontalInset, end = horizontalInset, top = verticalInset,
+    val compact = !touch && textPresent && reply.status == ReplyStatus.Completed
+    val padding = Modifier.padding(
+        start = horizontalInset, end = horizontalInset,
+        top = if (compact) AuroraLayout.DesktopCompactMessageTopInset else verticalInset,
     )
     AuroraMessageTimestamp(
         if (working) "" else reply.time,
         inlineAllowed = inline,
-        textSetsWidth = simple && textPresent && reply.result == null && liveText == null,
+        textSetsWidth = simple && textPresent && !reply.hasFiles && liveText == null,
         modifier = padding,
-        bottomPadding = verticalInset,
-        status = { AuroraReplyStatus(reply.status) },
+        bottomPadding = if (compact) AuroraLayout.DesktopCompactMessageBottomInset else verticalInset,
+        preferStatusWithTime = !working,
+        status = { AuroraReplyStatus(reply, touch) },
     ) { onTextLayout ->
         Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
             AuroraReplyBlocks(
@@ -123,11 +168,76 @@ private fun AuroraReplyContent(
     }
 }
 
-private val Reply.workingWithoutResult: Boolean
-    get() = status == ReplyStatus.Working && steps.isNotEmpty() && result == null
+private const val WaitingDotCount = 3
+private const val WaitingIdleOpacity = 0.3f
+
+@Composable
+private fun AuroraPendingReply(touch: Boolean) {
+    val surface = Modifier.widthIn(min = AuroraLayout.PendingReplyMinWidth)
+        .heightIn(min = AuroraLayout.PendingReplyMinHeight).padding(AuroraLayout.Space)
+    val announcement = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    if (!touch) {
+        Box(surface, contentAlignment = Alignment.CenterStart) {
+            AuroraDesktopWorkGoal("Агент работает", announcement)
+        }
+        return
+    }
+    Row(
+        surface,
+        horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(AuroraLayout.DesktopTarget)) {
+            val stroke = AuroraLayout.FrameStroke.toPx()
+            drawCircle(
+                AuroraColors.Primary,
+                radius = (AuroraLayout.ActiveMarker.toPx() - stroke) / 2,
+                style = Stroke(stroke),
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(AuroraLayout.WorkActivityDotsGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AuroraWorkText("Агент работает", AuroraWorkRole.Detail, announcement)
+            AuroraWorkActivityDots()
+        }
+    }
+}
+
+@Composable
+internal fun AuroraWorkActivityDots(modifier: Modifier = Modifier) {
+    val phase = if (HbTheme.motion == HbMotionPreference.Reduced) null else {
+        rememberInfiniteTransition(label = "Agent activity").animateFloat(
+            initialValue = 0f,
+            targetValue = WaitingDotCount.toFloat(),
+            animationSpec = infiniteRepeatable(tween(
+                durationMillis = HbMotions.Default.deliberateTransitionMs * WaitingDotCount,
+                easing = LinearEasing,
+            )),
+            label = "Activity pulse",
+        )
+    }
+    Canvas(modifier.size(AuroraLayout.WorkActivityDotsWidth, AuroraLayout.Glyph)) {
+        val diameter = AuroraLayout.WorkActivityDotDiameter.toPx()
+        val firstCenter = AuroraLayout.WorkActivityDotStartInset.toPx() + diameter / 2
+        val centerY = AuroraLayout.WorkActivityDotCenterY.toPx()
+        for (index in 0 until WaitingDotCount) {
+            val peak = index + 0.5f
+            val emphasis = (1f - 2f * abs((phase?.value ?: 0.5f) - peak)).coerceAtLeast(0f)
+            drawCircle(
+                AuroraColors.Primary.copy(alpha = WaitingIdleOpacity + (1f - WaitingIdleOpacity) * emphasis),
+                radius = diameter / 2,
+                center = Offset(firstCenter + index * AuroraLayout.ControlGap.toPx(), centerY),
+            )
+        }
+    }
+}
 
 private val Reply.inlineAnswerTime: Boolean
-    get() = historyContent?.plain != false && status == ReplyStatus.Completed && result == null && text.isNotEmpty()
+    get() = historyContent?.plain != false && status == ReplyStatus.Completed && !hasFiles && text.isNotEmpty()
+
+private val Reply.hasFiles: Boolean get() = result != null || artifacts.isNotEmpty()
 
 @Composable
 private fun AuroraReplyBlocks(
@@ -150,8 +260,17 @@ private fun AuroraReplyBlocks(
     } else key(history) {
         completedAnswer(history, text)
     }
+    val lastReady = remember(reply.id) { DisplayedReplyRevision<AnswerFrame?>(null) }
+    val previous = lastReady.value
+    // Keep the streamed body in the reverse list while the same text gets its final formatting.
+    val renderable = when {
+        latest.preparing -> previous?.takeIf { latest.text.startsWith(it.text) } ?: latest
+        LocalAuroraReplyArrival.current?.isActive?.invoke() == true && !latest.streaming &&
+            previous?.streaming == true && previous.text == latest.text -> previous
+        else -> latest
+    }
     val frame = key(reply.id) {
-        keepSelectedReplyRevision(latest, selection) { displayed, incoming ->
+        keepSelectedReplyRevision(renderable, selection) { displayed, incoming ->
             when {
                 !incoming.streaming -> incoming
                 displayed.isRich && incoming.isRich && incoming.text.startsWith(displayed.text) -> incoming
@@ -159,8 +278,17 @@ private fun AuroraReplyBlocks(
             }
         }
     }
-    val preparingHeight = remember(history, viewportHeight) {
-        largeReplyPreparingHeight(history != null, text, viewportHeight)
+    if (!frame.preparing) SideEffect { lastReady.value = frame }
+    val initialOffset = archiveReveal?.initialOffset ?: 0
+    val reserveSpace = archiveReveal?.reserveSpace != false
+    val density = LocalDensity.current
+    val preparingHeight = remember(history, viewportHeight, initialOffset, reserveSpace, density) {
+        when {
+            // The reverse list must be able to measure the restored offset before the rich body is placed.
+            initialOffset > 0 -> viewportHeight + with(density) { initialOffset.toDp() }
+            reserveSpace -> largeReplyPreparingHeight(history != null, text, viewportHeight)
+            else -> Dp.Hairline
+        }
     }
     if (frame.preparing) {
         AuroraPreparingReply(width, preparingHeight)
@@ -173,33 +301,112 @@ private fun AuroraReplyBlocks(
     if (result != null) {
         AuroraControl(
             { onAction(AiStudioAction.OpenResult(reply.id)) },
+            modifier = Modifier.trackReplyArrivalBlock(),
             touch = touch, background = AuroraColors.Canvas, round = false,
         ) {
             AuroraFileLabel(result, Modifier.padding(vertical = AuroraLayout.SmallGap))
         }
     }
+    AuroraArtifactRows(reply.artifacts, reply.id, touch, onAction, width)
 }
 
 @Composable
-@Suppress("InjectDispatcher") // Parse and style the archive revision together on the worker.
+internal fun AuroraArtifactRows(
+    files: List<File>,
+    replyId: String,
+    touch: Boolean,
+    onAction: (AiStudioAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (files.isEmpty()) return
+    Column(modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
+        for (file in files) key(file.id) { AuroraArtifactRow(file, replyId, touch, onAction) }
+    }
+}
+
+@Composable
+private fun AuroraArtifactRow(file: File, replyId: String, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
+    val button = Modifier.size(if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget)
+    Row(Modifier.fillMaxWidth().trackReplyArrivalBlock(), verticalAlignment = Alignment.CenterVertically) {
+        AuroraFileLabel(file, Modifier.weight(1f), attachmentTile = true)
+        AuroraControl(
+            { onAction(AiStudioAction.OpenArtifact(replyId, file.id)) },
+            modifier = button,
+            label = "Открыть ${file.name}", touch = touch, enabled = file.canPreview,
+            background = Color.Transparent, hoverBackground = AuroraColors.Canvas, horizontalPadding = Dp.Hairline,
+        ) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                HbIcon(HbIconGlyph.Eye, Modifier.size(AuroraLayout.LargeGlyph))
+            }
+        }
+        AuroraControl(
+            { onAction(AiStudioAction.SaveArtifact(replyId, file.id)) },
+            modifier = button,
+            label = "Скачать ${file.name}", touch = touch, background = Color.Transparent,
+            hoverBackground = AuroraColors.Canvas, horizontalPadding = Dp.Hairline,
+        ) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                HbIcon(HbIconGlyph.ArrowUp, Modifier.size(AuroraLayout.LargeGlyph).rotate(180f))
+            }
+        }
+    }
+}
+
+@Composable
 private fun completedAnswer(history: ReplyHistoryContent, text: String): AnswerFrame {
     val monospace = auroraCodeFontFamily()
-    val initial = remember(history) {
+    val cache = LocalAuroraCompletedDocuments.current
+    val initial = remember(history, monospace, cache) {
         val available = history.available
-        AnswerFrame(available, text, streaming = false, preparing = available == null)
+        val prepared = available?.let { cache?.find(history, it, monospace) }
+        val preparing = available?.plainText == null && prepared == null
+        AnswerFrame(available, text, streaming = false, preparing = preparing, prepared = prepared)
     }
-    val frame by produceState(initial, history, monospace) {
-        // Parse and style an uncached answer in one worker pass before publishing it to the UI.
-        value = withContext(Dispatchers.Default) {
-            val document = history.document()
-            val styled = if (initial.document !== document && document.plainText == null) {
-                document.prepareRichDocument(monospace)
-            } else null
-            AnswerFrame(document, text, streaming = false, prepared = styled)
-        }
+    if (initial.prepared != null) return initial
+    val frame by produceState(initial, history, monospace, cache) {
+        val (document, styled) = prepareCompletedDocument(history, monospace)
+        if (styled != null && text.length <= MaxCachedReplyLength) cache?.store(history, document, styled)
+        value = AnswerFrame(document, text, streaming = false, prepared = styled)
     }
     return frame
 }
+
+internal val LocalAuroraCompletedDocuments = staticCompositionLocalOf<AuroraCompletedDocuments?> { null }
+
+/** Keeps styled Markdown across lazy row disposal, within the lifetime of one history viewport. */
+internal class AuroraCompletedDocuments {
+    private val documents = LinkedHashMap<ReplyHistoryContent, Entry>()
+
+    fun find(history: ReplyHistoryContent, document: ReplyDocument, monospace: FontFamily): PreparedDocument? =
+        documents[history]?.takeIf { it.document === document && it.styled.monospace == monospace }?.styled
+
+    fun store(history: ReplyHistoryContent, document: ReplyDocument, styled: PreparedDocument) {
+        documents[history] = Entry(document, styled)
+        if (documents.size > MaxCachedReplies) documents.remove(documents.keys.first())
+    }
+
+    suspend fun prepareInitial(replies: List<ReplyHistoryContent>, monospace: FontFamily) {
+        for (history in replies) {
+            val available = history.available
+            if (available != null && (available.plainText != null || find(history, available, monospace) != null)) continue
+            val (document, styled) = prepareCompletedDocument(history, monospace)
+            if (styled != null) store(history, document, styled)
+        }
+    }
+
+    private class Entry(val document: ReplyDocument, val styled: PreparedDocument)
+}
+
+internal const val MaxCachedReplies = 24
+internal const val MaxCachedReplyLength = 32_768
+
+@Suppress("InjectDispatcher") // The history viewport owns background Markdown preparation.
+private suspend fun prepareCompletedDocument(history: ReplyHistoryContent, monospace: FontFamily) =
+    withContext(Dispatchers.Default) {
+        val document = history.document()
+        val styled = if (document.plainText == null) document.prepareRichDocument(monospace) else null
+        document to styled
+    }
 
 private class AnswerFrame(
     val document: ReplyDocument?,
@@ -228,10 +435,22 @@ internal fun <T> keepSelectedReplyRevision(
 }
 
 @Composable
-private fun AuroraReplyStatus(status: ReplyStatus) {
-    when (status) {
-        ReplyStatus.Failed -> AuroraText("Ошибка выполнения", small = true, color = AuroraColors.Error)
-        ReplyStatus.Stopped -> AuroraText("Остановлено", small = true, color = AuroraColors.MessageMuted)
+private fun AuroraReplyStatus(reply: Reply, touch: Boolean) {
+    val alignWithMarker = if (touch) Modifier else {
+        Modifier.offset(x = AuroraLayout.Space - AuroraLayout.DesktopMessageHorizontalInset)
+    }
+    when (reply.status) {
+        ReplyStatus.Failed -> {
+            val label = when (reply.failure) {
+                ReplyFailure.RateLimited -> "Слишком много запросов"
+                null -> "Ошибка выполнения"
+            }
+            AuroraText(label, alignWithMarker, small = true, color = AuroraColors.Error)
+        }
+        ReplyStatus.Stopped -> AuroraText(
+            if (touch) "Остановлено" else "Ответ остановлен", alignWithMarker,
+            small = true, color = AuroraColors.MessageMuted,
+        )
         else -> Unit
     }
 }

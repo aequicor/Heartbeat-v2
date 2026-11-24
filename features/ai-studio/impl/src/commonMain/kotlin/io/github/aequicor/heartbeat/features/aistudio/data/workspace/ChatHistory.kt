@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.applyEdit
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.draftOwner
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.historyUsesPreview
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatRevisionChange
@@ -23,6 +24,7 @@ internal fun ChatQueries.saveHistory(chatId: String, chat: AuroraChat, previous:
 
 private fun ChatQueries.saveMessage(chatId: String, message: Message, previous: Message?) {
     val current = selectMessage(chatId, message.id).executeAsOneOrNull()
+    if (current?.status == "draft" && current.presentation.draftOwner() != null) return
     val header = message.header()
     val status = message.revisionStatus()
     val now = Clock.System.now().toEpochMilliseconds()
@@ -30,7 +32,7 @@ private fun ChatQueries.saveMessage(chatId: String, message: Message, previous: 
         current?.status == "draft" && sharedRevision(current.revision_id, chatId).executeAsOne())
     if (current == null) {
         if (change == ChatRevisionChange.Append) {
-            insertFirstRevision(if (message is User) "user" else "assistant", status, now, message.id, header)
+            insertFirstRevision(if (message is User) "user" else "assistant", status, now, message.id, header, chatId)
             val revision = lastInsertedId().executeAsOne()
             appendEntry(chatId, revision)
             writeParts(revision, message)

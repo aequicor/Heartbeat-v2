@@ -21,7 +21,7 @@ internal suspend fun submitSessionBootstrap(
     screen.update {
         it.copy(sessionBootstrap = bootstrap.copy(operation = SessionBootstrapState.Operation.CreatingSession))
     }
-    when (val result = picker.create(action.prompt)?.getOrNull()) {
+    when (val result = picker.create(action.prompt, bootstrap.attachments.firstOrNull()?.name)?.getOrNull()) {
         is SessionBootstrapResult.Created -> {
             picker.close()
             screen.update { it.copy(sessionBootstrap = null) }

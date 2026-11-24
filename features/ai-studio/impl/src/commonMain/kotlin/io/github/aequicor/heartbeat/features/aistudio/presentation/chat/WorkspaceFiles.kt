@@ -29,7 +29,7 @@ internal class WorkspaceFiles {
         val id = screen.value.chat?.id
         if (visible && id != null && storage != null) {
             stored = screen.readStored { storage.listFiles(id) } ?: return
-            refresh(screen.value.messages)
+            refresh(listOfNotNull(screen.value.live) + screen.value.messages)
         }
         screen.update { it.copy(filesVisible = visible, fileGroups = groups(it.fileSearch)) }
     }
@@ -59,7 +59,11 @@ internal class WorkspaceFiles {
         messages.forEach { message ->
             when (message) {
                 is User -> addAll(message.files)
-                is Reply -> message.result?.let(::add)
+                is Reply -> {
+                    message.result?.let(::add)
+                    addAll(message.artifacts)
+                    for (step in message.steps) for (event in step.events) addAll(event.files)
+                }
             }
         }
     }.distinctBy(File::openId)

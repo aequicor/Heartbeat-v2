@@ -7,17 +7,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -63,10 +66,15 @@ fun HbMenu(
     trigger: @Composable (Modifier) -> Unit,
 ) {
     val triggerRequester = remember { FocusRequester() }
-    val gap = with(LocalDensity.current) { MENU_GAP.roundToPx() }
+    val density = LocalDensity.current
+    val gap = with(density) { MENU_GAP.roundToPx() }
     val visual = rememberHbMenuVisual(expanded, motion)
+    val isOpen by rememberUpdatedState(expanded)
     val focusable = motion?.hoverMenu != true
     val leaving = visual?.visible == true
+    val replacesBadge = motion?.replaceTrigger == true
+    val badgeSize = if (replacesBadge) with(density) { HbAuroraLayout.MessageMenuBadge.roundToPx() } else null
+    if (expanded && visual != null) SideEffect { visual.entries = actions }
 
     fun close() {
         onDismissRequest()
@@ -74,18 +82,20 @@ fun HbMenu(
     }
 
     Box(modifier = modifier) {
-        trigger(Modifier.focusRequester(triggerRequester))
+        val badgeVisibility = if (replacesBadge && (expanded || leaving)) Modifier.graphicsLayer { alpha = 0f } else Modifier
+        trigger(Modifier.focusRequester(triggerRequester).then(badgeVisibility))
 
         if (expanded || leaving) {
             Popup(
-                popupPositionProvider = remember(gap, alignEnd, pointerAnchor, motion, visual) {
-                    val overlap = motion?.replaceTrigger == true
+                popupPositionProvider = remember(gap, alignEnd, pointerAnchor, replacesBadge, badgeSize, visual) {
                     HbAnchoredPopupPositionProvider(
-                        gap = if (pointerAnchor == null && !overlap) gap else 0,
+                        gap = if (pointerAnchor == null && !replacesBadge) gap else 0,
                         alignEnd = alignEnd && pointerAnchor == null,
                         pointerAnchor = pointerAnchor,
-                        overlapAnchor = overlap,
+                        overlapAnchor = replacesBadge,
+                        badgeSize = badgeSize,
                         onAnchorInPopup = { anchor -> visual?.anchor = anchor },
+                        holdPosition = { visual != null && !isOpen },
                     )
                 },
                 onDismissRequest = { close() },
@@ -93,7 +103,7 @@ fun HbMenu(
             ) {
                 HbMenuPopupVisual(visual, motion, expanded) { rowsModifier ->
                     HbMenuSurface(
-                        entries = actions,
+                        entries = if (expanded) actions else visual?.entries ?: actions,
                         presentation = presentation,
                         focusable = expanded && focusable,
                         modifier = rowsModifier,

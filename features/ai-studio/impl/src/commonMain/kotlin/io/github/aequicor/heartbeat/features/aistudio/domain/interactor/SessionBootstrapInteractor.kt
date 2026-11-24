@@ -12,5 +12,8 @@ internal interface SessionBootstrapInteractor {
     suspend fun withDraft(projectId: ProjectId, use: suspend (ChatCreationDraft) -> Unit): Result<Unit>
 
     @Throwable(CancellationException::class)
+    suspend fun withChatConfigurationDraft(sessionId: String, use: suspend (ChatCreationDraft) -> Unit): Result<Unit>
+
+    @Throwable(CancellationException::class)
     suspend fun registerProject(directory: ProjectDirectory, name: String? = null): Result<ProjectCreationResult>
 }
