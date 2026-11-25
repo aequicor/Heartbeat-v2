@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -26,6 +27,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.di.DesktopGraph
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
+import java.awt.EventQueue
 import java.io.File
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
@@ -97,16 +99,31 @@ fun main() {
         val os = System.getProperty("os.name")
         val uiFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Segoe UI") else FontFamily.Default }
         val codeFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Consolas") else FontFamily.Monospace }
+        val shellModifier = remember(onClose) { startupProbeModifier(onClose) }.fillMaxSize()
         val content: @Composable () -> Unit = {
             HbTheme(appearance = appearance, fontFamily = uiFont, codeFontFamily = codeFont) {
                 HbDesktopFocusIndication(Modifier.fillMaxSize()) {
-                    ShellScreen(component = shell, renderers = renderers, modifier = Modifier.fillMaxSize())
+                    ShellScreen(component = shell, renderers = renderers, modifier = shellModifier)
                 }
             }
         }
         when {
             os.startsWith("Windows") || os.startsWith("Mac") -> EdgeToEdgeHeartbeatWindow(state, onClose, content)
             else -> JewelHeartbeatWindow(state, isDark, onClose, content)
+        }
+    }
+}
+
+// The packaging probe records the first completed shell draw, then uses normal window shutdown.
+private fun startupProbeModifier(onClose: () -> Unit): Modifier {
+    val marker = System.getenv("HEARTBEAT_STARTUP_PROBE") ?: return Modifier
+    var reported = false
+    return Modifier.drawWithContent {
+        drawContent()
+        if (!reported) {
+            reported = true
+            File(marker).writeText(System.currentTimeMillis().toString())
+            EventQueue.invokeLater(onClose)
         }
     }
 }

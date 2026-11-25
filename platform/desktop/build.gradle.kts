@@ -1,18 +1,14 @@
+import heartbeat.JcefJdkInfo
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JvmVendorSpec
-import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.util.Properties
-import java.util.zip.ZipFile
-import org.gradle.api.GradleException
 
 plugins {
     id("heartbeat-desktop-wheel")
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.compose")
+    id("heartbeat-desktop-distribution")
+    id("heartbeat-desktop-windows")
     id("org.jetbrains.kotlin.plugin.compose")
     // The composition root lives in the platform compilation (HB-ARCH-014), so the Metro
     // compiler plugin runs here and the integration test graph proves that the feature
@@ -20,62 +16,7 @@ plugins {
     id("dev.zacsweers.metro")
 }
 
-val desktopVersion = "1.0.0"
-val isWindows = System.getProperty("os.name").lowercase().startsWith("windows")
-val isMacos = System.getProperty("os.name").startsWith("Mac")
-val desktopToolchain = javaToolchains.launcherFor {
-    languageVersion = JavaLanguageVersion.of(25)
-    vendor = JvmVendorSpec.JETBRAINS
-}
-
-fun sdkHome(directory: File): File =
-    directory.resolve("Contents/Home").takeIf { it.isDirectory } ?: directory
-
-fun architecture(name: String): String = when (name.lowercase()) {
-    "x86_64", "amd64" -> "x64"
-    "aarch64", "arm64" -> "arm64"
-    else -> name
-}
-
-fun hasCompatibleJcef(home: File): Boolean {
-    if (!home.resolve("jmods/jcef.jmod").isFile) return false
-    val release = home.resolve("release")
-    if (!release.isFile) return false
-    val sdk = Properties()
-    release.inputStream().use(sdk::load)
-    val version = sdk.getProperty("JAVA_VERSION").orEmpty().trim('"').takeWhile(Char::isDigit)
-    return version == "25" &&
-        sdk.getProperty("IMPLEMENTOR").orEmpty().contains("JetBrains") &&
-        architecture(sdk.getProperty("OS_ARCH").orEmpty().trim('"')) == architecture(System.getProperty("os.arch"))
-}
-
-val explicitJcefHome = providers.environmentVariable("JBR_JCEF_HOME").orNull?.let { sdkHome(file(it)) }
-if (explicitJcefHome != null) {
-    check(hasCompatibleJcef(explicitJcefHome)) { "JBR_JCEF_HOME must name a JetBrains JDK 25 with JCEF for this host" }
-}
-val userDirectory = file(System.getProperty("user.home"))
-val standardSdkDirectories = when {
-    isMacos -> listOf(file("/Library/Java/JavaVirtualMachines"), userDirectory.resolve("Library/Java/JavaVirtualMachines"))
-    isWindows -> listOfNotNull(providers.environmentVariable("ProgramFiles").orNull?.let { file(it).resolve("Java") })
-    else -> listOf(file("/usr/lib/jvm"))
-}
-val jcefCandidates = sequence {
-    providers.environmentVariable("JAVA_HOME").orNull?.let { yield(file(it)) }
-    yield(file(System.getProperty("java.home")))
-    providers.gradleProperty("org.gradle.java.installations.paths").orNull.orEmpty().split(',')
-        .filter(String::isNotBlank).forEach { yield(file(it.trim())) }
-    val sdkCache = gradle.gradleUserHomeDir.resolve("jdks")
-    for (root in standardSdkDirectories + userDirectory.resolve(".jdks") + sdkCache) {
-        for (entry in root.listFiles(File::isDirectory).orEmpty().sortedBy(File::getName)) {
-            yield(entry)
-            if (root == sdkCache) yieldAll(entry.listFiles(File::isDirectory).orEmpty().asSequence())
-        }
-    }
-}
-val installedJcefHome = explicitJcefHome ?: jcefCandidates.map(::sdkHome).firstOrNull(::hasCompatibleJcef)
-val toolchainHome = desktopToolchain.get().metadata.installationPath.asFile
-val packagedJavaHome = installedJcefHome ?: toolchainHome
-val hasDiagramBrowser = hasCompatibleJcef(packagedJavaHome)
+val jcefJdk = extensions.getByType(JcefJdkInfo::class.java)
 
 kotlin {
     // Jewel 0.42.0 is built for the IntelliJ Platform 2026.3 runtime and ships
@@ -147,212 +88,20 @@ compose.desktop {
     application {
         mainClass = "io.github.aequicor.heartbeat.MainKt"
 
-        // DecoratedWindow needs the JetBrains Runtime, including the runtime image
-        // that jpackage builds for the distributable.
-        javaHome = packagedJavaHome.absolutePath
-        if (hasDiagramBrowser) jvmArgs += "--enable-native-access=jcef"
+        // DecoratedWindow needs JBR; jlink and runtime checks override this with the JCEF SDK.
+        javaHome = jcefJdk.runJavaHome.absolutePath
 
         nativeDistributions {
             // SQLite JDBC loads java.sql; DataStore's protobuf adapter uses sun.misc.Unsafe from
             // jdk.unsupported. jpackage includes neither automatically.
             modules("java.sql")
             modules("jdk.unsupported")
-            if (hasDiagramBrowser) modules("jcef")
+            if (jcefJdk.hasJcef) modules("jcef")
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the
             // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Heartbeat"
-            packageVersion = desktopVersion
+            packageVersion = "1.0.0"
         }
     }
-}
-
-if (isWindows) {
-    val jnaJar = configurations.runtimeClasspath.get().incoming.artifactView {
-        componentFilter { component ->
-            component is ModuleComponentIdentifier &&
-                component.group == "net.java.dev.jna" && component.module == "jna"
-        }
-    }.files
-    val jnaResources = layout.buildDirectory.dir("jna-launcher-resources")
-    val jnaLibrary = jnaResources.map { it.file("windows/jna/jnidispatch.dll") }
-    val jnaArchitecture = when (architecture(System.getProperty("os.arch"))) {
-        "x64" -> "x86-64"
-        "arm64" -> "aarch64"
-        else -> "x86"
-    }
-    val prepareWindowsJna = tasks.register("prepareWindowsJna") {
-        inputs.files(jnaJar)
-        inputs.property("jnaArchitecture", jnaArchitecture)
-        outputs.file(jnaLibrary)
-        doLast {
-            // Use the native library from the same JNA version as the runtime classpath.
-            ZipFile(jnaJar.singleFile).use { jar ->
-                val entryPath = "com/sun/jna/win32-$jnaArchitecture/jnidispatch.dll"
-                val entry = checkNotNull(jar.getEntry(entryPath)) { "JNA is missing $entryPath" }
-                val target = jnaLibrary.get().asFile.toPath()
-                Files.createDirectories(target.parent)
-                jar.getInputStream(entry).use { source ->
-                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
-                }
-            }
-        }
-    }
-    compose.desktop.application.nativeDistributions {
-        appResourcesRootDir.set(prepareWindowsJna.map { jnaResources.get() })
-    }
-}
-
-if (hasDiagramBrowser) {
-    val frameworks = packagedJavaHome.parentFile.resolve("Frameworks").takeIf { isMacos }
-    val jcefModule = packagedJavaHome.resolve("jmods/jcef.jmod")
-    tasks.matching { it.name == "createDistributable" }.configureEach {
-        if (frameworks != null) inputs.dir(frameworks)
-        if (isWindows) inputs.file(jcefModule)
-        doLast {
-            val images = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
-            if (frameworks != null) {
-                val app = images.resolve("Heartbeat.app")
-                val runtime = app.resolve("Contents/runtime")
-                // jpackage copies the linked Java image but omits its sibling Frameworks.
-                providers.exec {
-                    commandLine("/usr/bin/ditto", frameworks, runtime.resolve("Contents/Frameworks"))
-                }.result.get()
-                providers.exec {
-                    commandLine("/usr/bin/codesign", "--force", "--sign", "-", runtime)
-                }.result.get()
-                providers.exec {
-                    commandLine("/usr/bin/codesign", "--force", "--sign", "-", app)
-                }.result.get()
-            } else {
-                val runtime = images.resolve(if (isWindows) "Heartbeat/runtime" else "Heartbeat/lib/runtime")
-                val nativeDirectory = runtime.resolve(if (isWindows) "bin" else "lib")
-                if (isWindows) {
-                    // Compose's jlink task strips the bin section of JCEF along with JVM commands.
-                    val runtimeBin = nativeDirectory.toPath()
-                    ZipFile(jcefModule).use { module ->
-                        for (entry in module.entries()) {
-                            if (!entry.isDirectory && entry.name.startsWith("bin/")) {
-                                val target = runtimeBin.resolve(entry.name.removePrefix("bin/")).normalize()
-                                check(target.startsWith(runtimeBin)) { "Invalid path in jcef.jmod: ${entry.name}" }
-                                Files.createDirectories(target.parent)
-                                module.getInputStream(entry).use { source ->
-                                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
-                                }
-                            }
-                        }
-                    }
-                }
-                val requiredFiles = if (isWindows) {
-                    listOf("jcef.dll", "libcef.dll", "jcef_helper.exe", "cef_server.exe", "icudtl.dat", "resources.pak")
-                } else {
-                    listOf("libjcef.so", "libcef.so", "jcef_helper", "cef_server", "icudtl.dat", "resources.pak")
-                }
-                val missing = requiredFiles.filterNot { nativeDirectory.resolve(it).isFile }
-                check(missing.isEmpty()) { "Desktop runtime is missing JCEF files: ${missing.joinToString()}" }
-                if (!isWindows) {
-                    // jmod stores the executable bytes without Unix mode bits.
-                    for (helper in listOf("jcef_helper", "cef_server")) {
-                        check(nativeDirectory.resolve(helper).setExecutable(true, false)) {
-                            "Cannot make the JCEF helper executable: $helper"
-                        }
-                    }
-                }
-            }
-        }
-    }
-} else {
-    tasks.matching { it.name == "createDistributable" }.configureEach {
-        doFirst {
-            error("Packaging Heartbeat requires JetBrains JDK 25 with JCEF. Set JAVA_HOME or JBR_JCEF_HOME to that SDK.")
-        }
-    }
-}
-
-// Resolve the Inno Setup compiler (ISCC.exe) from explicit environment paths,
-// standard install directories, or finally PATH.
-val isccCandidates = listOfNotNull(
-    providers.environmentVariable("ISCC").orNull,
-    providers.environmentVariable("INNO_SETUP_HOME").orNull?.let { "$it/ISCC.exe" },
-    providers.environmentVariable("LOCALAPPDATA").orNull
-        ?.let { "$it/Programs/Inno Setup 6/ISCC.exe" },
-    providers.environmentVariable("ProgramFiles(x86)").orNull
-        ?.let { "$it/Inno Setup 6/ISCC.exe" },
-    providers.environmentVariable("ProgramFiles").orNull
-        ?.let { "$it/Inno Setup 6/ISCC.exe" },
-).filter { File(it).isFile }
-
-val appImageDir = layout.buildDirectory.dir("compose/binaries/main/app/Heartbeat")
-val installerDir = layout.buildDirectory.dir("compose/binaries/main/innosetup")
-
-// On Windows, a sandboxed dev environment can make the system temp directory and the user profile
-// read-only. The app then crashes at startup: Jewel's IntUiTheme measures the Inter font with
-// Font.createFont, the JDK writes a temporary font file into java.io.tmpdir, and SQLite cannot
-// create the database under %LOCALAPPDATA%. Redirect both the temp and the application data
-// directory to writable directories under the build output. This affects only the local run task,
-// not the packaged distribution.
-if (isWindows) {
-    val runTmpDir = layout.buildDirectory.dir("run-tmp")
-    val runDataDir = layout.buildDirectory.dir("run-data")
-
-    // runDev uses the installed JBR so ACP agents inherit the developer's process permissions.
-    tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
-        environment("HEARTBEAT_DATA_DIR", runDataDir.get().asFile.absolutePath)
-    }
-
-    val launchApp = tasks.register<Exec>("runDistributableWritableTemp") {
-        group = "compose desktop"
-        description = "Runs the packaged desktop app with writable temp and data directories"
-        dependsOn("createDistributable")
-        workingDir = appImageDir.get().asFile
-        commandLine(appImageDir.get().asFile.resolve("Heartbeat.exe").absolutePath)
-        environment("TMP", runTmpDir.get().asFile.absolutePath)
-        environment("TEMP", runTmpDir.get().asFile.absolutePath)
-        environment("HEARTBEAT_DATA_DIR", runDataDir.get().asFile.absolutePath)
-        doFirst {
-            runTmpDir.get().asFile.mkdirs()
-            runDataDir.get().asFile.mkdirs()
-        }
-    }
-
-    tasks.matching { it.name == "runDistributable" }.configureEach {
-        actions.clear()
-        dependsOn(launchApp)
-    }
-}
-
-val packageInnoSetup = tasks.register<Exec>("packageInnoSetup") {
-    group = "compose desktop"
-    description = "Build the Windows installer with Inno Setup"
-    dependsOn("createDistributable")
-    onlyIf { isWindows }
-    workingDir = projectDir
-    executable = isccCandidates.firstOrNull() ?: "ISCC.exe"
-    args(
-        "/DAppVersion=$desktopVersion",
-        "/DSourceDir=${appImageDir.get().asFile.absolutePath}",
-        "/DOutputDir=${installerDir.get().asFile.absolutePath}",
-        "installer/heartbeat.iss",
-    )
-    doFirst {
-        val image = appImageDir.get().asFile
-        check(File(image, "Heartbeat.exe").isFile) {
-            "Application image is missing: $image. Run createDistributable first."
-        }
-        installerDir.get().asFile.mkdirs()
-        if (isccCandidates.isEmpty() &&
-            System.getenv("PATH").orEmpty().split(File.pathSeparator)
-                .filter { it.isNotEmpty() }
-                .none { File(it, "ISCC.exe").isFile }
-        ) {
-            throw GradleException(
-                "Inno Setup 6.3 or newer is required to build the Windows installer. " +
-                    "Set ISCC or INNO_SETUP_HOME, or add ISCC.exe to PATH.",
-            )
-        }
-    }
-}
-
-tasks.matching { it.name == "packageDistributionForCurrentOS" }.configureEach {
-    dependsOn(packageInnoSetup)
 }

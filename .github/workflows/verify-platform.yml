@@ -22,20 +22,20 @@ jobs:
     if: github.event.label.name == 'verify-platform'
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: Windows x64
             runner: windows-2025
-            task: :platform:desktop:createDistributable
+            task: :platform:desktop:packageInnoSetup
           - platform: Linux x64
             runner: ubuntu-24.04
-            task: :platform:desktop:createDistributable
+            task: :platform:desktop:packageDeb
           - platform: macOS ARM64
             runner: macos-15
-            task: :platform:desktop:createDistributable
+            task: :platform:desktop:packageDmg
           - platform: Android Emulator
             runner: ubuntu-24.04
             task: :platform:android:assembleDebug
@@ -65,6 +65,52 @@ jobs:
         run: |
           & $env:GRADLE_WRAPPER $env:GRADLE_TASK --no-daemon
           exit $LASTEXITCODE
+      - name: Check AOT cache from the shipped desktop package
+        if: matrix.platform != 'Android Emulator'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $packages = 'platform/desktop/build/compose/binaries/main'
+          $installed = Join-Path $env:RUNNER_TEMP 'Installed Heartbeat'
+          if ($IsWindows) {
+            $setup = Get-Item "$packages/innosetup/*-setup.exe"
+            $p = Start-Process $setup.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOICONS /DIR=`"$installed`"" -Wait -PassThru
+            if ($p.ExitCode) { throw "Installer exited with $($p.ExitCode)" }
+            $launcher = Join-Path $installed 'Heartbeat.exe'
+          } elseif ($IsMacOS) {
+            $dmg = Get-Item "$packages/dmg/*.dmg"
+            $volume = Join-Path $env:RUNNER_TEMP HeartbeatVolume
+            hdiutil attach $dmg.FullName -readonly -nobrowse -mountpoint $volume
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            try {
+              ditto "$volume/Heartbeat.app" "$installed/Heartbeat.app"
+              if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            } finally { hdiutil detach $volume }
+            $launcher = Join-Path $installed 'Heartbeat.app/Contents/MacOS/Heartbeat'
+          } else {
+            $deb = Get-Item "$packages/deb/*.deb"
+            dpkg-deb -x $deb.FullName $installed
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            $launcher = (Get-ChildItem $installed -Recurse -File -Filter Heartbeat | Where-Object DirectoryName -Like '*/bin').FullName
+          }
+          # A deployed cache must also work on hosts where the training path never existed.
+          Rename-Item -LiteralPath "$packages/app" -NewName 'original-image'
+          $env:HEARTBEAT_DATA_DIR = Join-Path $env:RUNNER_TEMP 'heartbeat-probe-data'
+          $env:HEARTBEAT_STARTUP_PROBE = Join-Path $env:RUNNER_TEMP 'heartbeat-first-draw'
+          $env:JAVA_TOOL_OPTIONS = '-XX:AOTMode=on -Xlog:aot=info:file=installed-aot.log:none'
+          Set-Location $env:RUNNER_TEMP
+          $start = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+          if ($IsLinux) { xvfb-run -a $launcher }
+          elseif ($IsWindows) {
+            $p = Start-Process $launcher -WorkingDirectory $env:RUNNER_TEMP -PassThru -Wait
+            if ($p.ExitCode) { throw "Heartbeat exited with $($p.ExitCode)" }
+          } else { & $launcher }
+          if (!$IsWindows -and $LASTEXITCODE) { exit $LASTEXITCODE }
+          if (!(Select-String -Quiet -SimpleMatch 'Using AOT-linked classes: true' -Path installed-aot.log)) {
+            throw "The installed runtime did not use AOT-linked classes"
+          }
+          $elapsed = [long](Get-Content $env:HEARTBEAT_STARTUP_PROBE -ErrorAction Stop) - $start
+          Write-Output "First shell draw with the installed AOT cache in ${elapsed} ms"
       - name: Launch Android app
         if: matrix.platform == 'Android Emulator'
         shell: bash
