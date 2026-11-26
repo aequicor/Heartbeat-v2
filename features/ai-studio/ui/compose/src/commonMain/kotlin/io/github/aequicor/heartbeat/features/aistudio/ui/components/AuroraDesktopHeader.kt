@@ -113,7 +113,7 @@ internal fun AuroraDesktopHeader(
                 AuroraAccessMenu(chat.access, onAction)
                 if (chat.contextPercent != null || chat.quota != null) {
                     Spacer(Modifier.weight(1f))
-                    AuroraHeaderMetrics(chat.contextPercent, chat.quota, compact)
+                    AuroraHeaderMetrics(chat, compact)
                 }
             }
             AuroraHeaderStorageError(state.navigationErrorText(), inset)

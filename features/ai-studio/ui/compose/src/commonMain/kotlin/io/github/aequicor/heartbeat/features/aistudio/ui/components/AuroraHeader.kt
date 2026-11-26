@@ -88,7 +88,7 @@ private fun AuroraTouchHeader(
                     AuroraAccessMenu(chat.access, onAction, touch = true)
                 }
             } else AuroraTouchParameters(chat, onAction, Modifier.weight(1f))
-            AuroraTouchMetrics(chat.contextPercent, chat.quota, Modifier.padding(end = AuroraLayout.ContentInset))
+            AuroraTouchMetrics(chat, Modifier.padding(end = AuroraLayout.ContentInset))
         }
         AuroraHeaderStorageError(state.navigationErrorText(), inset)
     }

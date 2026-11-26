@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.text.style.TextOverflow
-import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -35,15 +35,16 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 
 @Composable
 internal fun AuroraHeaderMetrics(
-    context: Int?,
-    quota: Quota?,
+    chat: Chat,
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = chat.contextPercent
+    val quota = chat.quota
     if (context == null && quota == null) return
 
     val details = auroraMetricDetails(context, quota)
-    AuroraHeaderMenu(auroraMetricActions(details), modifier, alignEnd = true) { trigger, open ->
+    AuroraMetricMenu(chat, modifier, touch = false) { trigger, open ->
         val both = !compact && context != null && quota != null
         val width = if (both) {
             Modifier.widthIn(min = AuroraLayout.HeaderMetricWidth).width(IntrinsicSize.Max)
@@ -71,11 +72,13 @@ internal fun AuroraHeaderMetrics(
 }
 
 @Composable
-internal fun AuroraTouchMetrics(context: Int?, quota: Quota?, modifier: Modifier = Modifier) {
+internal fun AuroraTouchMetrics(chat: Chat, modifier: Modifier = Modifier) {
+    val context = chat.contextPercent
+    val quota = chat.quota
     if (context == null && quota == null) return
     val details = auroraMetricDetails(context, quota)
     val radius = AuroraLayout.MessageRadius
-    AuroraHeaderMenu(auroraMetricActions(details), modifier, alignEnd = true, touch = true) { trigger, open ->
+    AuroraMetricMenu(chat, modifier, touch = true) { trigger, open ->
         AuroraHeaderButton(
             details.joinToString(", "), open,
             trigger.widthIn(min = AuroraLayout.TouchHeaderMetricWidth).auroraHeaderSurface(radius),
@@ -92,10 +95,6 @@ private fun auroraMetricDetails(context: Int?, quota: Quota?) = listOfNotNull(
     context?.let { "Контекст · использовано $it%" },
     quota?.let { "Лимиты за ${it.hours} ч · использовано ${it.usedPercent}%" },
 )
-
-private fun auroraMetricActions(details: List<String>) =
-    listOf(HbMenuAction("Демонстрационные данные", {}, enabled = false)) +
-        details.map { HbMenuAction(it, {}, enabled = false) } + HbMenuAction("Закрыть", {})
 
 @Composable
 private fun AuroraMetricValues(context: Int?, quota: Quota?) {

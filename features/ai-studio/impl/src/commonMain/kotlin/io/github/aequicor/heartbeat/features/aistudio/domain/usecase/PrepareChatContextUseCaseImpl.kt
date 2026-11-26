@@ -34,7 +34,7 @@ internal class PrepareChatContextUseCaseImpl(
         val configuration = chat.configuration ?: throw ChatTurnException("Для чата не выбран движок")
         val engineSessionId = chat.engineSessionId ?: throw ChatTurnException("Сессия движка недоступна")
         val directory = chatDirectory(sessionId, sessions, projects)
-        val conversation = engines.resume(configuration.engineId, engineSessionId, directory)
+        val conversation = engines.resume(sessionId, configuration.engineId, engineSessionId, directory)
         val settings = conversation.settings
         val previous = ChatConfiguration(configuration.engineId, settings.model?.current, settings.reasoning?.current)
         try {

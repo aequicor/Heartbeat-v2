@@ -15,5 +15,5 @@ internal interface ChatEngineDataSource {
     suspend fun open(projectId: ProjectId, engineId: String, directory: String?): PreparedChatSession
 
     @Throwable(Exception::class, CancellationException::class)
-    suspend fun resume(engineId: String, sessionId: String, directory: String?): ChatEngineConversationDataSource
+    suspend fun resume(chatSessionId: String, engineId: String, sessionId: String, directory: String?): ChatEngineConversationDataSource
 }

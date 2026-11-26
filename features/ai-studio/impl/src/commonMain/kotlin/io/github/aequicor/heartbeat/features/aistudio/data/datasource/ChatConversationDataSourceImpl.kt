@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import dev.zacsweers.metro.Inject
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ContextWindowUsage
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatConversationDao
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConversationRecord
@@ -19,7 +20,8 @@ internal class ChatConversationDataSourceImpl(private val dao: ChatConversationD
     override suspend fun find(sessionId: String): ChatConversation? = accessStudioRepository {
         dao.find(sessionId)?.let { record ->
             val config = record.engineId?.let { ChatConfiguration(it, record.model, record.reasoning) }
-            ChatConversation(config, record.sessionId, record.stale != 0L)
+            val usage = if (record.used != null && record.size != null) ContextWindowUsage(record.used, record.size) else null
+            ChatConversation(config, record.sessionId, record.stale != 0L, usage)
         }
     }
 

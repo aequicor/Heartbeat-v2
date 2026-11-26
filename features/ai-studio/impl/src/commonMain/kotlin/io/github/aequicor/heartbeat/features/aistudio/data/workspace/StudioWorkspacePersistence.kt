@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
+import app.cash.sqldelight.coroutines.asFlow
+
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import dev.zacsweers.metro.SingleIn
@@ -16,12 +18,18 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ContextUsage
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWorkspaceMetadata
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.toNavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.workState
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Choice
@@ -45,6 +53,19 @@ internal class StudioWorkspacePersistence(
     private var recoveredWork = false
 
     private val queries get() = StudioWorkspaceQueries(connection.driver)
+
+    override fun observeContextUsage(sessionId: String): Flow<ContextUsage?> = flow {
+        val query = withContext(ioDispatcher) {
+            workspaceOperation("Observe chat context usage") { ChatQueries(connection.driver).chatContextUsage(sessionId) }
+        }
+        emitAll(query.asFlow().map {
+            withContext(ioDispatcher) {
+                workspaceOperation("Read chat context usage") {
+                    query.executeAsOneOrNull()?.let { row -> contextUsage(row.context_used_tokens, row.context_size_tokens) }
+                }
+            }
+        }.distinctUntilChanged())
+    }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun restore(legacy: suspend () -> AuroraWorkspace): AuroraWorkspace = withContext(ioDispatcher) {
@@ -106,7 +127,7 @@ internal class StudioWorkspacePersistence(
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun loadMetadata(chat: AuroraChat): AuroraChat = withContext(ioDispatcher) {
-        if (chat.payloadLoaded && !chat.summary.workState.isActive) return@withContext chat
+        if (chat.payloadLoaded && !chat.summary.workState.isActive && chat.summary.configuration == null) return@withContext chat
         writeLock.withLock {
             workspaceOperation("Read studio session content") {
                 val workspaceQueries = queries
@@ -122,9 +143,11 @@ internal class StudioWorkspacePersistence(
         val sessionId = chat.summary.id
         val record = workspaceQueries.selectWorkspacePayload(sessionId).executeAsOne()
         val navigationStatus = SessionWorkState.valueOf(record.work_state).toNavigationStatus()
+        val measured = if (record.engine_id == null) chat.summary
+        else chat.summary.withUsage(contextUsage(record.context_used_tokens, record.context_size_tokens))
         if (chat.payloadLoaded) {
-            if (navigationStatus == chat.summary.navigationStatus) return chat
-            return chat.copy(summary = chat.summary.copy(navigationStatus = navigationStatus))
+            if (navigationStatus == chat.summary.navigationStatus && measured == chat.summary) return chat
+            return chat.copy(summary = measured.copy(navigationStatus = navigationStatus))
         }
         val saved = record.workspace_payload?.let { Json.decodeFromString<AuroraChat>(it) } ?: chat
         val labels = saved.summary.configuration
@@ -135,7 +158,7 @@ internal class StudioWorkspacePersistence(
                 record.reasoning_level?.asChoice(labels?.level),
             )
         }
-        val summary = chat.summary.copy(configuration = configuration, navigationStatus = navigationStatus)
+        val summary = measured.copy(configuration = configuration, navigationStatus = navigationStatus)
         if (saved.messages.isNotEmpty() || saved.interrupted != null) {
             val metadata = saved.copy(messages = listOf(), interrupted = null)
             val migrated = workspaceQueries.updateWorkspaceSession(
@@ -228,7 +251,9 @@ internal class StudioWorkspacePersistence(
                 parentId = record.parent_session_id,
                 navigationStatus = SessionWorkState.valueOf(record.work_state).toNavigationStatus(),
             )
-            AuroraChat(restored, payloadLoaded = false)
+            val measured = if (record.engine_id == null) restored
+            else restored.withUsage(contextUsage(record.context_used_tokens, record.context_size_tokens))
+            AuroraChat(measured, payloadLoaded = false)
         }
         return workspace.copy(
             chats = chats,
@@ -244,6 +269,9 @@ internal class StudioWorkspacePersistence(
 }
 
 private fun String.asChoice(previous: Choice?): Choice = previous?.takeIf { it.id == this } ?: Choice(this, this)
+
+private fun contextUsage(used: Long?, size: Long?): ContextUsage? =
+    if (used != null && used >= 0 && size != null && size > 0) ContextUsage(used, size) else null
 
 @Suppress("TooGenericExceptionCaught") // Driver and legacy serializer exceptions cross the same storage boundary.
 private inline fun <T> workspaceOperation(operation: String, block: () -> T): T = try {

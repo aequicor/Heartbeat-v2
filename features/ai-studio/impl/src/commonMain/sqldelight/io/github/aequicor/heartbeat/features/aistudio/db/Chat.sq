@@ -6,12 +6,22 @@ INSERT OR REPLACE INTO last_chat_config(user_id, engine_id, model_name, reasonin
 VALUES ('local', ?, ?, ?);
 
 chatConversation:
-SELECT c.engine_id, c.model_name, c.reasoning_level, c.engine_session_id, c.engine_context_stale
+SELECT c.engine_id, c.model_name, c.reasoning_level, c.engine_session_id, c.engine_context_stale,
+       c.context_used_tokens, c.context_size_tokens
 FROM chat c JOIN studio_session s ON s.id = c.session_id
 WHERE c.session_id = :session_id AND s.status = 'ACTIVE';
 
 configureNewChat:
 UPDATE chat SET engine_id = ?, model_name = ?, reasoning_level = ?, engine_session_id = ? WHERE session_id = ?;
+
+saveContextUsage:
+UPDATE chat SET context_used_tokens = :used, context_size_tokens = :size
+WHERE session_id = :session_id AND engine_id = :engine_id AND engine_session_id = :engine_session_id
+    AND engine_context_stale = 0
+    AND (context_used_tokens IS NOT :used OR context_size_tokens IS NOT :size);
+
+chatContextUsage:
+SELECT context_used_tokens, context_size_tokens FROM chat WHERE session_id = :session_id;
 
 updateChatConfiguration:
 UPDATE chat SET engine_id = :engine_id, model_name = :model_name, reasoning_level = :reasoning_level
@@ -46,7 +56,9 @@ CREATE TABLE chat (
     engine_session_id TEXT,
     engine_context_stale INTEGER NOT NULL DEFAULT 0 CHECK (engine_context_stale IN (0, 1)),
     source_chat_id TEXT REFERENCES chat(id) ON DELETE SET NULL,
-    source_revision_id INTEGER REFERENCES message_revision(revision_id)
+    source_revision_id INTEGER REFERENCES message_revision(revision_id),
+    context_used_tokens INTEGER,
+    context_size_tokens INTEGER
 );
 
 CREATE TABLE chat_entry (
@@ -196,7 +208,7 @@ truncateAfter:
 DELETE FROM chat_entry WHERE chat_id = :chat_id AND position > :position;
 
 markContextStale:
-UPDATE chat SET engine_context_stale = 1 WHERE id = :chat_id;
+UPDATE chat SET engine_context_stale = 1, context_used_tokens = NULL, context_size_tokens = NULL WHERE id = :chat_id;
 
 copyUserAttachments:
 INSERT INTO message_part(revision_id, position, kind, title, status, attachment_id, presentation)

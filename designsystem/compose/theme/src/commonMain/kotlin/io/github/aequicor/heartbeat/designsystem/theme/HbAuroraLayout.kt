@@ -143,6 +143,7 @@ object HbAuroraLayout {
     val ExecutionParametersGap = 16.dp
     val HeaderCaptionGap = 36.dp
     val HeaderMetricWidth = 216.dp
+    val MetricMenuWidth = 296.dp
     val TouchHeaderMetricWidth = 78.dp
     val HeaderMetricsCompactAt = 640.dp
     val HeaderRingStroke = 2.dp

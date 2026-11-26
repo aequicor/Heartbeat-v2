@@ -32,7 +32,7 @@ internal class ApplyChatConfigurationUseCaseImpl(
         if (previous == configuration) return@runCatching
 
         val directory = chatDirectory(sessionId, sessions, projects)
-        val conversation = engines.resume(previous.engineId, engineSessionId, directory)
+        val conversation = engines.resume(sessionId, previous.engineId, engineSessionId, directory)
         withContext(NonCancellable) {
             val settings = conversation.settings
             val previousEngineSettings = ChatConfiguration(previous.engineId, settings.model?.current, settings.reasoning?.current)

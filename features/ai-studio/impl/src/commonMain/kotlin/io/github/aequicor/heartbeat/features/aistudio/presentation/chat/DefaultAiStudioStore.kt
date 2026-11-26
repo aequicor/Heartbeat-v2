@@ -43,6 +43,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.getAndUpdate
@@ -107,6 +111,12 @@ internal class DefaultAiStudioStore(
     }
 
     init {
+        if (persistence != null) scope.launch {
+            screen.map { it.chat?.takeIf { chat -> chat.configuration != null }?.id }
+                .distinctUntilChanged().collectLatest { id ->
+                    if (id != null) observeContextUsage(id, persistence)
+                }
+        }
         if (catalogChanges != null) {
             val previousChange = catalogChanges.replayCache.lastOrNull()
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -161,6 +171,23 @@ internal class DefaultAiStudioStore(
             while (saveRequests.receiveCatching().isSuccess) {
                 delay(SaveInterval)
                 enqueue(::save)
+            }
+        }
+    }
+
+    private suspend fun observeContextUsage(id: String, storage: StudioWorkspaceStorage) {
+        storage.observeContextUsage(id).retryWhen { failure, _ ->
+            if (failure !is StudioRepositoryException) return@retryWhen false
+            reportStorageError()
+            delay(1_000)
+            true
+        }.collect { usage ->
+            enqueue {
+                val chat = screen.value.chat
+                if (chat?.id == id && (chat.contextUsage != usage || chat.contextPercent != usage?.percent)) {
+                    updateChat(id) { it.copy(summary = it.summary.withUsage(usage)) }
+                    screen.update { it.copy(chat = chat.withUsage(usage)) }
+                }
             }
         }
     }

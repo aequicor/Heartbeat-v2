@@ -6,4 +6,6 @@ internal data class ChatConversationRecord(
     val reasoning: String?,
     val sessionId: String?,
     val stale: Long,
+    val used: Long? = null,
+    val size: Long? = null,
 )

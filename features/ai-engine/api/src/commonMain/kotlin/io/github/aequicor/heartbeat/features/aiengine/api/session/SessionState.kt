@@ -5,4 +5,5 @@ public data class SessionState(
     val messages: MessageWindow,
     val settings: SessionSettings = SessionSettings(),
     val turn: SessionTurn? = null,
+    val contextWindowUsage: ContextWindowUsage? = null,
 )

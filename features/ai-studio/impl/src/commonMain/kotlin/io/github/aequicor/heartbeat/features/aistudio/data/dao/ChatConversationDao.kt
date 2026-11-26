@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ContextWindowUsage
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConversationRecord
@@ -12,6 +14,9 @@ internal interface ChatConversationDao {
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun find(sessionId: String): ChatConversationRecord?
+
+    @Throwable(DaoException::class, CancellationException::class)
+    suspend fun saveContextUsage(chatSessionId: String, engineSession: SessionKey, usage: ContextWindowUsage)
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun updateConfiguration(sessionId: String, expected: ChatConversationRecord, configuration: ChatConfigRecord): Boolean

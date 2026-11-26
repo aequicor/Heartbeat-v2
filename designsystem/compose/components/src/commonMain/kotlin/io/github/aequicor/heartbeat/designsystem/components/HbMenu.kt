@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.PopupPositionProvider
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
@@ -159,14 +161,15 @@ private fun HbMenuSurface(
             (entries[index] as? HbMenuAction)?.enabled == true
         }
     }
-    var active by remember(entries) { mutableStateOf(enabledIndices.firstOrNull() ?: 0) }
+    var active by remember(entries) { mutableStateOf(enabledIndices.firstOrNull() ?: -1) }
     val requesters = remember(entries.size) { List(entries.size) { FocusRequester() } }
+    val surfaceRequester = remember { FocusRequester() }
 
     LaunchedEffect(active, focusable) {
         // The popup window receives its focus owner after the first frame, so requesting the row
         // focus during the initial composition would be dropped.
         withFrameNanos { }
-        if (focusable) requesters.getOrNull(active)?.requestFocus()
+        if (focusable) (requesters.getOrNull(active) ?: surfaceRequester).requestFocus()
     }
 
     val compact = presentation != HbMenuPresentation.Standard
@@ -192,7 +195,10 @@ private fun HbMenuSurface(
                         onActivate = onActivate,
                         onDismiss = onDismiss,
                     )
-                },
+                }
+                .then(if (focusable && enabledIndices.isEmpty()) {
+                    Modifier.focusRequester(surfaceRequester).focusable()
+                } else Modifier),
         ) {
             entries.forEachIndexed { index, entry ->
                 when (entry) {
@@ -293,6 +299,13 @@ private fun nextEnabledIndex(indices: List<Int>, active: Int, step: Int): Int {
     if (indices.isEmpty()) return active
     val position = indices.indexOf(active).let { if (it < 0) 0 else it }
     return indices[(position + step).coerceIn(0, indices.lastIndex)]
+}
+
+/** Positions a custom menu panel using the same window-edge handling as [HbMenu]. */
+@Composable
+fun rememberHbMenuPositionProvider(alignEnd: Boolean = false): PopupPositionProvider {
+    val gap = with(LocalDensity.current) { MENU_GAP.roundToPx() }
+    return remember(gap, alignEnd) { HbAnchoredPopupPositionProvider(gap, alignEnd = alignEnd) }
 }
 
 private val MENU_GAP = 4.dp

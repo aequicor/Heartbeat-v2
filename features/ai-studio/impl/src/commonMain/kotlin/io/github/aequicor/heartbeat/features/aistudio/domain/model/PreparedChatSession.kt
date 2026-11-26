@@ -11,6 +11,9 @@ internal interface PreparedChatSession {
     val isAvailable: Boolean
     val settings: ChatEngineOptions
 
+    @Throwable(CancellationException::class)
+    suspend fun trackContextUsage(chatSessionId: String)
+
     @Throwable(Exception::class, CancellationException::class)
     suspend fun select(selector: String, value: String): ChatEngineOptions
 

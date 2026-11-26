@@ -12,6 +12,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlin.io.encoding.Base64
+import kotlin.math.roundToInt
 
 /** Prepared state of the Aurora workspace. History is ordered from newest to oldest. */
 public data class AiStudioScreenState(
@@ -240,7 +241,10 @@ public data class AiStudioScreenState(
         val configuration: ChatEnginePickerState.Selection? = null,
         val projectId: String? = null,
         @Transient val storageError: String? = null,
+        @Transient val contextUsage: ContextUsage? = null,
     ) {
+
+        internal fun withUsage(usage: ContextUsage?): Chat = copy(contextUsage = usage, contextPercent = usage?.percent)
 
         public val isUntitled: Boolean get() = title == UntitledTitle
         public val isUngrouped: Boolean
@@ -258,6 +262,17 @@ public data class AiStudioScreenState(
 
     @Serializable
     public data class Quota(val hours: Int, val usedPercent: Int)
+
+    public data class ContextUsage(val used: Long, val size: Long) {
+
+        init {
+            require(used >= 0 && size > 0)
+        }
+
+        val fraction: Double get() = used.coerceAtMost(size).toDouble() / size
+        val percent: Int get() = (100.0 * used.coerceAtMost(size) / size).roundToInt()
+        val remaining: Long get() = (size - used).coerceAtLeast(0)
+    }
 
     public data class Subagent(val chatId: String, val title: String)
 

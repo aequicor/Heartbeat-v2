@@ -12,13 +12,15 @@ INSERT OR REPLACE INTO studio_workspace(singleton, metadata) VALUES (1, :metadat
 selectWorkspaceSessions:
 SELECT session.id, session.project_id, project.alias, session.title, session.status,
        session.parent_session_id, session.is_expanded, session.workspace_summary, session.work_state,
-       project.is_expanded AS project_expanded
+       project.is_expanded AS project_expanded, chat.engine_id, chat.context_used_tokens, chat.context_size_tokens
 FROM studio_session AS session
 JOIN studio_project AS project ON project.id = session.project_id
+LEFT JOIN chat ON chat.session_id = session.id
 ORDER BY session.updated_at_seconds DESC, session.updated_at_nanos DESC, session.id ASC;
 
 selectWorkspacePayload:
-SELECT session.workspace_payload, session.work_state, chat.engine_id, chat.model_name, chat.reasoning_level
+SELECT session.workspace_payload, session.work_state, chat.engine_id, chat.model_name, chat.reasoning_level,
+       chat.context_used_tokens, chat.context_size_tokens
 FROM studio_session AS session LEFT JOIN chat ON chat.session_id = session.id
 WHERE session.id = :id;
 

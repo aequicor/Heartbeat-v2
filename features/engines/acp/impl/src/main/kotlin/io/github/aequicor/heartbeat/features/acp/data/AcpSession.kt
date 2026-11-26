@@ -17,6 +17,7 @@ import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.protocol.invoke
 import com.agentclientprotocol.rpc.JsonRpcErrorCode
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineKey
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ContextWindowUsage
 import io.github.aequicor.heartbeat.features.aiengine.api.session.HistorySyncStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindow
 import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindowCursor
@@ -67,6 +68,7 @@ internal class AcpSession(
     private var promptAccepted = false
     private var cancelling = false
     private var turn: SessionTurn? = null
+    private var contextWindowUsage: ContextWindowUsage? = null
     private var terminated = false
     val configuration = AcpSessionSettings(id, protocol, lock, ::publish)
 
@@ -116,6 +118,7 @@ internal class AcpSession(
                 promptAccepted = true
             }
             when (update) {
+                is SessionUpdate.UsageUpdate -> contextWindowUsage = ContextWindowUsage(update.used, update.size)
                 is SessionUpdate.UserMessageChunk -> {
                     // Live user prompts are recorded when sent. User chunks supply replay history.
                     if (status != SessionStatus.Running) timeline.userChunk(update)
@@ -313,6 +316,7 @@ internal class AcpSession(
                 messages = MessageWindow(timeline.items, MessageWindowCursor(), history),
                 settings = configuration.current,
                 turn = turn?.copy(accepted = promptAccepted),
+                contextWindowUsage = contextWindowUsage,
             )
         }
 

@@ -3,6 +3,8 @@ package io.github.aequicor.heartbeat.features.aistudio.data.dao
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
+import io.github.aequicor.heartbeat.features.aiengine.api.session.ContextWindowUsage
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConversationRecord
@@ -37,6 +39,19 @@ internal class ChatConversationDaoImpl(
             ChatQueries(connection.driver).chatConversation(sessionId, ::ChatConversationRecord).executeAsOneOrNull()
         }
     }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun saveContextUsage(chatSessionId: String, engineSession: SessionKey, usage: ContextWindowUsage): Unit =
+        withContext(ioDispatcher) {
+            writeLock.withLock {
+                accessStudioDatabase<Unit>("Save chat context usage") {
+                    ChatQueries(connection.driver).saveContextUsage(
+                        used = usage.used, size = usage.size, session_id = chatSessionId,
+                        engine_id = engineSession.engine.id, engine_session_id = engineSession.id,
+                    )
+                }
+            }
+        }
 
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun updateConfiguration(

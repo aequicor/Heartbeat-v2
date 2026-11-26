@@ -126,6 +126,7 @@ internal class ChatCreationDraftImpl(
                 ) ?: return@withContext SessionBootstrapResult.ProjectUnavailable
                 created = true
                 accepted = null // Transfer ownership only after the local transaction commits.
+                session.trackContextUsage(saved.session.id.value.toString())
                 SessionBootstrapResult.Created(saved.session, saved.project)
             }
         }.rethrowCancellation()

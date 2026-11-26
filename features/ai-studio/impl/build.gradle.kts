@@ -34,6 +34,7 @@ kotlin {
     }
 
     sourceSets.commonMain.dependencies {
+        implementation(libs.sqldelight.coroutines.extensions)
         implementation(libs.jetbrains.markdown)
         implementation(libs.okio)
         implementation(libs.kotlinx.serialization.json)
