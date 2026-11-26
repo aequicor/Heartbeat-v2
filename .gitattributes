@@ -1,3 +1,5 @@
 /gradlew text eol=lf
 /gradlew.bat text eol=crlf
+/build-and-open-installer.sh text eol=lf
+/build-and-open-installer.bat text eol=crlf
 /.githooks/* text eol=lf
