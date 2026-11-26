@@ -1,6 +1,6 @@
 # Архитектура
 
-Heartbeat использует Kotlin Multiplatform. Общий код обслуживает сценарии кодинга и исследований в проектах. Целевые платформы — Android, iOS, Linux, Windows и macOS; desktop работает на JVM с Compose Multiplatform, расширение Chromium использует Kotlin/Wasm.
+Heartbeat Lab использует Kotlin Multiplatform. Общий код обслуживает сценарии кодинга и исследований в проектах. Целевые платформы — Android, iOS, Linux, Windows и macOS; desktop работает на JVM с Compose Multiplatform, расширение Chromium использует Kotlin/Wasm.
 
 Проект построен по **Feature-first Modular Architecture** с разделением публичных контрактов, универсальной реализации и платформозависимых адаптеров.
 

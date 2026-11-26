@@ -21,6 +21,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import com.jetbrains.JBR
 import com.jetbrains.WindowDecorations
+import io.github.aequicor.heartbeat.designsystem.components.HbAppName
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbProvidePlatformTextStyle
 import io.github.aequicor.heartbeat.designsystem.theme.HbProvideWindowCaption
@@ -52,9 +53,10 @@ internal fun EdgeToEdgeHeartbeatWindow(
     SwingWindow(
         onCloseRequest = onClose,
         state = state,
-        title = "Heartbeat",
+        title = HbAppName,
         init = { platformTextStyle = configureWindowsText(it) },
     ) {
+        DesktopWindowIcons(window)
         HbProvidePlatformTextStyle(platformTextStyle) {
             val fullscreen = state.placement == WindowPlacement.Fullscreen
             if (decorations == null || fullscreen) {

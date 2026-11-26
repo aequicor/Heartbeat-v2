@@ -1,6 +1,6 @@
-# Heartbeat
+# Heartbeat Lab
 
-Heartbeat — студия на Kotlin Multiplatform (KMP) для разработки и исследований в проектах с помощью ИИ.
+Heartbeat Lab — студия на Kotlin Multiplatform (KMP) для разработки и исследований в проектах с помощью ИИ.
 
 # Навигация
 

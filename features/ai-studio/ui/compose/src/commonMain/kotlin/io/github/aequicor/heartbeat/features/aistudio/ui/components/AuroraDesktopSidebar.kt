@@ -55,6 +55,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import io.github.aequicor.heartbeat.designsystem.components.HbAppName
+import io.github.aequicor.heartbeat.designsystem.components.HbBrandMark
 import io.github.aequicor.heartbeat.designsystem.components.HbFocusIndication
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
@@ -142,9 +144,9 @@ private fun SidebarHeader(
             Modifier.heightIn(min = AuroraLayout.NavigationHeading),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AiStudioBrandMark(Modifier.size(AuroraLayout.Glyph), AuroraColors.Primary)
+            HbBrandMark(Modifier.size(AuroraLayout.Glyph))
             SidebarText(
-                "Heartbeat", Modifier.padding(start = AuroraLayout.NavigationCaptionGap), style = HbTypography.Label,
+                HbAppName, Modifier.padding(start = AuroraLayout.NavigationCaptionGap), style = HbTypography.Label,
             )
             Spacer(Modifier.width(AuroraLayout.Space))
             HbWindowClientArea { clientArea ->

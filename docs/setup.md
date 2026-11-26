@@ -30,7 +30,7 @@ Project** и дождись окончания Gradle sync. IDE создаст `
 
 1. В окне **Gradle** открой **Heartbeat → Tasks → dev**.
 2. Дважды щёлкни `runDev`.
-3. Откроется окно `Heartbeat`. В окне **Run** появится строка `Heartbeat started`. Закрой окно,
+3. Откроется окно `Heartbeat Lab`. В окне **Run** появится строка `Heartbeat started`. Закрой окно,
    чтобы процесс завершился с кодом 0.
 
 `runDev` выбирает точку входа текущего хоста. Именованная задача собирает конкретную платформу,
@@ -46,7 +46,7 @@ Desktop-приложение работает на JVM и использует C
 зависимости Compose и Gradle; нужна сеть.
 
 Установщик текущей ОС собирает `gradlew :platform:desktop:packageDistributionForCurrentOS`.
-На Windows это установщик Inno Setup: `Heartbeat-<версия>-setup.exe` в
+На Windows установщик Inno Setup называется `Heartbeat-Lab-<версия>-setup.exe` и лежит в
 `platform/desktop/build/compose/binaries/main/innosetup`. Компилятор `ISCC.exe` ищется в `ISCC`,
 `INNO_SETUP_HOME`, стандартном каталоге установки или в `PATH`. Если Inno Setup не найден, задача скачивает
 закреплённую версию 6.7.4 с проверкой SHA-256 и распаковывает её в `build` без системной установки. Образ приложения с
@@ -74,7 +74,7 @@ iOS собирается из проекта Xcode, а не через Gradle.
 
 ## Работа с дизайном
 
-Макеты Heartbeat хранятся в Figma. Для работы агента с макетом запусти плагин Figwright в нужном
+Макеты Heartbeat Lab хранятся в Figma. Для работы агента с макетом запусти плагин Figwright в нужном
 файле Figma. Агент читает и изменяет макет через MCP Figwright.
 
 Правила для агентов и спецификация дизайн-системы находятся в репозитории

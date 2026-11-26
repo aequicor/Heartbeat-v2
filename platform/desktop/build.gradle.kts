@@ -100,7 +100,20 @@ compose.desktop {
             // Windows is packaged by Inno Setup (packageInnoSetup), not by the
             // built-in Compose formats (Msi/Exe), so no Windows format is listed.
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg)
-            packageName = "Heartbeat"
+            // Keep the Windows launcher path used by existing installations and pinned shortcuts.
+            packageName = if (System.getProperty("os.name").startsWith("Windows")) "Heartbeat" else "Heartbeat Lab"
+            description = "Heartbeat Lab"
+            windows {
+                iconFile.set(project.file("icons/heartbeat-lab.ico"))
+            }
+            macOS {
+                bundleID = "io.github.aequicor.heartbeat"
+                iconFile.set(project.file("icons/heartbeat-lab.icns"))
+            }
+            linux {
+                packageName = "heartbeat"
+                iconFile.set(project.file("icons/heartbeat-lab.png"))
+            }
             packageVersion = "1.0.0"
         }
     }

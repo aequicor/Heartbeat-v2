@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.github.aequicor.heartbeat.designsystem.components.HbAppName
+import io.github.aequicor.heartbeat.designsystem.components.HbBrandMark
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
@@ -104,11 +106,10 @@ internal fun AuroraChats(
                     HbIcon(HbIconGlyph.Close, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
                 }
             }
-            AiStudioBrandMark(
+            HbBrandMark(
                 Modifier.padding(start = AuroraLayout.ControlGap, end = AuroraLayout.Space).size(AuroraLayout.Glyph),
-                AuroraColors.Primary,
             )
-            AuroraText("Heartbeat", Modifier.weight(1f))
+            AuroraText(HbAppName, Modifier.weight(1f))
             AuroraControl(
                 onOpenSettings,
                 label = stringResource(Res.string.settings),
@@ -460,7 +461,7 @@ internal fun AuroraPanelDialog(onClose: () -> Unit, content: @Composable () -> U
                         contentAlignment = Alignment.CenterStart,
                     ) {
                         BasicText(
-                            "Heartbeat",
+                            HbAppName,
                             style = HbTypography.Metadata.copy(color = AuroraColors.DesktopWorkMuted),
                         )
                     }

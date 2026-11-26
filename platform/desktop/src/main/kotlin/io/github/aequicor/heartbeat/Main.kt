@@ -5,6 +5,7 @@ package io.github.aequicor.heartbeat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -21,19 +22,24 @@ import com.arkivanov.essenty.lifecycle.LifecycleRegistry
 import com.arkivanov.essenty.lifecycle.destroy
 import com.arkivanov.essenty.lifecycle.resume
 import dev.zacsweers.metro.createGraphFactory
+import io.github.aequicor.heartbeat.designsystem.components.HbAppName
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
+import io.github.aequicor.heartbeat.designsystem.resources.Res
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.di.DesktopGraph
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import java.awt.EventQueue
+import java.awt.Window
 import java.io.File
+import javax.swing.ImageIcon
 import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.intui.standalone.theme.IntUiTheme
 import org.jetbrains.jewel.intui.standalone.theme.darkThemeDefinition
@@ -152,11 +158,12 @@ private fun JewelHeartbeatWindow(
         DecoratedWindow(
             onCloseRequest = onClose,
             state = state,
-            title = "Heartbeat",
+            title = HbAppName,
         ) {
+            DesktopWindowIcons(window)
             TitleBar {
                 Text(
-                    "Heartbeat",
+                    HbAppName,
                     style = JewelTheme.defaultTextStyle.copy(
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Normal,
@@ -164,6 +171,23 @@ private fun JewelHeartbeatWindow(
                 )
             }
             content()
+        }
+    }
+}
+
+@Composable
+internal fun DesktopWindowIcons(window: Window) {
+    LaunchedEffect(window) {
+        window.iconImages = withContext(Dispatchers.IO) {
+            listOf(
+                "drawable/heartbeat_lab_mark.png",
+                "files/heartbeat-lab-20.png",
+                "drawable-hdpi/heartbeat_lab_mark.png",
+                "drawable-xhdpi/heartbeat_lab_mark.png",
+                "files/heartbeat-lab-40.png",
+                "drawable-xxhdpi/heartbeat_lab_mark.png",
+                "drawable-xxxhdpi/heartbeat_lab_mark.png",
+            ).map { path -> ImageIcon(Res.readBytes(path)).image }
         }
     }
 }
