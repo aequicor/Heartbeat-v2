@@ -8,4 +8,5 @@ internal data class ChatConversationRecord(
     val stale: Long,
     val used: Long? = null,
     val size: Long? = null,
+    val securityModeJson: String? = null,
 )

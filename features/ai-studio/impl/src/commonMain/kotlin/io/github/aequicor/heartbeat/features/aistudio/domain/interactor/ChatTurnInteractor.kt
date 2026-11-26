@@ -26,6 +26,9 @@ internal interface ChatTurnInteractor {
     ): Result<Unit>
 
     @Throwable(CancellationException::class)
+    suspend fun selectSecurityMode(sessionId: String, value: String?): Result<Unit>
+
+    @Throwable(CancellationException::class)
     suspend fun cancel(sessionId: String): Result<Unit>
 
     @Throwable(CancellationException::class)

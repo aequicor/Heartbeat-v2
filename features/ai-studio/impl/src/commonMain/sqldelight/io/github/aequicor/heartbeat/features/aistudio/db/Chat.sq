@@ -1,5 +1,5 @@
 lastChatConfiguration:
-SELECT engine_id, model_name, reasoning_level FROM last_chat_config WHERE user_id = 'local';
+SELECT engine_id, model_name, reasoning_level, security_config_json FROM last_chat_config WHERE user_id = 'local';
 
 rememberChatConfiguration:
 INSERT OR REPLACE INTO last_chat_config(user_id, engine_id, model_name, reasoning_level)
@@ -7,7 +7,7 @@ VALUES ('local', ?, ?, ?);
 
 chatConversation:
 SELECT c.engine_id, c.model_name, c.reasoning_level, c.engine_session_id, c.engine_context_stale,
-       c.context_used_tokens, c.context_size_tokens
+       c.context_used_tokens, c.context_size_tokens, c.security_config_json
 FROM chat c JOIN studio_session s ON s.id = c.session_id
 WHERE c.session_id = :session_id AND s.status = 'ACTIVE';
 
@@ -19,6 +19,20 @@ UPDATE chat SET context_used_tokens = :used, context_size_tokens = :size
 WHERE session_id = :session_id AND engine_id = :engine_id AND engine_session_id = :engine_session_id
     AND engine_context_stale = 0
     AND (context_used_tokens IS NOT :used OR context_size_tokens IS NOT :size);
+
+chatSecurityMode:
+SELECT security_config_json FROM chat WHERE session_id = :session_id;
+
+setChatSecurityMode:
+UPDATE chat SET security_config_json = :snapshot
+WHERE session_id = :session_id AND engine_id = :engine_id AND engine_session_id IS :engine_session_id
+    AND security_config_json IS :previous;
+
+lastSecurityModePreference:
+SELECT security_config_json FROM last_chat_config WHERE user_id = 'local' AND engine_id = :engine_id;
+
+rememberSecurityModePreference:
+UPDATE last_chat_config SET security_config_json = :preference WHERE user_id = 'local' AND engine_id = :engine_id;
 
 chatContextUsage:
 SELECT context_used_tokens, context_size_tokens FROM chat WHERE session_id = :session_id;
@@ -58,7 +72,8 @@ CREATE TABLE chat (
     source_chat_id TEXT REFERENCES chat(id) ON DELETE SET NULL,
     source_revision_id INTEGER REFERENCES message_revision(revision_id),
     context_used_tokens INTEGER,
-    context_size_tokens INTEGER
+    context_size_tokens INTEGER,
+    security_config_json TEXT
 );
 
 CREATE TABLE chat_entry (
@@ -135,7 +150,8 @@ CREATE TABLE last_chat_config (
     user_id TEXT NOT NULL PRIMARY KEY,
     engine_id TEXT NOT NULL,
     model_name TEXT,
-    reasoning_level TEXT
+    reasoning_level TEXT,
+    security_config_json TEXT
 );
 
 CREATE TRIGGER create_session_chat AFTER INSERT ON studio_session

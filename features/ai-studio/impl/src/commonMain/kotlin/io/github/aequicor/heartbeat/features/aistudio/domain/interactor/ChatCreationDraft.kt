@@ -14,6 +14,9 @@ internal interface ChatCreationDraft {
     suspend fun chooseEngine(id: String): Result<Unit>
 
     @Throwable(CancellationException::class)
+    suspend fun chooseSecurityMode(value: String?): Result<Unit>
+
+    @Throwable(CancellationException::class)
     suspend fun chooseModel(id: String): Result<Unit>
 
     @Throwable(CancellationException::class)

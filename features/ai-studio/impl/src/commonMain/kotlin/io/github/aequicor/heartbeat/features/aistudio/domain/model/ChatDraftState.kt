@@ -7,6 +7,8 @@ internal data class ChatDraftState(
     val confirmed: Selection? = null,
     val editing: Selection? = null,
     val options: ChatEngineOptions? = null,
+    val securityMode: ChatSecurityMode? = null,
+    val securityModeError: String? = null,
     val busy: Boolean = false,
     val failed: Boolean = false,
 ) {

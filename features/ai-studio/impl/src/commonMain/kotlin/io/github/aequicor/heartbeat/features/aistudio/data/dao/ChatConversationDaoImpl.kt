@@ -20,6 +20,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
@@ -37,6 +38,33 @@ internal class ChatConversationDaoImpl(
     override suspend fun find(sessionId: String): ChatConversationRecord? = withContext(ioDispatcher) {
         accessStudioDatabase("Read chat conversation") {
             ChatQueries(connection.driver).chatConversation(sessionId, ::ChatConversationRecord).executeAsOneOrNull()
+        }
+    }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun updateSecurityMode(
+        chatId: String, engineId: String, engineSessionId: String?, transform: (ChatSecurityMode?) -> ChatSecurityMode?,
+    ): ChatSecurityMode? = withContext(ioDispatcher) {
+        writeLock.withLock {
+            accessStudioDatabase("Update chat mode") {
+                val queries = ChatQueries(connection.driver)
+                queries.transactionWithResult {
+                    val chat = queries.chatConversation(chatId, ::ChatConversationRecord).executeAsOne()
+                    check(chat.engineId == engineId && chat.sessionId == engineSessionId) { "Сессия движка изменилась" }
+                    val previous = chat.securityModeJson?.let { Json.decodeFromString<ChatSecurityMode>(it) }
+                    val next = transform(previous)
+                    if (next != previous) {
+                        val snapshot = next?.let { Json.encodeToString(it) }
+                        check(queries.setChatSecurityMode(snapshot, chatId, engineId, engineSessionId, chat.securityModeJson).value == 1L)
+                        val preferred = next?.selectedValue
+                        if (next != null && !next.requiresUserChoice && preferred != null) {
+                            val preference = ChatSecurityMode.Preference(next.configId, next.options, preferred)
+                            queries.rememberSecurityModePreference(Json.encodeToString(preference), engineId)
+                        }
+                    }
+                    next
+                }
+            }
         }
     }
 

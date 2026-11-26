@@ -110,7 +110,9 @@ internal fun AuroraDesktopHeader(
                 if (state.sessionBootstrap != null || chat.configuration != null) {
                     AuroraChatEngineParameters(state.sessionBootstrap?.picker ?: state.chatEnginePicker, chat.configuration, false, onAction)
                 } else AuroraExecutionParameters(chat, onAction)
-                AuroraAccessMenu(chat.access, onAction)
+                if (state.sessionBootstrap != null || chat.configuration != null) {
+                    AuroraSecurityMode(state, chat, onAction, touch = false)
+                } else AuroraAccessMenu(chat.access, onAction)
                 if (chat.contextPercent != null || chat.quota != null) {
                     Spacer(Modifier.weight(1f))
                     AuroraHeaderMetrics(chat, compact)

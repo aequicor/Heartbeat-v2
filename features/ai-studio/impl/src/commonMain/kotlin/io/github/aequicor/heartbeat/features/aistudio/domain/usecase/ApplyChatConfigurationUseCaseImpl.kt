@@ -29,7 +29,7 @@ internal class ApplyChatConfigurationUseCaseImpl(
         if (chat.contextStale || previous.engineId != configuration.engineId) {
             throw ChatTurnException("Движок не может принять контекст этого чата")
         }
-        if (previous == configuration) return@runCatching
+        if (previous.copy(securityMode = configuration.securityMode) == configuration) return@runCatching
 
         val directory = chatDirectory(sessionId, sessions, projects)
         val conversation = engines.resume(sessionId, previous.engineId, engineSessionId, directory)

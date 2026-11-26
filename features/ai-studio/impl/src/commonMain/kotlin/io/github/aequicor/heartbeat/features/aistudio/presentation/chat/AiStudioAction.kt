@@ -54,6 +54,8 @@ public sealed interface AiStudioAction {
     public data class DeleteProject(val id: String) : AiStudioAction
     public data class NewProjectChat(val project: String) : AiStudioAction
     public data class SetScenario(val scenario: Scenario) : AiStudioAction
+    public data class SelectSecurityMode(val chatId: String, val value: String?) : AiStudioAction
+
     public data class SetAccess(val access: Access) : AiStudioAction
     public data class SetEffort(val effort: String) : AiStudioAction
     public data class Attach(val fileId: String) : AiStudioAction

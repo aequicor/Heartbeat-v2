@@ -9,6 +9,8 @@ import kotlin.coroutines.cancellation.CancellationException
 
 internal interface StudioWorkspaceMetadata {
 
+    fun observeSecurityMode(sessionId: String): Flow<AiStudioScreenState.SecurityMode?>
+
     fun observeContextUsage(sessionId: String): Flow<ContextUsage?>
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)

@@ -122,6 +122,12 @@ internal class BootstrapEnginePicker(
         screen.update { it.copy(chatEnginePicker = null) }
     }
 
+    fun chooseSecurityMode(value: String?) {
+        if (existingChat == null && screen.value.sessionBootstrap?.picker?.securityModeBusy == false) {
+            request { this.chooseSecurityMode(value) }
+        }
+    }
+
     fun handle(action: EnginePicker) {
         if (isApplyingToChat) return
         val active = draft ?: run {
@@ -302,6 +308,7 @@ internal class BootstrapEnginePicker(
             loading = applying || (state.busy && !showingModelsDuringReasoningLoad) ||
                 (displayedStep != null && displayedStep != Step.Engine && editing == null && !state.failed),
             failure = failure, canApply = !applying && state.canConfirm,
+            securityMode = state.securityMode?.display(), securityModeBusy = state.busy, securityModeError = state.securityModeError,
         ))
     }
 

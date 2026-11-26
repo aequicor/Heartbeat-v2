@@ -9,6 +9,9 @@ import kotlin.Throws as Throwable
 
 internal interface ChatEngineDataSource {
 
+    @Throwable(Exception::class, CancellationException::class)
+    suspend fun selectSecurityMode(chatId: String, value: String?, directory: String?)
+
     val engines: Flow<List<ChatEngineOptions.Choice>>
 
     @Throwable(Exception::class, CancellationException::class)

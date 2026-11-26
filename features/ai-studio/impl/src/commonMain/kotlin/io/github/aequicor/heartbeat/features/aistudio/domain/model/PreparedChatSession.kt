@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.domain.model
 
+import kotlinx.coroutines.flow.Flow
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.Throws as Throwable
 
@@ -10,6 +11,7 @@ internal interface PreparedChatSession {
     val sessionId: String
     val isAvailable: Boolean
     val settings: ChatEngineOptions
+    val settingsUpdates: Flow<ChatEngineOptions>
 
     @Throwable(CancellationException::class)
     suspend fun trackContextUsage(chatSessionId: String)

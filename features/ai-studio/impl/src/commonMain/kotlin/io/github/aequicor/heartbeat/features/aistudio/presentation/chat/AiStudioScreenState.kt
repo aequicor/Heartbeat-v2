@@ -46,6 +46,8 @@ public data class AiStudioScreenState(
     val renameError: RenameError? = null,
     val sessionBootstrap: SessionBootstrapState? = null,
     val chatEnginePicker: ChatEnginePickerState? = null,
+    val applyingSecurityModeFor: Set<String> = emptySet(),
+    val securityModeErrors: Map<String, String> = emptyMap(),
     val olderMessagesBefore: Long? = null,
     val allowsFileImport: Boolean = false,
     val importingAttachmentsFor: Set<String> = emptySet(),
@@ -53,6 +55,9 @@ public data class AiStudioScreenState(
     val openedHistory: OpenedHistory? = null,
     val artifactToSave: File? = null,
 ) {
+
+    public fun isPromptBlockedBySecurityMode(chat: Chat): Boolean =
+        chat.securityMode?.requiresUserChoice == true || chat.id in applyingSecurityModeFor || chat.id in securityModeErrors
 
     public data class OpenedHistory(val newestMessageId: String?)
 
@@ -72,6 +77,9 @@ public data class AiStudioScreenState(
         val loading: Boolean = false,
         val failure: Failure? = null,
         val canApply: Boolean = false,
+        val securityMode: SecurityMode? = null,
+        val securityModeBusy: Boolean = false,
+        val securityModeError: String? = null,
     ) {
 
         @Serializable
@@ -242,6 +250,7 @@ public data class AiStudioScreenState(
         val projectId: String? = null,
         @Transient val storageError: String? = null,
         @Transient val contextUsage: ContextUsage? = null,
+        @Transient val securityMode: SecurityMode? = null,
     ) {
 
         internal fun withUsage(usage: ContextUsage?): Chat = copy(contextUsage = usage, contextPercent = usage?.percent)
@@ -262,6 +271,11 @@ public data class AiStudioScreenState(
 
     @Serializable
     public data class Quota(val hours: Int, val usedPercent: Int)
+
+    public data class SecurityMode(val options: List<Option>, val selected: String?, val requiresUserChoice: Boolean) {
+
+        public data class Option(val value: String, val label: String, val description: String?, val group: String?)
+    }
 
     public data class ContextUsage(val used: Long, val size: Long) {
 

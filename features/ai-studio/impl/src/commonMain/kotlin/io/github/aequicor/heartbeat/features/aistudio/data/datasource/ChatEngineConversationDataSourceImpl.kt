@@ -4,6 +4,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermiss
 import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSettings
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTurn
@@ -35,6 +36,7 @@ import kotlin.uuid.Uuid
 internal class ChatEngineConversationDataSourceImpl(
     private val session: Session,
     private val attachments: ChatAttachmentDataSource,
+    private val validateSecurityMode: suspend () -> SessionSettings,
     private val closeSession: suspend () -> Unit,
 ) : ChatEngineConversationDataSource {
 
@@ -49,6 +51,15 @@ internal class ChatEngineConversationDataSourceImpl(
 
     @Throwable(Exception::class, CancellationException::class)
     override suspend fun send(text: String, files: List<ChatAttachment>, update: suspend (ChatEngineTurn) -> Unit) {
+        val validated = try {
+            validateSecurityMode()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: ChatTurnException) {
+            throw failure
+        } catch (failure: Exception) {
+            throw ChatTurnException("Не удалось подтвердить режим агента", failure, notDispatched = true)
+        }
         val turnId = Uuid.random().toString()
         val start = mutex.withLock {
             if (cancelled) return@withLock null
@@ -62,7 +73,7 @@ internal class ChatEngineConversationDataSourceImpl(
                 if (image != null) SessionEvent.PromptFile.Image(image.mimeType, file.content)
                 else SessionEvent.PromptFile.Text("${file.name}\n${file.content}")
             }
-            session.dispatch(SessionEvent.SendPrompt(text, turnId, promptFiles = promptFiles))
+            session.dispatch(SessionEvent.SendPrompt(text, turnId, promptFiles = promptFiles, validatedSettings = validated))
             check(session.state.value.turn?.id == turnId) { "The engine did not accept this turn" }
             runningId = turnId
             offset

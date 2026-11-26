@@ -74,7 +74,8 @@ internal fun AuroraLowerControls(
     onPanelHeight: (Int) -> Unit = {},
     onTail: () -> Unit = { list.requestScrollToItem(0) },
 ) {
-    val chatId = state.chat?.id ?: return
+    val chat = state.chat ?: return
+    val chatId = chat.id
     var field by remember(chatId, draft) {
         val text = draft.value.takeIf { it.chatId == chatId }?.text.orEmpty()
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
@@ -113,6 +114,7 @@ internal fun AuroraLowerControls(
                     }
                 },
                 activity = state.activity,
+                sendBlocked = state.isPromptBlockedBySecurityMode(chat),
                 files = state.attachments,
                 touch = touch,
                 importingAttachment = chatId in state.importingAttachmentsFor,
@@ -177,7 +179,8 @@ internal fun AuroraBootstrapComposer(
                     onAction(action)
                 }
             },
-            sendBlocked = bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null,
+            sendBlocked = bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null ||
+                bootstrap.picker.securityModeBusy || bootstrap.picker.securityModeError != null || bootstrap.picker.securityMode?.requiresUserChoice == true,
             importingAttachment = bootstrap.id in state.importingAttachmentsFor,
             attachmentError = state.attachmentErrorFor == bootstrap.id,
             attach = {

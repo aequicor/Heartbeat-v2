@@ -38,7 +38,8 @@ internal class AcpConnection(
         input = flow {
             process.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                 while (true) {
-                    emit(reader.readLine() ?: break)
+                    val line = reader.readLine() ?: break
+                    emit(withModeOptionNames(line))
                 }
             }
         },

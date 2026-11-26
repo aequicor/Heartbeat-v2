@@ -1,0 +1,2 @@
+ALTER TABLE chat ADD COLUMN security_config_json TEXT;
+ALTER TABLE last_chat_config ADD COLUMN security_config_json TEXT;

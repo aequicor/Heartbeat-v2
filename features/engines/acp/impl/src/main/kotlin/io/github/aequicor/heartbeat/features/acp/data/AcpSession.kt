@@ -193,6 +193,19 @@ internal class AcpSession(
     @Suppress("TooGenericExceptionCaught") // The session reports RPC and transport failures through its state.
     private fun sendPrompt(event: SessionEvent.SendPrompt) {
         if (status != SessionStatus.Idle && status !is SessionStatus.Failed) return
+        val validated = event.validatedSettings
+        val actual = configuration.current.securityMode
+        val expected = validated?.securityMode
+        val sameMode = actual?.id == expected?.id && actual?.current == expected?.current &&
+            actual?.choices.isNullOrEmpty() == expected?.choices.isNullOrEmpty()
+        val available = actual == null || actual.choices.isEmpty() || actual.choices.any { it.id == actual.current }
+        if (validated != null && (!sameMode || !available || actual?.currentConfirmed == false)) {
+            promptAccepted = false
+            turn = event.turnId?.let { SessionTurn(it, SessionTurn.Status.Rejected) }
+            status = SessionStatus.Failed("Режим агента изменился. Проверьте выбор перед отправкой")
+            publish()
+            return
+        }
         val textBlocks = (listOf(event.text).filter(String::isNotBlank) + event.attachments).map { ContentBlock.Text(it) }
         val content = textBlocks + event.promptFiles.map { file ->
             when (file) {

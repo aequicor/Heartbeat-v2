@@ -6,6 +6,7 @@ public sealed interface SessionEvent {
         val turnId: String? = null,
         val attachments: List<String> = listOf(),
         val promptFiles: List<PromptFile> = listOf(),
+        val validatedSettings: SessionSettings? = null,
     ) : SessionEvent
 
     public sealed interface PromptFile {

@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.Throws as Throwable
@@ -69,7 +70,7 @@ internal class DefaultAiStudioStore(
     private val catalogChanges: SharedFlow<ProjectsSessionsChange>? = null,
     private val sessionBootstrap: SessionBootstrapInteractor? = null,
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
-    turnInteractor: ChatTurnInteractor? = null,
+    private val turnInteractor: ChatTurnInteractor? = null,
     private val importAttachment: ImportChatAttachmentUseCase? = null,
 ) : AiStudioStore {
 
@@ -114,7 +115,22 @@ internal class DefaultAiStudioStore(
         if (persistence != null) scope.launch {
             screen.map { it.chat?.takeIf { chat -> chat.configuration != null }?.id }
                 .distinctUntilChanged().collectLatest { id ->
-                    if (id != null) observeContextUsage(id, persistence)
+                    if (id != null) coroutineScope {
+                        launch { observeContextUsage(id, persistence) }
+                        persistence.observeSecurityMode(id).retryWhen { failure, _ ->
+                            if (failure !is StudioRepositoryException) return@retryWhen false
+                            reportStorageError()
+                            delay(1_000)
+                            true
+                        }.collect { securityMode ->
+                            enqueue {
+                                if (screen.value.chat?.id == id) {
+                                    updateChat(id) { it.copy(summary = it.summary.copy(securityMode = securityMode)) }
+                                    screen.update { it.copy(chat = it.chat?.copy(securityMode = securityMode)) }
+                                }
+                            }
+                        }
+                    }
                 }
         }
         if (catalogChanges != null) {
@@ -255,6 +271,7 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.DeleteProject -> updateProjectsSessions(ProjectAction.Delete(action.id))
             is AiStudioAction.NewProjectChat -> newChat(action.project)
             is AiStudioAction.SetScenario -> updateSummary { it.copy(scenario = action.scenario) }
+            is AiStudioAction.SelectSecurityMode -> selectSecurityMode(action)
             is AiStudioAction.SetAccess -> updateSummary { it.copy(access = action.access) }
             is AiStudioAction.SetEffort -> updateSummary { it.copy(effort = action.effort) }
             is AiStudioAction.Attach -> if (importAttachment == null) attach(action.fileId) else Unit
@@ -540,6 +557,35 @@ internal class DefaultAiStudioStore(
         }
     }
 
+    private val failedSecurityModeSelections = mutableMapOf<String, String?>()
+
+    private fun selectSecurityMode(action: AiStudioAction.SelectSecurityMode) {
+        val id = action.chatId
+        if (screen.value.sessionBootstrap?.id == id) {
+            enginePicker?.chooseSecurityMode(action.value)
+            return
+        }
+        val interactor = turnInteractor ?: return
+        if (id != screen.value.chat?.id || id in screen.value.applyingSecurityModeFor || remoteTurns?.isRunning(id) == true) return
+        val value = action.value ?: failedSecurityModeSelections[id]
+        screen.update { it.copy(applyingSecurityModeFor = it.applyingSecurityModeFor + id, securityModeErrors = it.securityModeErrors - id) }
+        scope.launch {
+            val result = withContext(defaultDispatcher) {
+                val selected = interactor.selectSecurityMode(id, value)
+                if (action.value == null && value != null && selected.isSuccess) interactor.selectSecurityMode(id, null) else selected
+            }
+            enqueue {
+                val failure = result.exceptionOrNull()
+                if (failure == null) failedSecurityModeSelections.remove(id) else failedSecurityModeSelections[id] = value
+                screen.update {
+                    val errors = if (failure == null) it.securityModeErrors - id else it.securityModeErrors +
+                        (id to (failure.message ?: "Не удалось применить режим"))
+                    it.copy(applyingSecurityModeFor = it.applyingSecurityModeFor - id, securityModeErrors = errors)
+                }
+            }
+        }
+    }
+
     private fun updateSummary(transform: (Chat) -> Chat) {
         updateChat(workspace.selectedId) { it.copy(summary = transform(it.summary)) }
         screen.update { withProjectsSessions(it.copy(chat = selected.summary)) }
@@ -649,6 +695,7 @@ internal class DefaultAiStudioStore(
         val text = draft.text.trim()
         val activeTurn = chatId in turns || remoteTurns?.isRunning(chatId) == true
         if (chatId in screen.value.importingAttachmentsFor) return
+        if (screen.value.isPromptBlockedBySecurityMode(chat.summary)) return
         if (draft.chatId != chatId || !ChatPrompt.canSend(text, chat.attachments.isNotEmpty(), activeTurn)) return
         val remote = remoteTurns
         if (remote != null) {
@@ -783,6 +830,7 @@ internal class DefaultAiStudioStore(
     }
 
     private fun retry(id: String) {
+        if (screen.value.isPromptBlockedBySecurityMode(selected.summary)) return
         val message = findMessage(id)
         if ((message as? User)?.retryAllowed == false || (message as? Reply)?.retryAllowed == false) return
         remoteTurns?.let { remote ->

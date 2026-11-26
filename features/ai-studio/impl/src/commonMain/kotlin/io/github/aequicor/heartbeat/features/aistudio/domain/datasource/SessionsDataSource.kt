@@ -7,6 +7,9 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 internal interface SessionsDataSource {
@@ -14,6 +17,9 @@ internal interface SessionsDataSource {
     suspend fun <T> transaction(block: suspend () -> T): T
 
     suspend fun lastConfiguration(): ChatConfiguration?
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun rememberSecurityMode(configuration: ChatConfiguration)
 
     suspend fun create(
         projectId: ProjectId,

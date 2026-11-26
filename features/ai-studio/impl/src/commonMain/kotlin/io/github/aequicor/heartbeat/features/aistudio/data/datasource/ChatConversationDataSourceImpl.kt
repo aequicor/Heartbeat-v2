@@ -10,6 +10,8 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRep
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConversation
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
+import kotlinx.serialization.json.Json
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -19,7 +21,8 @@ internal class ChatConversationDataSourceImpl(private val dao: ChatConversationD
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun find(sessionId: String): ChatConversation? = accessStudioRepository {
         dao.find(sessionId)?.let { record ->
-            val config = record.engineId?.let { ChatConfiguration(it, record.model, record.reasoning) }
+            val securityMode = record.securityModeJson?.let { Json.decodeFromString<ChatSecurityMode>(it) }
+            val config = record.engineId?.let { ChatConfiguration(it, record.model, record.reasoning, securityMode) }
             val usage = if (record.used != null && record.size != null) ContextWindowUsage(record.used, record.size) else null
             ChatConversation(config, record.sessionId, record.stale != 0L, usage)
         }

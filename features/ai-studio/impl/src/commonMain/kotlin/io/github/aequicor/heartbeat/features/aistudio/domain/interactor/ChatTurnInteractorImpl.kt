@@ -1,6 +1,10 @@
 package io.github.aequicor.heartbeat.features.aistudio.domain.interactor
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.chatDirectory
 import dev.zacsweers.metro.Inject
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
@@ -22,6 +26,9 @@ import kotlin.coroutines.cancellation.CancellationException
 
 @Inject
 internal class ChatTurnInteractorImpl(
+    private val sessions: SessionsDataSource,
+    private val projects: ProjectDataSource,
+    private val engines: ChatEngineDataSource,
     private val sendMessage: SendChatMessageUseCase,
     private val applyConfiguration: ApplyChatConfigurationUseCase,
 ) : ChatTurnInteractor {
@@ -85,6 +92,14 @@ internal class ChatTurnInteractorImpl(
     @Throwable(CancellationException::class)
     override suspend fun applyConfiguration(sessionId: String, configuration: ChatConfiguration): Result<Unit> =
         withIdleChat(sessionId) { applyConfiguration.invoke(sessionId, configuration) }
+
+    @Throwable(CancellationException::class)
+    override suspend fun selectSecurityMode(sessionId: String, value: String?): Result<Unit> = withIdleChat(sessionId) {
+        runCatching {
+            val directory = if (value == null) chatDirectory(sessionId, sessions, projects) else null
+            engines.selectSecurityMode(sessionId, value, directory)
+        }.rethrowCancellation()
+    }
 
     private suspend fun withIdleChat(
         sessionId: String,

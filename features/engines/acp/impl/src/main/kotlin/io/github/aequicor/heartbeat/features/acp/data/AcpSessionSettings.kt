@@ -46,7 +46,7 @@ internal class AcpSessionSettings(
     suspend fun select(id: String, value: String, checkAvailable: () -> Unit): SessionSettings {
         val legacyModel = synchronized(lock) {
             checkAvailable()
-            val selector = listOfNotNull(current.model, current.reasoning).first { it.id == id }
+            val selector = listOfNotNull(current.model, current.reasoning, current.securityMode).first { it.id == id }
             require(selector.choices.any { it.id == value })
             if (selector.current == value && id !in unconfirmed) return current
             id == LegacyModelSelector && options.orEmpty().none { it.id.value == id }
@@ -69,7 +69,10 @@ internal class AcpSessionSettings(
             }
         } catch (failure: Exception) {
             // A failed request can leave the cached value behind the agent's setting.
-            synchronized(lock) { unconfirmed.add(id) }
+            synchronized(lock) {
+                unconfirmed.add(id)
+                refresh()
+            }
             throw failure
         }
         return synchronized(lock) {
@@ -88,7 +91,12 @@ internal class AcpSessionSettings(
                 state.availableModels.map { SessionSettings.Choice(it.modelId.value, it.name) },
             )
         }
-        current = SessionSettings(model?.toSelector() ?: legacyModel, reasoning?.toSelector())
+        val securityMode = selects.firstOrNull { it.category == SessionConfigOptionCategory.MODE }
+        current = SessionSettings(
+            model?.toSelector() ?: legacyModel,
+            reasoning?.toSelector(),
+            securityMode?.toSelector(currentConfirmed = securityMode.id.value !in unconfirmed),
+        )
         publish()
     }
 
@@ -98,12 +106,16 @@ internal class AcpSessionSettings(
     }
 }
 
-private fun SessionConfigOption.Select.toSelector(): SessionSettings.Selector {
-    val values = when (val list = options) {
-        is SessionConfigSelectOptions.Flat -> list.options
-        is SessionConfigSelectOptions.Grouped -> list.groups.flatMap { it.options }
+private fun SessionConfigOption.Select.toSelector(currentConfirmed: Boolean = true): SessionSettings.Selector {
+    val choices = when (val list = options) {
+        is SessionConfigSelectOptions.Flat -> list.options.map {
+            SessionSettings.Choice(it.value.value, it.name.ifBlank { it.value.value }, it.description)
+        }
+        is SessionConfigSelectOptions.Grouped -> list.groups.flatMap { group ->
+            group.options.map {
+                SessionSettings.Choice(it.value.value, it.name.ifBlank { it.value.value }, it.description, group.group.value, group.name)
+            }
+        }
     }
-    return SessionSettings.Selector(
-        id.value, currentValue.value, values.map { SessionSettings.Choice(it.value.value, it.name) },
-    )
+    return SessionSettings.Selector(id.value, currentValue.value, choices, currentConfirmed)
 }

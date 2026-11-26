@@ -3,6 +3,8 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.SessionDao
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPage
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
+import kotlinx.serialization.json.Json
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
@@ -14,6 +16,9 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 @Inject
@@ -23,7 +28,19 @@ internal class DefaultSessionsDataSource(private val dao: SessionDao) : Sessions
         accessStudioRepository { dao.transaction(block) }
 
     override suspend fun lastConfiguration(): ChatConfiguration? = accessStudioRepository {
-        dao.lastConfiguration()?.let { ChatConfiguration(it.engineId, it.model, it.reasoning) }
+        dao.lastConfiguration()?.let { record ->
+            val preference = record.securityModeJson?.let { Json.decodeFromString<ChatSecurityMode.Preference>(it) }
+            ChatConfiguration(record.engineId, record.model, record.reasoning, preference?.forNewChat())
+        }
+    }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun rememberSecurityMode(configuration: ChatConfiguration) = accessStudioRepository {
+        val securityMode = requireNotNull(configuration.securityMode)
+        val preference = ChatSecurityMode.Preference(securityMode.configId, securityMode.options, requireNotNull(securityMode.selectedValue))
+        dao.rememberSecurityMode(ChatConfigRecord(
+            configuration.engineId, configuration.model, configuration.reasoning, Json.encodeToString(preference),
+        ))
     }
 
     override suspend fun create(
@@ -40,7 +57,10 @@ internal class DefaultSessionsDataSource(private val dao: SessionDao) : Sessions
             parentSessionId = parentSessionId?.value?.toString(),
             conversation = conversation?.let {
                 val config = it.configuration
-                ChatConfigRecord.Conversation(ChatConfigRecord(config.engineId, config.model, config.reasoning), it.engineSessionId)
+                ChatConfigRecord.Conversation(
+                    ChatConfigRecord(config.engineId, config.model, config.reasoning, config.securityMode?.let { securityMode -> Json.encodeToString(securityMode) }),
+                    it.engineSessionId,
+                )
             },
         ).toSession()
     }

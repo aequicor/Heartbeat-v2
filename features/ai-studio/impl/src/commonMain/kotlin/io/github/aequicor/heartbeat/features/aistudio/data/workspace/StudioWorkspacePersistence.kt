@@ -18,10 +18,13 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionStatus
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SecurityMode
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ContextUsage
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWorkspaceMetadata
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.display
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.toNavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.workState
 import kotlinx.coroutines.CoroutineDispatcher
@@ -53,6 +56,19 @@ internal class StudioWorkspacePersistence(
     private var recoveredWork = false
 
     private val queries get() = StudioWorkspaceQueries(connection.driver)
+
+    override fun observeSecurityMode(sessionId: String): Flow<SecurityMode?> = flow {
+        val query = withContext(ioDispatcher) { ChatQueries(connection.driver).chatSecurityMode(sessionId) }
+        emitAll(query.asFlow().map {
+            withContext(ioDispatcher) {
+                workspaceOperation("Read chat mode") {
+                    query.executeAsOneOrNull()?.security_config_json?.let { json ->
+                        Json.decodeFromString<ChatSecurityMode>(json).display()
+                    }
+                }
+            }
+        }.distinctUntilChanged())
+    }
 
     override fun observeContextUsage(sessionId: String): Flow<ContextUsage?> = flow {
         val query = withContext(ioDispatcher) {

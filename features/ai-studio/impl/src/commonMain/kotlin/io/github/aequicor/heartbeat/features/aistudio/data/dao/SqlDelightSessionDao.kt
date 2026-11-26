@@ -7,11 +7,16 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.DaoPageCursor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.DatabaseTimestamp
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SessionDto
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecord
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
+import kotlinx.serialization.json.Json
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioSessionQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Studio_session
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.uuid.Uuid
 
 internal class SqlDelightSessionDao(
@@ -30,6 +35,17 @@ internal class SqlDelightSessionDao(
     override suspend fun lastConfiguration(): ChatConfigRecord? = withContext(ioDispatcher) {
         accessStudioDatabase("Read last chat configuration") {
             ChatQueries(connection.driver).lastChatConfiguration(::ChatConfigRecord).executeAsOneOrNull()
+        }
+    }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun rememberSecurityMode(configuration: ChatConfigRecord): Unit = withContext(ioDispatcher) {
+        accessStudioDatabase("Save preferred security mode") {
+            val chats = ChatQueries(connection.driver)
+            chats.transaction {
+                chats.rememberChatConfiguration(configuration.engineId, configuration.model, configuration.reasoning)
+                chats.rememberSecurityModePreference(configuration.securityModeJson, configuration.engineId)
+            }
         }
     }
 
@@ -62,8 +78,18 @@ internal class SqlDelightSessionDao(
             if (conversation != null) {
                 val config = conversation.configuration
                 val chats = ChatQueries(connection.driver)
+                val preference = chats.lastSecurityModePreference(config.engineId).executeAsOneOrNull()?.security_config_json
                 chats.configureNewChat(config.engineId, config.model, config.reasoning, conversation.engineSessionId, id)
                 chats.rememberChatConfiguration(config.engineId, config.model, config.reasoning)
+                val securityMode = config.securityModeJson?.let { Json.decodeFromString<ChatSecurityMode>(it) }
+                    ?: preference?.let { Json.decodeFromString<ChatSecurityMode.Preference>(it).forNewChat() }
+                if (securityMode != null) {
+                    chats.setChatSecurityMode(Json.encodeToString(securityMode), id, config.engineId, conversation.engineSessionId, null)
+                    securityMode.selectedValue?.let { value ->
+                        val next = ChatSecurityMode.Preference(securityMode.configId, securityMode.options, value)
+                        chats.rememberSecurityModePreference(Json.encodeToString(next), config.engineId)
+                    }
+                }
             }
             sessionQueries.selectSessionById(id).executeAsOne().toSessionDto()
         }
