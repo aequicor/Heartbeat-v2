@@ -16,15 +16,19 @@ internal fun AuroraWorkResult(
     touch: Boolean,
     modifier: Modifier = Modifier,
     color: Color = AuroraColors.WorkInk,
-    contentModifier: Modifier = Modifier,
+    reveal: Boolean = false,
+    animateOnEntry: Boolean = false,
 ) {
     val selection = rememberSelectionState()
     val markdown = content?.takeUnless { it.plain }
     val width = if (markdown == null) Modifier else WorkMarkdownIntrinsicSize
     SelectionContainer(state = selection, modifier = modifier) {
-        Column(contentModifier) {
-            AuroraMarkdownContent(text, markdown, selection,
-                auroraMessageStyle().copy(color = color), touch, width)
+        val body: @Composable () -> Unit = {
+            Column {
+                AuroraMarkdownContent(text, markdown, selection,
+                    auroraMessageStyle().copy(color = color), touch, width)
+            }
         }
+        if (reveal) AuroraWorkReveal(animateOnEntry, content = body) else body()
     }
 }

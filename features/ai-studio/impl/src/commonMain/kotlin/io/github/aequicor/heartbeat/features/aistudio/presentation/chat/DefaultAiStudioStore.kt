@@ -27,6 +27,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.NavigationStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.contract.ProjectsSessionsAction
@@ -868,20 +869,11 @@ internal class DefaultAiStudioStore(
         val messages = history(selected)
         workspaceFiles.refresh(listOfNotNull(reply) + messages)
         screen.update {
-            val closedStages = reply?.let { current ->
-                val previous = it.live?.takeIf { old -> old.id == current.id }
-                current.steps.filter { step ->
-                    step.result != null && previous?.steps?.any { old -> old.id == step.id && old.result == null } == true
-                }.map { step -> "${current.id}/${step.id}" }.toSet()
-            }.orEmpty()
             val next = it.copy(
                 chat = selected.summary, messages = messages, live = reply, request = remoteTurns?.request(id),
                 activity = remoteTurns?.activity(id) ?: Activity.Running, attachments = selected.attachments,
                 fileGroups = workspaceFiles.groups(it.fileSearch),
-                expandedSteps = it.expandedSteps - closedStages,
-                expandedEvents = if (closedStages.isEmpty()) it.expandedEvents else it.expandedEvents.filterNot { key ->
-                    closedStages.any { stage -> key.startsWith("$stage/") }
-                }.toSet(),
+                expandedSteps = it.stepsExpandedAfterInterim(reply),
             )
             if (navigationChanged) withProjectsSessions(next) else next
         }
@@ -992,6 +984,7 @@ internal class DefaultAiStudioStore(
                 val next = it.copy(
                     chat = selected.summary,
                     messages = messages, live = turn.reply, request = turn.request, activity = turn.activity,
+                    expandedSteps = it.stepsExpandedAfterInterim(turn.reply),
                     fileGroups = if (structural) workspaceFiles.groups(it.fileSearch) else it.fileGroups,
                     attachments = selected.attachments,
                 )
@@ -1114,6 +1107,20 @@ internal class DefaultAiStudioStore(
             it.copy(storageError = RestoreError)
         }
         snapshots.emptyWorkspace()
+    }
+
+    private fun AiStudioScreenState.stepsExpandedAfterInterim(reply: Reply?): Set<String> {
+        if (reply?.status != ReplyStatus.Working) return expandedSteps
+        val completed = reply.steps.filter { it.status != StepStatus.Current && it.result != null && it.events.isNotEmpty() }
+        if (completed.isEmpty()) return expandedSteps
+
+        val previous = live?.takeIf { it.id == reply.id }?.steps.orEmpty().associateBy { it.id }
+        // Keep the stage's events visible when its result arrives. Later snapshots respect a manual collapse.
+        val newlyCompleted = completed.filter { step ->
+            val prior = previous[step.id]
+            prior?.result == null || prior.status == StepStatus.Current
+        }
+        return if (newlyCompleted.isEmpty()) expandedSteps else expandedSteps + newlyCompleted.map { "${reply.id}/${it.id}" }
     }
 
     private fun Set<String>.toggle(id: String) = if (id in this) this - id else this + id

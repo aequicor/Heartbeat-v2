@@ -97,6 +97,7 @@ internal fun AuroraReplyAnswer(
     archiveReveal: ArchiveReveal? = null,
     keepStartDuringResize: Boolean = false,
     anchoredHeight: AuroraMeasuredHeight? = null,
+    anchoringWork: Boolean = false,
     onAnchoredHeight: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val hasAnswer = reply.text.isNotEmpty() || reply.hasFiles
@@ -105,8 +106,9 @@ internal fun AuroraReplyAnswer(
     val opening = archiveReveal?.takeUnless { it.isPlaced }
     val immediate = opening != null || liveText != null || finalResize || keepStartDuringResize
     val size = when {
-        anchoredHeight != null ->
-            auroraMeasuredHeightMotion(anchoredHeight, StreamResizeMillis, onResizeEnd, immediate, onAnchoredHeight)
+        anchoredHeight != null -> auroraMeasuredHeightMotion(
+            anchoredHeight, StreamResizeMillis, onResizeEnd, immediate && !anchoringWork, onAnchoredHeight,
+        )
         immediate -> Modifier
         else -> Modifier.auroraHeightMotion(StreamResizeMillis, false, onResizeEnd)
     }
@@ -114,7 +116,7 @@ internal fun AuroraReplyAnswer(
     LaunchedEffect(finalResize) {
         if (finalResize) withFrameNanos { finishResize() }
     }
-    AuroraReplyReveal(liveText != null) {
+    AuroraReplyReveal(liveText != null, revealFinalAdditions = true) {
         Box(size, propagateMinConstraints = true) {
             if (showAnswer) {
                 AuroraReplyContent(reply, touch, onAction, liveText, selection, viewportHeight, opening)

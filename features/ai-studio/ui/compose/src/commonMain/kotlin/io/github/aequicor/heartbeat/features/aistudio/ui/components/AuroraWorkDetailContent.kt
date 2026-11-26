@@ -27,7 +27,7 @@ internal fun AuroraWorkDetailContent(event: WorkEvent, touch: Boolean, selection
         return
     }
     key(event.id) {
-        AuroraReplyReveal(streaming = event.status == StepStatus.Current) {
+        val body: @Composable () -> Unit = {
             when {
                 event.detailsFormat == DetailFormat.Markdown -> AuroraMarkdownContent(
                     event.detailText, event.markdownDetails, selection, HbTypography.Detail.copy(color = color), touch,
@@ -45,6 +45,9 @@ internal fun AuroraWorkDetailContent(event: WorkEvent, touch: Boolean, selection
                 else -> AuroraReplyText(event.detailText, WorkDetailWidth, HbTypography.Detail.copy(color = color))
             }
         }
+        if (workTextRevealEnabled()) {
+            AuroraWorkReveal(animateInitial = true, streaming = event.status == StepStatus.Current, content = body)
+        } else AuroraReplyReveal(streaming = event.status == StepStatus.Current, content = body)
     }
 }
 

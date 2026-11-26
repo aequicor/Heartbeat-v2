@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +58,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Step
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.StepStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
+import kotlinx.coroutines.sync.Mutex
 
 @Composable
 internal fun AuroraWorkTimeline(
@@ -79,7 +79,7 @@ internal fun AuroraWorkTimeline(
     val verticalInset = if (touch || active) inset else AuroraLayout.ContentInset
     val interim = reply.interim?.takeUnless { text -> reply.steps.any { it.result == text } }
     val preparation = interim?.takeUnless { touch }
-    val entrance = remember(reply.id) { ShownWork().apply { record(reply) } }.takeIf { active }
+    val entrance = remember(reply.id) { ShownWork(reply) }.takeIf { it.live }
     if (entrance != null) SideEffect { entrance.record(reply) }
     if (reply.steps.isEmpty() && interim == null) return
     val region = if (!active && workMenu != null) {
@@ -94,33 +94,43 @@ internal fun AuroraWorkTimeline(
                 Modifier.fillMaxWidth().timelineMarker(
                     StepStatus.Done, axis, firstLineCenter, before = false, after = reply.steps.isNotEmpty(), touch = false,
                 ).padding(start = workContentInset(touch), bottom = AuroraLayout.ContentInset),
-                contentModifier = Modifier.auroraFadeInOnEntry(entrance?.interim == false),
+                reveal = entrance != null, animateOnEntry = entrance?.interim == false,
             )
         }
         reply.steps.forEachIndexed { index, step ->
             key(step.id) {
-                AuroraWorkStage(
-                    reply.id, step, "${reply.id}/${step.id}" in expandedSteps, expandedEvents,
-                    earlierPhase = preparation != null || index > 0, laterPhase = index < reply.steps.lastIndex,
-                    axis, interruptedSingleEvent, touch, onAction, onDisclosure, workMenu, entrance,
-                )
+                val stage: @Composable () -> Unit = {
+                    AuroraWorkStage(
+                        reply.id, step, "${reply.id}/${step.id}" in expandedSteps, expandedEvents,
+                        earlierPhase = preparation != null || index > 0, laterPhase = index < reply.steps.lastIndex,
+                        axis, interruptedSingleEvent, touch, onAction, onDisclosure, workMenu, entrance,
+                    )
+                }
+                if (entrance == null) stage() else AuroraWorkReveal(animateInitial = index >= entrance.stepCount, content = stage)
             }
         }
         if (touch && interim != null) {
             AuroraWorkResult(
                 interim, reply.interimContent, touch, Modifier.padding(top = AuroraLayout.Space),
-                contentModifier = Modifier.auroraFadeInOnEntry(entrance?.interim == false),
+                reveal = entrance != null, animateOnEntry = entrance?.interim == false,
             )
         }
     }
 }
 
-private class ShownWork {
-    val events = mutableSetOf<String>()
+private class ShownWork(initial: Reply) {
+    val live = initial.status == ReplyStatus.Working
+    val stepCount = initial.steps.size
+    val entranceQueue = Mutex()
+    val events = mutableSetOf<Pair<String, String>>()
     val results = mutableSetOf<String>()
     var interim = false
         private set
     private var steps: List<Step>? = null
+
+    init {
+        record(initial)
+    }
 
     fun record(reply: Reply) {
         interim = interim || reply.interim != null
@@ -128,7 +138,7 @@ private class ShownWork {
         steps = reply.steps
         for (step in reply.steps) {
             if (step.result != null) results.add(step.id)
-            step.events.forEach { events.add(it.id) }
+            step.events.forEach { events.add(step.id to it.id) }
         }
     }
 }
@@ -145,19 +155,21 @@ internal fun Modifier.auroraFadeInOnEntry(animateOnEntry: Boolean): Modifier {
 }
 
 @Composable
-private fun AuroraCurrentWorkTitle(step: Step, earlierPhase: Boolean, laterMarker: Boolean, axis: Dp, touch: Boolean) {
+private fun AuroraCurrentWorkTitle(
+    step: Step, earlierPhase: Boolean, laterMarker: Boolean, axis: Dp, touch: Boolean, next: AuroraWorkEventEntrance?,
+) {
     val title = step.activeTitle.ifBlank { "Агент работает" }
     val ink = if (earlierPhase && (touch || step.activeTitle.isNotBlank())) AuroraColors.WorkMuted else AuroraColors.WorkInk
     if (touch) {
         AuroraWorkText(
             step.activeTitle.ifBlank { "Агент работает…" }, AuroraWorkRole.Detail,
             Modifier.timelineMarker(
-                StepStatus.Current, axis, AuroraLayout.WorkTitleLine / 2, earlierPhase, after = false, touch = true,
+                StepStatus.Current, axis, AuroraLayout.WorkTitleLine / 2, earlierPhase, after = laterMarker, touch = true, next = next,
             ).padding(start = AuroraLayout.WorkTextInset),
             color = ink,
         )
     } else {
-        AuroraDesktopWorkGoal(title, before = earlierPhase, after = laterMarker, ink = ink)
+        AuroraDesktopWorkGoal(title, before = earlierPhase, after = laterMarker, ink = ink, next = next)
     }
 }
 
@@ -168,19 +180,22 @@ internal fun AuroraDesktopWorkGoal(
     before: Boolean = false,
     after: Boolean = false,
     ink: Color = AuroraColors.WorkInk,
+    next: AuroraWorkEventEntrance? = null,
 ) {
     val axis = AuroraLayout.DesktopWorkAxis - AuroraLayout.Space
     var firstLineCenter by remember { mutableFloatStateOf(0f) }
     Row(
         modifier.timelineMarker(StepStatus.Current, axis, Dp.Hairline, before, after, touch = false,
-            offsetY = { firstLineCenter },
+            offsetY = { firstLineCenter }, next = next,
         ).padding(start = axis + AuroraLayout.ActiveMarker / 2 + AuroraLayout.DesktopWorkGoalGap),
         horizontalArrangement = Arrangement.spacedBy(AuroraLayout.WorkActivityDotsGap),
         verticalAlignment = Alignment.Top,
     ) {
-        BasicText(
+        AuroraReplyText(
             text, Modifier.weight(1f, fill = false),
             style = HbTypography.Detail.copy(color = ink),
+            revealKey = remember { Any() },
+            cascade = false,
             overflow = TextOverflow.Ellipsis,
             onTextLayout = { layout ->
                 firstLineCenter = (layout.getLineTop(0) + layout.getLineBottom(0)) / 2f
@@ -214,7 +229,7 @@ private fun AuroraWorkStage(
     val stageFocus = remember { FocusRequester() }
     val hasInterim = step.result != null
     LaunchedEffect(hasInterim) {
-        if (hasInterim && !standalone && retainFocusedEvents) {
+        if (hasInterim && !standalone && !expanded && retainFocusedEvents) {
             stageFocus.requestFocus()
             retainFocusedEvents = false
         }
@@ -226,14 +241,17 @@ private fun AuroraWorkStage(
     }
     val open = expanded || retainFocusedEvents || previousStandaloneEvent?.let(expandedEvents::contains) == true
     val showEvents = (current || open || standalone) && step.events.isNotEmpty()
+    val arrivals = if (showEvents && entrance != null) step.events.map { event ->
+        key(event.id) { rememberWorkEventEntrance((step.id to event.id) !in entrance.events, entrance.entranceQueue) }
+    } else emptyList()
     val region = if (open && !current && !standalone && workMenu != null) {
         workMenu.region(AiStudioAction.SetWorkExpanded(replyId, false, step.id), "Свернуть этап")
     } else Modifier
     Column(region) {
         if (current) {
-            AuroraCurrentWorkTitle(step, earlierPhase, showEvents || laterPhase, axis, touch)
+            AuroraCurrentWorkTitle(step, earlierPhase, showEvents || laterPhase, axis, touch, arrivals.firstOrNull())
         } else if (!standalone) {
-            AuroraPastWorkHeader(step, open, earlierPhase, laterPhase || showEvents, axis, touch, stageFocus) {
+            AuroraPastWorkHeader(step, open, earlierPhase, laterPhase || showEvents, axis, touch, stageFocus, arrivals.firstOrNull()) {
                 onDisclosure()
                 retainFocusedEvents = false
                 previousStandaloneEvent = null
@@ -248,7 +266,8 @@ private fun AuroraWorkStage(
                     if (current || standalone || !it.hasFocus) retainFocusedEvents = it.hasFocus
                 }.focusGroup(),
                 workMenu = workMenu,
-                entrance = entrance,
+                arrivals = arrivals,
+                reveal = entrance != null,
             )
         } else if (expanded && step.details.isNotBlank()) {
             val connector = if (laterPhase && !touch) Modifier.timelineLine(axis) else Modifier
@@ -260,7 +279,7 @@ private fun AuroraWorkStage(
         }
         if (!current) AuroraStageResult(
             step.result, step.resultContent, laterPhase, showEvents, axis, touch,
-            animateOnEntry = entrance?.results?.contains(step.id) == false,
+            reveal = entrance != null, animateOnEntry = entrance?.results?.contains(step.id) == false,
         )
     }
 }
@@ -268,7 +287,7 @@ private fun AuroraWorkStage(
 @Composable
 private fun AuroraStageResult(
     result: String?, content: ReplyHistoryContent?, laterPhase: Boolean, showEvents: Boolean, axis: Dp, touch: Boolean,
-    animateOnEntry: Boolean,
+    reveal: Boolean, animateOnEntry: Boolean,
 ) {
     if (result != null) {
         val connector = if (laterPhase) Modifier.timelineLine(axis) else Modifier
@@ -278,7 +297,7 @@ private fun AuroraStageResult(
                 start = workContentInset(touch),
                 top = if (showEvents) AuroraLayout.ContentInset else Dp.Hairline,
             ),
-            contentModifier = Modifier.auroraFadeInOnEntry(animateOnEntry),
+            reveal = reveal, animateOnEntry = animateOnEntry,
         )
     }
     if (laterPhase) {
@@ -300,15 +319,17 @@ private fun AuroraStageEvents(
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
     workMenu: AuroraWorkMenu? = null,
-    entrance: ShownWork? = null,
+    arrivals: List<AuroraWorkEventEntrance?>,
+    reveal: Boolean,
 ) {
     val current = step.status == StepStatus.Current
     val gap = if (touch) AuroraLayout.SmallGap else AuroraLayout.DesktopWorkEventGap
     Column(modifier) {
         step.events.forEachIndexed { index, event ->
             key(event.id) {
+                val entrance = arrivals.getOrNull(index)
                 if (!standalone) {
-                    val connector = if (current && touch) Modifier else Modifier.timelineLine(axis)
+                    val connector = Modifier.timelineLine(axis, progress = entrance?.let { { it.gapProgress } })
                     Spacer(connector.fillMaxWidth().height(gap))
                 }
                 val open = "$replyId/${step.id}/${event.id}" in expandedEvents
@@ -322,7 +343,9 @@ private fun AuroraStageEvents(
                     standalone = standalone, connectedAbove = !standalone || earlierPhase,
                     markerDiameter = if (interruptedSingleEvent) AuroraLayout.ActiveMarker else AuroraLayout.NavigationStatus,
                     modifier = region,
-                    animateOnEntry = entrance?.events?.contains(event.id) == false,
+                    entrance = entrance,
+                    next = arrivals.getOrNull(index + 1),
+                    reveal = reveal,
                     fileContent = {
                         AuroraArtifactRows(
                             event.files, replyId, touch, onAction,
@@ -340,13 +363,13 @@ private fun AuroraStageEvents(
 @Composable
 private fun AuroraPastWorkHeader(
     step: Step, expanded: Boolean, before: Boolean, after: Boolean, axis: Dp, touch: Boolean,
-    focus: FocusRequester, onClick: () -> Unit,
+    focus: FocusRequester, next: AuroraWorkEventEntrance?, onClick: () -> Unit,
 ) {
     val target = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopWorkDisclosureTarget
     val expandable = step.events.isNotEmpty() || step.details.isNotBlank()
     val markerY = if (touch) target / 2 else null
     val labelInset = if (expandable && !touch) AuroraLayout.SmallGap else Dp.Hairline
-    val marker = Modifier.fillMaxWidth().timelineMarker(step.status, axis, markerY, before, after, touch)
+    val marker = Modifier.fillMaxWidth().timelineMarker(step.status, axis, markerY, before, after, touch, next = next)
         .padding(start = workContentInset(touch) - labelInset)
     val role = if (touch) AuroraWorkRole.Action else AuroraWorkRole.StageTitle
     val ink = if (touch || step.result != null) AuroraColors.WorkMuted else AuroraColors.DesktopInk
@@ -426,6 +449,8 @@ internal fun Modifier.timelineMarker(
     diameter: Dp = if (status == StepStatus.Current && !event) AuroraLayout.ActiveMarker else AuroraLayout.NavigationStatus,
     filled: Boolean = !event && status == StepStatus.Done,
     offsetY: () -> Float = { 0f },
+    entrance: AuroraWorkEventEntrance? = null,
+    next: AuroraWorkEventEntrance? = null,
 ): Modifier = drawBehind {
     val point = Offset(axis.toPx(), (y?.toPx() ?: size.height / 2f) + offsetY())
     val radius = diameter.toPx() / 2
@@ -433,8 +458,15 @@ internal fun Modifier.timelineMarker(
     val color = if (!touch && filled && status == StepStatus.Done) {
         AuroraColors.StageComplete
     } else status.markerColor(event)
-    if (before) drawLine(AuroraColors.StageLine, Offset(point.x, 0f), point, lineWidth)
-    if (after) drawLine(AuroraColors.StageLine, point, Offset(point.x, size.height), lineWidth)
+    val progress = entrance?.markerProgress ?: 1f
+    if (before && progress > 0f) {
+        drawLine(AuroraColors.StageLine, Offset(point.x, 0f), Offset(point.x, point.y * progress), lineWidth)
+    }
+    if (progress < 1f) return@drawBehind
+    val tail = next?.previousProgress ?: 1f
+    if (after && tail > 0f) {
+        drawLine(AuroraColors.StageLine, point, Offset(point.x, point.y + (size.height - point.y) * tail), lineWidth)
+    }
     if (filled) {
         drawCircle(color, radius = radius, center = point)
     } else {
@@ -454,7 +486,8 @@ private fun StepStatus.markerColor(event: Boolean): Color = when (this) {
 
 private const val ChevronRightRotation = -90f
 
-private fun Modifier.timelineLine(axis: Dp): Modifier = drawBehind {
+private fun Modifier.timelineLine(axis: Dp, progress: (() -> Float)? = null): Modifier = drawBehind {
     val x = axis.toPx()
-    drawLine(AuroraColors.StageLine, Offset(x, 0f), Offset(x, size.height), AuroraLayout.Stroke.toPx())
+    val end = size.height * (progress?.invoke() ?: 1f)
+    if (end > 0f) drawLine(AuroraColors.StageLine, Offset(x, 0f), Offset(x, end), AuroraLayout.Stroke.toPx())
 }

@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
@@ -55,6 +56,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
@@ -91,7 +93,9 @@ internal fun AuroraWorkEvent(
     connectedAbove: Boolean = true,
     markerDiameter: Dp = AuroraLayout.NavigationStatus,
     modifier: Modifier = Modifier,
-    animateOnEntry: Boolean = false,
+    entrance: AuroraWorkEventEntrance? = null,
+    next: AuroraWorkEventEntrance? = null,
+    reveal: Boolean = false,
     fileContent: @Composable () -> Unit = {},
     onClick: () -> Unit,
 ) {
@@ -99,38 +103,53 @@ internal fun AuroraWorkEvent(
     val thinking = event.kind == WorkEventKind.Thinking
     val transition = rememberThinkingHeaderTransition(thinking, expanded)
     val motion = transition?.takeIf { it.isActive(expanded) }
-    val titledPreview = !expanded && thinking && !event.title.isNullOrBlank()
-    val target = if (touch || titledPreview) {
+    val target = if (touch || thinking) {
         AuroraLayout.WorkEventTarget
     } else {
         AuroraLayout.DesktopTarget
     }
     var headerHeight by remember { mutableIntStateOf(with(density) { target.roundToPx() }) }
-    val marker = if (current && touch) Modifier else Modifier.timelineMarker(
+    val inset = if (!touch && thinking) AuroraLayout.SmallGap else AuroraLayout.ControlGap
+    val titleLine = HbTypography.Label.lineHeight
+    val titleInset = if (thinking) with(density) { maxOf(inset, (target - titleLine.toDp()) / 2) } else inset
+    val titleCenter = with(density) { titleInset.roundToPx() + (titleLine.toPx() / 2f) }
+    val marker = Modifier.timelineMarker(
         event.status, axis, Dp.Hairline, before = connectedAbove, after = connectedBelow, touch, event = true,
         diameter = markerDiameter,
         filled = standalone,
-        offsetY = { (headerHeight + (motion?.heightOffset(expanded) ?: 0f)) / 2f },
+        offsetY = { if (thinking) titleCenter else headerHeight / 2f },
+        entrance = entrance,
+        next = next,
     ).padding(start = if (touch) AuroraLayout.DesktopTarget else AuroraLayout.DesktopWorkContentInset)
+    val ready = entrance?.ready != false
+    val opacity = if (entrance == null) null else animateFloatAsState(
+        if (ready) 1f else 0f, tween(HbMotions.Default.smallStateChangeMs), label = "Work row entrance",
+    )
     val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
-    val background = when {
-        !touch || thinking -> Modifier
-        current -> Modifier.background(AuroraColors.Current)
-        expanded -> Modifier.background(AuroraColors.WorkHistory)
-        else -> Modifier
+    val tint = when {
+        !touch || thinking -> Color.Transparent
+        current -> AuroraColors.Current
+        expanded -> AuroraColors.WorkHistory
+        else -> Color.Transparent
     }
+    val background = if (tint == Color.Transparent) Modifier
+    else Modifier.drawBehind { drawRect(tint, alpha = opacity?.value ?: 1f) }
     var wasExpanded by remember { mutableStateOf(expanded) }
     SideEffect { wasExpanded = expanded }
-    Column(
-        modifier.then(marker).fillMaxWidth().clip(shape).then(background),
-    ) {
-        AuroraWorkEventHeader(
-            event, expanded, current, touch, motion, onClick,
-            Modifier.auroraFadeInOnEntry(animateOnEntry).zIndex(1f).heightIn(min = target).onSizeChanged {
-                headerHeight = it.height
-                transition?.recordHeight(expanded, it.height)
-            },
-        )
+    Column(modifier.then(marker).fillMaxWidth().clip(shape).then(background)) {
+        val admission = if (ready) Modifier else Modifier.clearAndSetSemantics {}
+        val arrival = if (opacity == null) Modifier else Modifier.graphicsLayer { alpha = opacity.value }
+        val header: @Composable () -> Unit = {
+            AuroraWorkEventHeader(
+                event, expanded, current, touch, motion, titleInset, titleCenter, ready, onClick,
+                admission.then(arrival).zIndex(1f).heightIn(min = target).onSizeChanged {
+                    headerHeight = it.height
+                    transition?.recordHeight(expanded, it.height)
+                },
+            )
+        }
+        if (reveal) AuroraWorkReveal(animateInitial = entrance != null, ready = ready, content = header)
+        else header()
         if (expanded) {
             // The work timeline already animates height and keeps the active row anchored during reflow.
             val fade = if (motion == null) Modifier.auroraFadeInOnEntry(!wasExpanded) else Modifier.graphicsLayer {
@@ -139,7 +158,14 @@ internal fun AuroraWorkEvent(
             }
             val panel = if (touch) fade else fade.padding(end = AuroraLayout.Space).clip(shape)
                 .background(AuroraColors.WorkAccess)
-            AuroraWorkDetailsBody(event, touch, panel, fileContent)
+            val body: @Composable () -> Unit = { AuroraWorkDetailsBody(event, touch, panel, fileContent) }
+            if (reveal) {
+                AuroraWorkReveal(
+                    animateInitial = !wasExpanded,
+                    streaming = event.status == StepStatus.Current,
+                    content = body,
+                )
+            } else body()
         }
     }
 }
@@ -170,7 +196,6 @@ private class ThinkingHeaderTransition(val initialProgress: Float) {
 
     private var collapsedHeight by mutableIntStateOf(0)
     private var expandedHeight by mutableIntStateOf(0)
-    var previewHeight by mutableIntStateOf(0)
     val drawPreview by derivedStateOf { previewOpacity() > 0f }
 
     fun previewOpacity(): Float = (1f - progress() * 2f).coerceAtLeast(0f)
@@ -182,8 +207,6 @@ private class ThinkingHeaderTransition(val initialProgress: Float) {
     }
 
     fun heightOffset(expanded: Boolean): Float = heightGap() * remaining(expanded)
-
-    fun labelOffset(expanded: Boolean): Float = (heightGap() - previewHeight) * remaining(expanded) / 2f
 
     private fun heightGap(): Int = if (collapsedHeight == 0 || expandedHeight == 0) 0
     else collapsedHeight - expandedHeight
@@ -198,6 +221,9 @@ private fun AuroraWorkEventHeader(
     current: Boolean,
     touch: Boolean,
     transition: ThinkingHeaderTransition?,
+    inset: Dp,
+    titleCenter: Float,
+    ready: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -212,8 +238,6 @@ private fun AuroraWorkEventHeader(
         current -> AuroraColors.Ink
         else -> AuroraColors.Primary
     }
-    val inset = if (!touch && thinking) AuroraLayout.SmallGap else AuroraLayout.ControlGap
-    val movingIcon = thinkingIconMotion(transition, expanded)
     val hoverColor = if (touch && hovered && !thinking) AuroraColors.WorkHover else Color.Transparent
     AuroraControl(
         onClick,
@@ -224,36 +248,33 @@ private fun AuroraWorkEventHeader(
             },
         touch = touch, background = hoverColor, round = false,
         horizontalPadding = if (touch) AuroraLayout.Space else Dp.Hairline,
-        clipContent = transition == null,
+        clipContent = transition == null, enabled = ready,
     ) {
         val glyph = event.glyph()
+        val icon = if (thinking) Modifier.alignBy { it.measuredHeight / 2 } else Modifier
         if (touch) {
-            Box(movingIcon.width(AuroraLayout.FileTile - AuroraLayout.Glyph), contentAlignment = Alignment.Center) {
+            Box(icon.width(AuroraLayout.FileTile - AuroraLayout.Glyph), contentAlignment = Alignment.Center) {
                 HbIcon(glyph, tint = tint, size = AuroraLayout.Glyph)
             }
         } else {
-            HbIcon(glyph, movingIcon.workIconOutline(glyph), tint = tint, size = AuroraLayout.Glyph)
+            HbIcon(glyph, icon.workIconOutline(glyph), tint = tint, size = AuroraLayout.Glyph)
         }
         val text = Modifier.weight(1f).padding(horizontal = AuroraLayout.Space, vertical = inset)
         if (compactTool) {
             AuroraToolLabels(event, expanded, showStatus = showControls, modifier = text)
         } else {
             val showPreview = !thinking || !expanded
-            AuroraWorkStackedLabels(event, touch, showPreview, transition, text)
+            val labels = if (thinking) text.alignBy { titleCenter.toInt() } else text
+            AuroraWorkStackedLabels(event, touch, showPreview, transition, labels)
         }
         AuroraWorkChevron(
-            expanded, if (touch) movingIcon else movingIcon.padding(end = AuroraLayout.Space)
+            expanded, if (touch) icon else icon.padding(end = AuroraLayout.Space)
                 .graphicsLayer { alpha = if (showControls) 1f else 0f },
             tint = if (touch) AuroraColors.Muted else AuroraColors.DesktopInk,
             expansion = transition?.progress,
         )
     }
 }
-
-private fun thinkingIconMotion(transition: ThinkingHeaderTransition?, expanded: Boolean): Modifier =
-    if (transition == null) Modifier else Modifier.graphicsLayer {
-        translationY = transition.heightOffset(expanded) / 2f
-    }
 
 private fun thinkingHeaderClip(transition: ThinkingHeaderTransition?, expanded: Boolean): Modifier =
     if (transition == null) Modifier else Modifier.drawWithContent {
@@ -266,11 +287,10 @@ private fun AuroraWorkStackedLabels(
     event: WorkEvent, touch: Boolean, showPreview: Boolean, transition: ThinkingHeaderTransition?,
     modifier: Modifier = Modifier,
 ) {
-    val title = event.visibleTitle.orEmpty().ifBlank { if (showPreview) "" else "Размышления" }
-    val shift = if (transition == null || event.title.isNullOrBlank()) Modifier else Modifier.graphicsLayer {
-        translationY = transition.labelOffset(expanded = !showPreview)
+    val title = event.visibleTitle.orEmpty().ifBlank {
+        if (event.kind == WorkEventKind.Thinking) "Размышления" else ""
     }
-    Column(modifier.then(shift)) {
+    Column(modifier) {
         if (title.isNotBlank()) {
             AuroraWorkText(
                 title, AuroraWorkRole.Action,
@@ -299,7 +319,6 @@ private fun Modifier.thinkingPreviewTransition(showPreview: Boolean, transition:
     // Draw the leaving preview at its old size without adding it to the timeline's target height.
     return layout { measurable, constraints ->
         val preview = measurable.measure(constraints)
-        transition.previewHeight = preview.height
         layout(preview.width, if (showPreview) preview.height else 0) { preview.placeRelative(0, 0) }
     }.graphicsLayer { alpha = transition.previewOpacity() }.then(semantics)
 }

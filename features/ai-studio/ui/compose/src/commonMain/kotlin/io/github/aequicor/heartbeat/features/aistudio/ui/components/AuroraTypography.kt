@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -41,5 +42,12 @@ internal fun AuroraWorkText(
         AuroraWorkRole.Metadata -> HbTypography.Metadata
         AuroraWorkRole.Detail -> HbTypography.Detail
     }
-    BasicText(text, modifier, style.copy(color = color), maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    val ink = style.copy(color = color)
+    if (replyTextRevealProvided()) {
+        AuroraReplyText(
+            text, modifier, ink, revealKey = remember { Any() }, maxLines = maxLines, overflow = TextOverflow.Ellipsis, cascade = false,
+        )
+    } else {
+        BasicText(text, modifier, ink, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
+    }
 }

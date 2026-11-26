@@ -110,7 +110,8 @@ internal fun AuroraDesktopSidebar(
                         row.isProjectGroup -> AuroraLayout.NavigationProjectGap
                         else -> AuroraLayout.NavigationRowGap
                     }
-                    val rowModifier = Modifier.width(AuroraLayout.NavigationListWidth).padding(top = gap)
+                    val rowModifier = Modifier.fillMaxWidth()
+                        .padding(top = gap, end = AuroraLayout.NavigationWidth - AuroraLayout.NavigationListWidth)
                     if (row.kind.isPagination) {
                         AuroraNavigationPage(row, list, touch = false, projectsSessions, rowModifier)
                     } else {
@@ -136,7 +137,7 @@ private fun SidebarHeader(
     onAction: (AiStudioAction) -> Unit,
     brandStartInset: Dp,
 ) {
-    Column(Modifier.width(AuroraLayout.NavigationWidth)) {
+    Column(Modifier.fillMaxWidth()) {
         HbBrandLogo(Modifier.padding(start = brandStartInset))
         AuroraActionSearchRow(
             actionLabel = stringResource(Res.string.new_session),

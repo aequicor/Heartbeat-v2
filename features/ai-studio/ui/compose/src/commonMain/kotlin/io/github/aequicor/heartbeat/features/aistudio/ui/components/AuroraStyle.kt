@@ -59,7 +59,13 @@ internal fun AuroraText(
     val style = role.copy(
         color = color,
     )
-    BasicText(text, modifier, style, maxLines = lines, overflow = TextOverflow.Ellipsis)
+    if (replyTextRevealProvided()) {
+        AuroraReplyText(
+            text, modifier, style, revealKey = remember { Any() }, maxLines = lines, overflow = TextOverflow.Ellipsis, cascade = false,
+        )
+    } else {
+        BasicText(text, modifier, style, maxLines = lines, overflow = TextOverflow.Ellipsis)
+    }
 }
 
 @Composable

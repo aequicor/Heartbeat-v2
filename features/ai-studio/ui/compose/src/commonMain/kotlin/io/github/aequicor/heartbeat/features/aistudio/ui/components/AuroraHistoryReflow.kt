@@ -33,7 +33,6 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -256,32 +255,28 @@ internal fun auroraMeasuredHeightMotion(
     streaming: Boolean = false,
     onFrame: (height: Int, target: Int) -> Unit,
 ): Modifier {
-    if (streaming) {
-        // Streamed text reserves its full height immediately; only the new glyphs fade in.
-        return Modifier.onSizeChanged { size ->
-            val previous = height.displayed
-            height.displayed = size.height
-            if (previous > 0 && previous != size.height) onFrame(size.height, size.height)
-        }
-    }
-    val animated = HbTheme.motion != HbMotionPreference.Reduced
+    val animated = HbTheme.motion != HbMotionPreference.Reduced && !streaming
     val resize by rememberUpdatedState(onFrame)
     val finish by rememberUpdatedState(onResizeEnd)
+    val immediate by rememberUpdatedState(streaming)
     var target by remember(height) { mutableIntStateOf(-1) }
-    var shown by remember(height) { mutableIntStateOf(-1) }
-    // Publish the height and its scroll compensation before LazyColumn measures this frame.
+    var frame by remember(height) { mutableIntStateOf(-1) }
     if (target >= 0) {
         val end = target
-        LaunchedEffect(end, animated, duration) {
+        LaunchedEffect(end, animated, duration, streaming) {
+            if (streaming) {
+                frame = -1
+                return@LaunchedEffect
+            }
             val start = height.displayed
             if (animated && start != end) {
                 Animatable(start, Int.VectorConverter).animateTo(end, tween(duration)) {
-                    shown = value
+                    frame = value
                     resize(value, end)
                 }
                 finish()
             } else {
-                shown = end
+                frame = end
                 resize(end, end)
             }
         }
@@ -296,18 +291,18 @@ internal fun auroraMeasuredHeightMotion(
 
             override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
                 val work = measurable.measure(constraints)
-                // Lazy rows enter the viewport at their final height. Start resize bookkeeping
-                // only after that height actually changes, so entering a row avoids a second layout.
-                if (measuredHeight >= 0 && work.height != measuredHeight) target = work.height
+                val previous = measuredHeight
+                if (previous >= 0 && work.height != previous) target = work.height
                 measuredHeight = work.height
                 val displayed = constraints.constrainHeight(
                     when {
-                        shown >= 0 -> shown
-                        target < 0 -> work.height
+                        immediate || target < 0 -> work.height
+                        frame >= 0 -> frame
                         else -> height.displayed
                     },
                 )
                 height.displayed = displayed
+                if (immediate && previous >= 0 && previous != displayed) resize(displayed, displayed)
                 return layout(work.width, displayed) { work.placeRelative(0, 0) }
             }
         }

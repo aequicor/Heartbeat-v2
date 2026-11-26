@@ -153,7 +153,7 @@ private fun AuroraRichBlock(
         } else {
             AuroraReplyText(prepared.text, textPadding, style = bodyStyle)
         }
-        is ReplyBlock.Heading -> AuroraRichHeading(prepared.text, block.level, touch, bodyStyle, textPadding)
+        is ReplyBlock.Heading -> AuroraRichHeading(prepared.text, block.level, touch, bodyStyle, textPadding, measureTimestampTail)
         is ReplyBlock.Quote -> Box(
             Modifier.drawBehind {
                 val stroke = AuroraLayout.FrameStroke.toPx()
@@ -161,9 +161,11 @@ private fun AuroraRichBlock(
                 drawLine(AuroraColors.MessageDivider, Offset(x, 0f), Offset(x, size.height), stroke)
             }.padding(start = AuroraLayout.ContentInset),
         ) {
-            AuroraRichBlocks(prepared.children.single(), touch, streaming, bodyStyle = bodyStyle)
+            AuroraRichBlocks(
+                prepared.children.single(), touch, streaming, bodyStyle = bodyStyle, measureTimestampTail = measureTimestampTail,
+            )
         }
-        is ReplyBlock.ListBlock -> AuroraRichList(block, prepared.children, touch, streaming, bodyStyle)
+        is ReplyBlock.ListBlock -> AuroraRichList(block, prepared.children, touch, streaming, bodyStyle, measureTimestampTail)
         is ReplyBlock.Table -> AuroraReplyArrivalBlock { AuroraRichTable(requireNotNull(prepared.table), touch) }
         is ReplyBlock.Rule -> AuroraReplyArrivalBlock {
             Spacer(Modifier.fillMaxWidth().height(AuroraLayout.Stroke).background(AuroraColors.MessageDivider))
@@ -176,7 +178,7 @@ private fun AuroraRichBlock(
 
 @Composable
 private fun AuroraRichHeading(
-    text: AnnotatedString, level: Int, touch: Boolean, body: TextStyle, modifier: Modifier = Modifier,
+    text: AnnotatedString, level: Int, touch: Boolean, body: TextStyle, modifier: Modifier, measureTimestampTail: Boolean,
 ) {
     val (size, line) = when (level) {
         1 -> 24 to 32
@@ -187,14 +189,10 @@ private fun AuroraRichHeading(
         else -> 14 to 20
     }
     val factor = body.fontSize.value / if (touch) 16 else 15
-    AuroraReplyText(
-        text, modifier.semantics { heading() },
-        body.copy(
-            fontSize = (size * factor).sp,
-            lineHeight = (line * factor).sp,
-            fontWeight = FontWeight.SemiBold,
-        ),
-    )
+    val style = body.copy(fontSize = (size * factor).sp, lineHeight = (line * factor).sp, fontWeight = FontWeight.SemiBold)
+    val heading = modifier.semantics { heading() }
+    if (measureTimestampTail) AuroraTimestampParagraph(text, heading, style)
+    else AuroraReplyText(text, heading, style)
 }
 
 @Composable
@@ -204,6 +202,7 @@ private fun AuroraRichList(
     touch: Boolean,
     streaming: Boolean,
     bodyStyle: TextStyle,
+    measureTimestampTail: Boolean,
 ) {
     val markerWidth = if (block.ordered) {
         maxOf(24, ((block.start.toLong() + block.items.lastIndex).toString().length + 1) * 9).dp
@@ -229,7 +228,10 @@ private fun AuroraRichList(
                         revealKey = "marker/$index")
                 }
                 Column(Modifier.weight(1f, fill = false)) {
-                    AuroraRichBlocks(item, touch, streaming, bodyStyle = bodyStyle)
+                    AuroraRichBlocks(
+                        item, touch, streaming, bodyStyle = bodyStyle,
+                        measureTimestampTail = measureTimestampTail && index == items.lastIndex,
+                    )
                 }
             }
         }

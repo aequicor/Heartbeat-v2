@@ -54,6 +54,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
@@ -247,7 +248,9 @@ private fun ObserveAuroraReplyHeight(
                 val live = liveText.value
                 val hasAnswer = measured.third || (live.replyId == id && live.text.isNotBlank())
                 val completedAnswer = measured.third && current.status == ReplyStatus.Completed
-                reflow.tail.observeReplyHeight(id, measured.first, measured.second, hasAnswer, completedAnswer)
+                if (!reflow.ownsWorkResize(id)) {
+                    reflow.tail.observeReplyHeight(id, measured.first, measured.second, hasAnswer, completedAnswer)
+                }
             }
         }
     }
@@ -332,6 +335,7 @@ internal fun AuroraUserBubble(
         Modifier.background(AuroraColors.User, RoundedCornerShape(AuroraLayout.MessageRadius))
     }
     val textPresent = user.text.isNotEmpty()
+    val inlineTime = textPresent && user.delivery == Delivery.Sent
     val width = if (!touch && user.files.isEmpty()) AuroraLayout.DesktopMessageBubble else AuroraLayout.UserBubble
     val horizontalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset
     val desktopDeliveryError = !touch && user.delivery == Delivery.Failed
@@ -347,7 +351,7 @@ internal fun AuroraUserBubble(
     }
     AuroraMessageTimestamp(
         user.time,
-        inlineAllowed = false,
+        inlineAllowed = inlineTime,
         textSetsWidth = user.files.isEmpty() && textPresent,
         modifier = Modifier.widthIn(max = width).then(surface).padding(
             start = horizontalInset, end = horizontalInset, top = top,
@@ -365,7 +369,12 @@ internal fun AuroraUserBubble(
                 }
             }
             if (textPresent) SelectionContainer(state = selection) {
-                BasicText(user.text, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+                AuroraTimestampParagraph(
+                    remember(user.text) { AnnotatedString(user.text) },
+                    Modifier,
+                    auroraMessageStyle(),
+                    onTextLayout,
+                )
             }
         }
     }
@@ -543,7 +552,8 @@ private fun AuroraAgentMessageBody(
         .trackReplyHeight(reply, reflow, selection, tracksHeight, reveal)
     val scope = rememberCoroutineScope()
     val onResizeEnd = { if (finalResize) focus.finishStreamResize() }
-    val expandedThinking = !finished && reply.steps.any { step ->
+    val applyingDisclosure = reflow != null && focus.isApplyingEventDisclosure(expandedEvents, reflow.tail.inputGeneration)
+    val expandedThinking = !finished && !applyingDisclosure && reply.steps.any { step ->
         step.events.any { it.kind == WorkEventKind.Thinking && "${reply.id}/${step.id}/${it.id}" in expandedEvents }
     }
     AuroraReplyLayout(
@@ -556,7 +566,8 @@ private fun AuroraAgentMessageBody(
                 viewportHeight = reflow?.viewportHeight ?: Dp.Hairline,
                 archiveReveal = reveal,
                 keepStartDuringResize = reflow?.tail?.keepsReplyStart(reply.id) == true,
-                anchoredHeight = focus.answerHeight.takeIf { !touch && reply.steps.isNotEmpty() && reflow != null },
+                anchoredHeight = focus.answerHeight.takeIf { reply.steps.isNotEmpty() && reflow != null },
+                anchoringWork = applyingDisclosure || reflow?.ownsWorkResize(reply.id) == true,
                 onAnchoredHeight = { height, target -> reflow?.answerResized(reply.id, height, target, scope) },
             )
         },

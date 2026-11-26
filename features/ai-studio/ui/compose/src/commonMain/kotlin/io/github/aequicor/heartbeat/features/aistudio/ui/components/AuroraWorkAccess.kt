@@ -109,6 +109,9 @@ internal class AuroraWorkAccess(startedLive: Boolean) {
         pendingEvent = EventDisclosure(key, key !in expanded, scrollInput)
     }
 
+    fun isApplyingEventDisclosure(expanded: Set<String>, scrollInput: Int): Boolean =
+        pendingEvent?.let { it.open == (it.key in expanded) && it.scrollInput == scrollInput } == true
+
     fun restoreEventAnchor(expanded: Set<String>, id: String, reflow: AuroraHistoryReflow?, scope: CoroutineScope) {
         val request = pendingEvent ?: return
         if (request.open != (request.key in expanded)) return

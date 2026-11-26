@@ -89,7 +89,7 @@ private fun MeasureScope.placeMessageContent(
     val rowGap = AuroraLayout.SmallGap.roundToPx()
     val stampX = width - (stamp?.width ?: 0)
     val stampInline = if (stamp != null && inlineAllowed) {
-        val tail = inlineText?.timestampTail(body[LastBaseline]) ?: body.timestampTail()
+        val tail = body.timestampTail() ?: inlineText?.timestampTail(body[LastBaseline])
         tail?.stampTop(stamp, stampX, ceil(AuroraLayout.Space.toPx()).toInt(), body.height)
     } else {
         null
@@ -119,7 +119,12 @@ private fun MeasureScope.placeMessageContent(
 }
 
 @Composable
-internal fun AuroraTimestampParagraph(text: AnnotatedString, modifier: Modifier, style: TextStyle) {
+internal fun AuroraTimestampParagraph(
+    text: AnnotatedString,
+    modifier: Modifier,
+    style: TextStyle,
+    onTextLayout: (TextLayoutResult) -> Unit = {},
+) {
     val geometry = remember { MessageTextGeometry() }
     val reportTail = Modifier.layout { measurable, constraints ->
         val paragraph = measurable.measure(constraints)
@@ -134,7 +139,10 @@ internal fun AuroraTimestampParagraph(text: AnnotatedString, modifier: Modifier,
             paragraph.place(0, 0)
         }
     }
-    AuroraReplyText(text, modifier.then(reportTail), style, onTextLayout = geometry::update)
+    AuroraReplyText(text, modifier.then(reportTail), style, onTextLayout = { layout ->
+        geometry.update(layout)
+        onTextLayout(layout)
+    })
 }
 
 @Composable

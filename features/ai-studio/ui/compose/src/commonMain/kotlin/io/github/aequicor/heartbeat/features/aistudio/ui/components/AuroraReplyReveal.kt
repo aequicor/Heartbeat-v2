@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -47,6 +48,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import kotlinx.coroutines.flow.first
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -153,7 +155,39 @@ internal fun Modifier.trackReplyArrivalBlock(): Modifier {
 @Suppress("CompositionLocalAllowlist")
 private val LocalReplyReveal = staticCompositionLocalOf<ReplyRevealContext?> { null }
 
-private class ReplyRevealContext(val reveal: ReplyReveal, val streaming: Boolean, val active: Boolean)
+private class ReplyRevealContext(
+    val reveal: ReplyReveal,
+    val streaming: Boolean,
+    val active: Boolean,
+    val work: Boolean = false,
+    val animateInitial: Boolean = true,
+)
+
+@Composable
+@ReadOnlyComposable
+internal fun workTextRevealEnabled(): Boolean = LocalReplyReveal.current?.work == true
+
+@Composable
+@ReadOnlyComposable
+internal fun replyTextRevealProvided(): Boolean = LocalReplyReveal.current != null
+
+@Composable
+internal fun AuroraWorkReveal(
+    animateInitial: Boolean,
+    ready: Boolean = true,
+    streaming: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    val active = HbTheme.motion != HbMotionPreference.Reduced
+    val reveal = remember { ReplyReveal() }
+    val animate = remember { animateInitial }
+    SideEffect { reveal.composed = true }
+    AuroraRevealClock(reveal, active && ready, continuous = false)
+    val context = remember(reveal, streaming, active, animate) {
+        ReplyRevealContext(reveal, streaming, active, work = true, animateInitial = animate)
+    }
+    CompositionLocalProvider(LocalReplyReveal provides context, content = content)
+}
 
 @Composable
 @ReadOnlyComposable
@@ -161,25 +195,47 @@ internal fun replyRevealIsFinal(): Boolean = LocalReplyReveal.current?.streaming
 
 /** Owned by the reply, not by a paragraph which can be recreated by plain/rich or staged layout. */
 @Composable
-internal fun AuroraReplyReveal(streaming: Boolean, content: @Composable () -> Unit) {
-    val active = streaming && HbTheme.motion != HbMotionPreference.Reduced
+internal fun AuroraReplyReveal(
+    streaming: Boolean,
+    revealFinalAdditions: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var startedLive by remember { mutableStateOf(streaming) }
+    if (streaming && !startedLive) SideEffect { startedLive = true }
+    val active = (streaming || startedLive && revealFinalAdditions) && HbTheme.motion != HbMotionPreference.Reduced
     val reveal = remember { ReplyReveal() }
-    LaunchedEffect(reveal, active) {
-        if (active) {
+    AuroraRevealClock(reveal, active, streaming)
+    val context = remember(reveal, streaming, active) { ReplyRevealContext(reveal, streaming, active) }
+    CompositionLocalProvider(LocalReplyReveal provides context, content = content)
+}
+
+@Composable
+private fun AuroraRevealClock(reveal: ReplyReveal, active: Boolean, continuous: Boolean) {
+    LaunchedEffect(reveal, active, continuous) {
+        if (!active) return@LaunchedEffect
+        if (continuous) {
             while (true) withFrameNanos(reveal::frame)
+        } else {
+            while (true) {
+                snapshotFlow { reveal.animating }.first { it }
+                reveal.resumeClock()
+                while (reveal.animating) withFrameNanos(reveal::frame)
+            }
         }
     }
-    CompositionLocalProvider(LocalReplyReveal provides ReplyRevealContext(reveal, streaming, active), content = content)
 }
 
 private const val NanosPerMillisecond = 1_000_000L
 private const val InitialTextOpacity = .15f
 
-private data class RevealKey(val block: Int, val part: Any)
+private data class RevealKey(val block: Int, val part: Any, val cascade: Boolean = true)
 private class RevealRange(val start: Int, val end: Int, var time: Long)
 private class RevealMask(val range: RevealRange, val path: Path)
 private class RevealRevision(
-    val text: String, val ranges: List<RevealRange>, val appended: List<RevealRange> = listOf(),
+    val text: String,
+    val ranges: List<RevealRange>,
+    val appended: List<RevealRange> = listOf(),
+    val final: Boolean = false,
 ) {
     var finished = false
 }
@@ -191,32 +247,47 @@ private class ReplyReveal {
     private val seen = mutableMapOf<RevealKey, RevealRevision>()
     private val drafts = mutableMapOf<RevealKey, RevealRevision>()
     private val timeline = RevealTimeline()
+    private var labelDeadline = 0L
+    var composed = false
+    var animating by mutableStateOf(false)
+        private set
 
-    fun frame(now: Long) {
-        val start = origin ?: now.also { origin = it }
-        currentTime = (now - start) / NanosPerMillisecond
-        time = currentTime
+    fun resumeClock() {
+        origin = null
     }
 
-    fun prepare(key: RevealKey, text: String, active: Boolean): RevealRevision {
+    fun frame(now: Long) {
+        val start = origin ?: (now - currentTime * NanosPerMillisecond).also { origin = it }
+        currentTime = (now - start) / NanosPerMillisecond
+        time = currentTime
+        animating = currentTime < labelDeadline || timeline.hasPending(currentTime)
+    }
+
+    fun prepare(key: RevealKey, text: String, context: ReplyRevealContext): RevealRevision {
         val previous = seen[key]
-        val draft = drafts[key]?.takeIf { it.text == text }
+        val finalized = !context.work && !context.streaming
+        val draft = drafts[key]?.takeIf { it.text == text && it.final == finalized }
+        val completing = finalized && previous?.final == false
         val reformatted = previous == null && seen[RevealKey(key.block, "body")]?.text?.contains(text) == true
         // Formatting can replace visible syntax or reparent text. Such revisions must never
         // fade old characters again; subsequent append-only revisions can reveal normally.
         val revision = when {
-            !active -> RevealRevision(text, listOf())
+            !context.active -> RevealRevision(text, listOf(), final = finalized)
             draft != null -> draft
-            previous?.text == text -> previous
-            reformatted -> RevealRevision(text, listOf())
-            previous != null && !text.startsWith(previous.text) -> RevealRevision(text, listOf())
+            previous?.text == text && !completing -> previous
+            reformatted -> RevealRevision(text, listOf(), final = finalized)
+            previous == null && !context.animateInitial && !composed -> RevealRevision(text, listOf(), final = finalized)
+            !context.work && previous != null && !text.startsWith(previous.text) ->
+                RevealRevision(text, listOf(), final = finalized)
             else -> {
-                val start = previous?.text?.length ?: 0
+                val start = previous?.text?.commonPrefixWith(text)?.length ?: 0
                 val ranges = previous?.ranges.orEmpty().filter {
-                    currentTime - it.time < HbMotions.Default.smallStateChangeMs
+                    !completing && it.end <= start && currentTime - it.time < HbMotions.Default.smallStateChangeMs
                 }
-                val appended = revealWords(text, start, currentTime)
-                RevealRevision(text, ranges + appended, appended)
+                val appended = if (start < text.length && (!key.cascade || context.work && text.length - start > MaximumAnimatedCharacters)) {
+                    listOf(RevealRange(start, text.length, currentTime))
+                } else revealWords(text, start, currentTime)
+                RevealRevision(text, ranges + appended, appended, final = finalized)
             }
         }
         drafts[key] = revision
@@ -225,7 +296,12 @@ private class ReplyReveal {
 
     fun commit(key: RevealKey, revision: RevealRevision) {
         if (seen[key] === revision) return
-        timeline.replace(seen[key]?.ranges.orEmpty(), revision, currentTime)
+        if (key.cascade) {
+            timeline.replace(seen[key]?.ranges.orEmpty(), revision, currentTime)
+        } else if (revision.appended.isNotEmpty()) {
+            labelDeadline = currentTime + HbMotions.Default.smallStateChangeMs
+        }
+        animating = currentTime < labelDeadline || timeline.hasPending(currentTime)
         seen[key] = revision
         drafts.remove(key)
     }
@@ -233,6 +309,9 @@ private class ReplyReveal {
 
 private class RevealTimeline {
     private val ranges = mutableListOf<RevealRange>()
+
+    fun hasPending(now: Long): Boolean =
+        ranges.any { now - it.time < HbMotions.Default.smallStateChangeMs }
 
     fun replace(previous: List<RevealRange>, revision: RevealRevision, now: Long) {
         val removed = previous.toSet() - revision.ranges.toSet()
@@ -250,9 +329,9 @@ private class RevealTimeline {
     private fun finishOlderRanges(now: Long) {
         var characters = 0
         val duration = HbMotions.Default.smallStateChangeMs
-        for (range in ranges.asReversed()) {
+        for ((index, range) in ranges.asReversed().withIndex()) {
             characters += range.end - range.start
-            if (characters > MaximumAnimatedCharacters) range.time = now - duration
+            if (index > 0 && characters > MaximumAnimatedCharacters) range.time = now - duration
         }
         ranges.removeAll { now - it.time >= duration }
     }
@@ -303,11 +382,12 @@ internal fun AuroraReplyText(
     revealOffset: Int = 0,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    cascade: Boolean = true,
 ) {
     val context = LocalReplyReveal.current
     val reveal = context?.reveal
-    val key = RevealKey(LocalReplyRevealBlock.current, revealKey)
-    val revision = reveal?.prepare(key, revealSource, context.active)
+    val key = RevealKey(LocalReplyRevealBlock.current, revealKey, cascade)
+    val revision = reveal?.prepare(key, revealSource, context)
     if (revision != null) SideEffect { reveal.commit(key, revision) }
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
     val paint = LocalAuroraReplyArrival.current
@@ -471,9 +551,10 @@ internal fun AuroraReplyText(
     revealOffset: Int = 0,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    cascade: Boolean = true,
 ) {
     AuroraReplyText(
         remember(text) { AnnotatedString(text) }, modifier, style, onTextLayout, softWrap,
-        revealKey, revealSource, revealOffset, maxLines, overflow,
+        revealKey, revealSource, revealOffset, maxLines, overflow, cascade,
     )
 }
