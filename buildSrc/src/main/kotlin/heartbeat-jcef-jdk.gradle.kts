@@ -12,6 +12,8 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.Duration
@@ -56,6 +58,31 @@ private fun sha512(file: File): String {
         }
     }
     return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+}
+
+private fun repairWindowsJdk(staged: Path, installed: Path) {
+    // Remove obsolete entries and type conflicts before restoring the archive contents.
+    Files.walk(installed).use { paths ->
+        paths.sorted(Comparator.reverseOrder()).forEach { target ->
+            val source = staged.resolve(installed.relativize(target))
+            if (Files.notExists(source) || Files.isSymbolicLink(target) ||
+                Files.isDirectory(source) != Files.isDirectory(target, NOFOLLOW_LINKS)
+            ) {
+                Files.delete(target)
+            }
+        }
+    }
+    Files.walk(staged).use { paths ->
+        paths.forEach { source ->
+            val target = installed.resolve(staged.relativize(source))
+            if (Files.isDirectory(source)) {
+                Files.createDirectories(target)
+            } else if (Files.notExists(target) || Files.mismatch(source, target) != -1L) {
+                // Windows can keep identical files such as lib/jrt-fs.jar open across builds.
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
 }
 
 val explicitJcefHome = providers.environmentVariable("JBR_JCEF_HOME").orNull?.let { sdkHome(file(it)) }
@@ -163,7 +190,7 @@ val provisionJcefJdk = if (shouldProvisionJcef) {
         inputs.file(archive)
         outputs.dir(provisionedJcefRoot)
         doLast {
-            staging.deleteRecursively()
+            project.delete(staging)
             Files.createDirectories(staging.toPath())
             val archiveFile = archive.get().asFile
             if (isWindows) {
@@ -182,11 +209,14 @@ val provisionJcefJdk = if (shouldProvisionJcef) {
             val sdkRoot = checkNotNull(extractedRoot) {
                 "Downloaded archive does not contain JetBrains JDK 25 with JCEF"
             }
-            provisionedJcefRoot.deleteRecursively()
-            Files.createDirectories(provisionedJcefRoot.parentFile.toPath())
-            Files.move(sdkRoot.toPath(), provisionedJcefRoot.toPath())
+            if (isWindows && provisionedJcefRoot.exists()) {
+                repairWindowsJdk(sdkRoot.toPath(), provisionedJcefRoot.toPath())
+            } else {
+                project.delete(provisionedJcefRoot)
+                Files.move(sdkRoot.toPath(), provisionedJcefRoot.toPath())
+            }
             check(hasCompatibleJcef(provisionedJcefHome)) { "Provisioned JDK is not usable for desktop packaging" }
-            staging.deleteRecursively()
+            project.delete(staging)
         }
     }
 } else {

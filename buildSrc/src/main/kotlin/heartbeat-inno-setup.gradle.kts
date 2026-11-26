@@ -102,6 +102,10 @@ val provisionInnoSetup = if (shouldProvisionInnoSetup) {
         inputs.file(innoSetupArchive)
         outputs.file(provisionedIscc)
         executable = innoSetupArchive.get().asFile.absolutePath
+        // The installer unpacks its bootstrap executable before it opens its setup log.
+        val setupTemp = temporaryDir
+        environment("TEMP", setupTemp.absolutePath)
+        environment("TMP", setupTemp.absolutePath)
         args(
             "/PORTABLE=1",
             "/VERYSILENT",
@@ -111,6 +115,7 @@ val provisionInnoSetup = if (shouldProvisionInnoSetup) {
             "/DIR=${innoSetupHome.get().asFile.absolutePath}",
         )
         doFirst {
+            Files.createDirectories(setupTemp.toPath())
             innoSetupHome.get().asFile.deleteRecursively()
         }
     }
