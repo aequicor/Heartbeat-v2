@@ -41,13 +41,17 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
+@Composable
 internal fun Modifier.auroraHeaderSurface(radius: Dp, outline: Boolean = true): Modifier {
     val shape = RoundedCornerShape(radius)
+    val fill = if (LocalAuroraFloatingBackdrop.current == null) AuroraColors.Pearl else AuroraColors.FloatingHeaderSurface
     return shadow(AuroraLayout.ControlGap, shape, clip = false)
-        .background(AuroraColors.Pearl, shape)
+        .auroraFloatingBlur(shape)
+        .background(fill, shape)
         .then(if (outline) Modifier.border(AuroraLayout.Stroke, AuroraColors.HeaderOutline, shape) else Modifier)
 }
 
+@Composable
 internal fun Modifier.auroraFloatingHeaderSurface(fill: Color, outline: Color? = null): Modifier {
     val shape = RoundedCornerShape(AuroraLayout.FloatingHeaderRadius)
     return dropShadow(
@@ -62,7 +66,7 @@ internal fun Modifier.auroraFloatingHeaderSurface(fill: Color, outline: Color? =
             AuroraLayout.FloatingHeaderContactRadius, AuroraColors.HeaderContactShadow,
             offset = DpOffset(Dp.Hairline, AuroraLayout.Stroke),
         ),
-    ).background(fill, shape)
+    ).auroraFloatingBlur(shape).background(fill, shape)
         .then(if (outline == null) Modifier else Modifier.border(AuroraLayout.Stroke, outline, shape))
 }
 
@@ -74,6 +78,7 @@ internal fun AuroraHeaderButton(
     height: Dp = AuroraLayout.DesktopTarget,
     radius: Dp = AuroraLayout.SmallRadius,
     contentPadding: PaddingValues = PaddingValues(Dp.Hairline),
+    verticalInset: Dp = AuroraLayout.HeaderControlVerticalInset,
     enabled: Boolean = true,
     fill: Color = Color.Transparent,
     hoverFill: Color = AuroraColors.NavigationHover,
@@ -92,7 +97,7 @@ internal fun AuroraHeaderButton(
             .semantics { contentDescription = label }
             .clickable(interactions, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(contentPadding)
-            .padding(vertical = AuroraLayout.HeaderControlVerticalInset),
+            .padding(vertical = verticalInset),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
@@ -114,6 +119,7 @@ internal fun AuroraHeaderMenu(
         modifier = modifier,
         presentation = if (touch) HbMenuPresentation.AuroraTouchMessage else HbMenuPresentation.AuroraMessage,
         alignEnd = alignEnd,
+        popupBackground = auroraBlurredMenuBackground(),
     ) { triggerModifier -> trigger(triggerModifier) { expanded = true } }
 }
 

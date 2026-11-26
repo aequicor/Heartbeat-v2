@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
+import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
@@ -116,6 +117,7 @@ internal class ChatEngineConversationDataSourceImpl(
                     }
                 }
                 val progress = items.toChatTurn(status, permission, toolFiles.mapValues { it.value.values.toList() }).copy(
+                    questionnaire = state.questionnaires.firstOrNull(),
                     accepted = accepted, artifacts = replyFiles.values.toList(),
                 )
                 val updateWithFailure = when (turn?.failure) {
@@ -149,6 +151,9 @@ internal class ChatEngineConversationDataSourceImpl(
 
     override fun answerPermission(requestId: String, optionId: String) =
         session.dispatch(SessionEvent.AnswerPermission(requestId, optionId))
+
+    override fun answerQuestionnaire(requestId: String, answer: QuestionnaireAnswer) =
+        session.dispatch(SessionEvent.AnswerQuestionnaire(requestId, answer))
 }
 
 private fun PendingPermission.toChatPermission(): ChatTurn.Permission {

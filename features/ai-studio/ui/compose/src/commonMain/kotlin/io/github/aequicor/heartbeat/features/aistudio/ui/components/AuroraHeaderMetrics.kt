@@ -53,9 +53,10 @@ internal fun AuroraHeaderMetrics(
         }
         AuroraHeaderButton(
             details.joinToString(", "), open,
-            trigger.then(width).auroraFloatingHeaderSurface(AuroraColors.Pearl, AuroraColors.HeaderOutline),
+            trigger.then(width).auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim),
             height = AuroraLayout.HeaderButton, radius = AuroraLayout.FloatingHeaderRadius,
             contentPadding = PaddingValues(horizontal = AuroraLayout.ContentInset),
+            verticalInset = AuroraLayout.SmallGap,
         ) {
             if (!compact) {
                 BasicText(

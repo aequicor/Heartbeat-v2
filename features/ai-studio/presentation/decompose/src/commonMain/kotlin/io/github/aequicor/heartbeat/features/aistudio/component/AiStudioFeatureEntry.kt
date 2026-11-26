@@ -5,6 +5,7 @@ import com.arkivanov.essenty.lifecycle.doOnDestroy
 import dev.zacsweers.metro.ContributesIntoSet
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
@@ -13,6 +14,7 @@ import io.github.aequicor.heartbeat.navigation.api.AppRoute
 import io.github.aequicor.heartbeat.navigation.decompose.DecomposeFeatureEntry
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
+import io.github.aequicor.heartbeat.navigation.decompose.WorkspaceRegistration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +30,13 @@ class AiStudioFeatureEntry @Inject internal constructor(
 ) : DecomposeFeatureEntry {
 
     override val featureId: String = AiStudioRoutes.FEATURE_ID
+
+    override val workspace = WorkspaceRegistration(
+        route = AiStudioRoutes.main(),
+        label = "Чат",
+        icon = HbIconGlyph.ChatWorkspace,
+        priority = 0,
+    )
 
     override fun create(
         route: AppRoute,

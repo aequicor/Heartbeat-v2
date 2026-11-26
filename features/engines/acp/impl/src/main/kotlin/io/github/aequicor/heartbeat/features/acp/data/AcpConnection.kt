@@ -3,7 +3,14 @@ package io.github.aequicor.heartbeat.features.acp.data
 import com.agentclientprotocol.annotations.UnstableApi
 import com.agentclientprotocol.model.AcpMethod.AgentMethods.V1
 import com.agentclientprotocol.model.AcpMethod.ClientMethods.V1 as ClientMethods
+import com.agentclientprotocol.model.ClientCapabilities
 import com.agentclientprotocol.model.CloseSessionRequest
+import com.agentclientprotocol.model.CreateElicitationResponse
+import com.agentclientprotocol.model.ElicitationAction
+import com.agentclientprotocol.model.ElicitationCapabilities
+import com.agentclientprotocol.model.ElicitationFormCapabilities
+import com.agentclientprotocol.model.ElicitationMode
+import com.agentclientprotocol.model.ElicitationScope
 import com.agentclientprotocol.model.InitializeRequest
 import com.agentclientprotocol.model.InitializeResponse
 import com.agentclientprotocol.model.LoadSessionRequest
@@ -16,6 +23,7 @@ import com.agentclientprotocol.model.SessionId
 import com.agentclientprotocol.model.SessionUpdate
 import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.protocol.invoke
+import com.agentclientprotocol.protocol.jsonRpcInvalidParams
 import com.agentclientprotocol.protocol.setNotificationHandler
 import com.agentclientprotocol.protocol.setRequestHandler
 import com.agentclientprotocol.transport.StdioTransport
@@ -73,11 +81,30 @@ internal class AcpConnection(
             val session = synchronized(routingLock) { sessions[request.sessionId] }
             session?.requestPermission(request) ?: RequestPermissionResponse(RequestPermissionOutcome.Cancelled)
         }
+        protocol.setRequestHandler(ClientMethods.ElicitationCreate) { request ->
+            val form = request.mode as? ElicitationMode.Form
+                ?: jsonRpcInvalidParams("Only form elicitation is supported")
+            val sessionId = when (val scope = request.scope) {
+                is ElicitationScope.Session -> scope.sessionId
+                is ElicitationScope.Request -> protocol.getOutgoingRequestSessionId(scope.requestId)
+            }
+            val session = synchronized(routingLock) { sessions[sessionId] }
+            session?.requestQuestionnaire(request.message, form.requestedSchema)
+                ?: CreateElicitationResponse(ElicitationAction.Cancel)
+        }
     }
 
     suspend fun initialize() {
         protocol.start()
-        agent = V1.Initialize(protocol, InitializeRequest(PROTOCOL_VERSION_V1))
+        agent = V1.Initialize(
+            protocol,
+            InitializeRequest(
+                PROTOCOL_VERSION_V1,
+                clientCapabilities = ClientCapabilities(
+                    elicitation = ElicitationCapabilities(form = ElicitationFormCapabilities()),
+                ),
+            ),
+        )
         check(agent.protocolVersion == PROTOCOL_VERSION_V1) {
             "Unsupported ACP protocol version ${agent.protocolVersion}"
         }

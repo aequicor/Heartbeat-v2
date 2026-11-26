@@ -86,7 +86,7 @@ internal class DefaultAiStudioStore(
         allowsFileImport = importAttachment != null,
     ))
     private val enginePicker = sessionBootstrap?.let {
-        BootstrapEnginePicker(it, scope, defaultDispatcher, screen, ::enqueue, ::configurationApplied)
+        BootstrapEnginePicker(it, scope, defaultDispatcher, screen, ::enqueue, ::configurationApplied, ::configurationLabels)
     }
     private val remoteTurns = turnInteractor?.let { RemoteChatTurns(it, scope, defaultDispatcher, ::enqueue) }
     private val editor = MutableStateFlow(Draft())
@@ -158,15 +158,7 @@ internal class DefaultAiStudioStore(
                     },
                 )
             }
-            if (workspace.chats.none { it.summary.id == workspace.selectedId }) {
-                val fallback = workspace.activeChats().firstOrNull()?.id ?: workspace.chats.firstOrNull()?.summary?.id
-                if (fallback != null) workspace = workspace.copy(selectedId = fallback)
-            }
-            if (catalog != null || workspace.chats.isEmpty()) {
-                screen.update { withProjectsSessions(it.copy(loading = false)) }
-            } else {
-                openChat(workspace.selectedId, acknowledgeResult = false)
-            }
+            restoreInitialSession()
             launch {
                 projectsSessionsStore?.state?.collect { state ->
                     enqueue {
@@ -263,7 +255,17 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.BootstrapProject -> {
                 val project = screen.value.sessionBootstrap?.project
                 updateBootstrapProject(screen, sessionBootstrap, defaultDispatcher, action)
-                if (screen.value.sessionBootstrap?.project != project) enginePicker?.start()
+                val bootstrap = screen.value.sessionBootstrap
+                if (bootstrap != null && bootstrap.project != project) {
+                    enginePicker?.start(bootstrap) { picker ->
+                        screen.update { state ->
+                            val current = state.sessionBootstrap
+                            if (current?.id == bootstrap.id && current.project == bootstrap.project) {
+                                state.copy(sessionBootstrap = current.copy(picker = picker))
+                            } else state
+                        }
+                    }
+                }
             }
             is AiStudioAction.SubmitSessionBootstrap ->
                 submitSessionBootstrap(screen, enginePicker, action, ::openBootstrappedSession)
@@ -275,14 +277,24 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.SetAccess -> updateSummary { it.copy(access = action.access) }
             is AiStudioAction.SetEffort -> updateSummary { it.copy(effort = action.effort) }
             is AiStudioAction.Attach -> if (importAttachment == null) attach(action.fileId) else Unit
-            is AiStudioAction.ImportAttachment -> importAttachment(action)
+            is AiStudioAction.ImportAttachment -> importAttachments(action.draftId) { importFiles ->
+                importFiles(listOf(action.reference))
+            }
+            is AiStudioAction.ImportAttachments -> importAttachments(action.draftId, action.source)
             is AiStudioAction.AttachmentPickerFailed -> reportAttachmentError(action.draftId)
             is AiStudioAction.Detach -> detach(action.fileId)
             is AiStudioAction.Retry -> retry(action.id)
             is AiStudioAction.EditMessage -> editMessage(action.id)
             is AiStudioAction.InteractWithRequest, is AiStudioAction.Choose,
             is AiStudioAction.EditAnswer, is AiStudioAction.MoveQuestion,
-            is AiStudioAction.SkipQuestion, is AiStudioAction.SubmitAnswers -> turns[workspace.selectedId]?.answer(action)
+            is AiStudioAction.SkipQuestion, is AiStudioAction.SubmitAnswers, is AiStudioAction.DeclineQuestionnaire -> {
+                val id = workspace.selectedId
+                val remote = remoteTurns
+                if (remote?.isRunning(id) == true) {
+                    remote.answerQuestionnaire(id, action)
+                    screen.update { if (it.chat?.id == id) it.copy(request = remote.request(id)) else it }
+                } else turns[id]?.answer(action)
+            }
             is AiStudioAction.ToggleFiles -> workspaceFiles.toggleFiles(screen, action.visible, persistence)
             is AiStudioAction.ShowFileSearch -> screen.update { workspaceFiles.setSearchVisible(it, action.visible) }
             is AiStudioAction.SearchFiles -> screen.update { workspaceFiles.search(it, action.text) }
@@ -328,6 +340,15 @@ internal class DefaultAiStudioStore(
     private suspend fun answerPermission(id: String, action: AiStudioAction.AnswerPermission) {
         if (remoteTurns?.isRunning(id) == true) remoteTurns.answer(id, action.requestId, action.allow)
         else turns[id]?.answer(action)
+    }
+
+    private suspend fun restoreInitialSession() {
+        val active = workspace.activeChats()
+        val last = active.firstOrNull { it.id == workspace.selectedId } ?: active.firstOrNull()
+        if (last != null) openChat(last.id, acknowledgeResult = false)
+        if (screen.value.chat == null) {
+            showSessionBootstrap(SessionBootstrapState.Project.Ungrouped)
+        }
     }
 
     private suspend fun openChat(id: String, acknowledgeResult: Boolean = true) {
@@ -439,10 +460,30 @@ internal class DefaultAiStudioStore(
         if (enginePicker?.isApplyingToChat == true) return
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         val bootstrap = SessionBootstrapState(project, projectTitle = title, id = nextId())
+        val picker = enginePicker
+        if (picker == null) publishBootstrap(bootstrap)
+        else picker.start(bootstrap) { publishBootstrap(bootstrap.copy(picker = it)) }
+    }
+
+    private fun publishBootstrap(bootstrap: SessionBootstrapState) {
         screen.update {
-            withProjectsSessions(it.copy(sessionBootstrap = bootstrap, filesVisible = false, viewer = null))
+            withProjectsSessions(it.copy(loading = false, sessionBootstrap = bootstrap, filesVisible = false, viewer = null))
         }
-        enginePicker?.start()
+    }
+
+    private fun configurationLabels(selection: Selection): Selection {
+        val previous = workspace.chats.asSequence().mapNotNull { it.summary.configuration }
+            .filter { it.engine.id == selection.engine.id }
+        val model = selection.model?.let { choice ->
+            if (choice.name != choice.id) choice
+            else previous.firstNotNullOfOrNull { it.model?.takeIf { model -> model.id == choice.id && model.name != model.id } }
+                ?: if (choice.id.startsWith("[") && choice.id.endsWith("]")) choice.copy(name = "Модель") else choice
+        }
+        val level = selection.level?.let { choice ->
+            if (choice.name != choice.id) choice
+            else previous.firstNotNullOfOrNull { it.level?.takeIf { level -> level.id == choice.id && level.name != level.id } } ?: choice
+        }
+        return selection.copy(model = model, level = level)
     }
 
     private suspend fun showSessionBootstrapForProject(id: String) {
@@ -471,8 +512,19 @@ internal class DefaultAiStudioStore(
                 ),
             )
         }
-        openChat(id, acknowledgeResult = false)
-        if (remoteTurns != null) send(editor.value)
+        val remote = remoteTurns
+        if (remote == null) {
+            openChat(id, acknowledgeResult = false)
+        } else {
+            screen.update { it.copy(submittingDrafts = it.submittingDrafts + id) }
+            try {
+                openChat(id, acknowledgeResult = false)
+                val draft = editor.value
+                if (draft.chatId == id) send(draft)
+            } finally {
+                if (!remote.isRunning(id)) finishDraftSubmission(id)
+            }
+        }
         save()
     }
 
@@ -618,9 +670,8 @@ internal class DefaultAiStudioStore(
         if (selected.attachments.none { it.id == id }) attachments(selected.attachments + file)
     }
 
-    private fun importAttachment(action: AiStudioAction.ImportAttachment) {
+    private fun importAttachments(id: String, source: AttachmentImportSource) {
         val useCase = importAttachment ?: return
-        val id = action.draftId
         if (!hasAttachmentDraft(id) || id in screen.value.importingAttachmentsFor) return
         screen.update {
             it.copy(
@@ -629,13 +680,24 @@ internal class DefaultAiStudioStore(
             )
         }
         scope.launch {
-            val result = withContext(defaultDispatcher) { useCase(action.reference) }
-            enqueue {
-                result.fold(
-                    onSuccess = { addAttachment(id, it.display()) },
-                    onFailure = { reportAttachmentError(id) },
-                )
-                screen.update { it.copy(importingAttachmentsFor = it.importingAttachmentsFor - id) }
+            try {
+                source.withReferences { references ->
+                    for (reference in references) {
+                        val result = withContext(defaultDispatcher) { useCase(reference) }
+                        enqueue {
+                            result.fold(
+                                onSuccess = { addAttachment(id, it.display()) },
+                                onFailure = { reportAttachmentError(id) },
+                            )
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                enqueue { reportAttachmentError(id) }
+            } finally {
+                enqueue { screen.update { it.copy(importingAttachmentsFor = it.importingAttachmentsFor - id) } }
             }
         }
     }
@@ -714,8 +776,13 @@ internal class DefaultAiStudioStore(
 
     private suspend fun sendToEngine(remote: RemoteChatTurns, draft: Draft, text: String, chat: AuroraChat) {
         val id = chat.summary.id
-        val files = screen.readStored { chat.attachments.map { it.withContent(persistence) } } ?: return
-        startEngineTurn(remote, id, RemoteChatTurns.Submission.New(text, files) { saveSubmittedDraft(draft, chat) })
+        screen.update { it.copy(submittingDrafts = it.submittingDrafts + id) }
+        try {
+            val files = screen.readStored { chat.attachments.map { it.withContent(persistence) } } ?: return
+            startEngineTurn(remote, id, RemoteChatTurns.Submission.New(text, files) { saveSubmittedDraft(draft, chat) })
+        } finally {
+            if (!remote.isRunning(id)) finishDraftSubmission(id)
+        }
     }
 
     private fun startEngineTurn(remote: RemoteChatTurns, id: String, submission: RemoteChatTurns.Submission) {
@@ -726,6 +793,7 @@ internal class DefaultAiStudioStore(
                 if (workspace.chats.any { it.summary.id == id }) renderRemoteTurn(id, update)
             },
             complete = { outcome ->
+                if (submission is RemoteChatTurns.Submission.New) finishDraftSubmission(id)
                 if (workspace.chats.any { it.summary.id == id }) {
                     if (outcome?.exceptionOrNull() is StudioRepositoryException) reportChatSaveError(id)
                     val status = chat(id).summary.navigationStatus
@@ -764,6 +832,18 @@ internal class DefaultAiStudioStore(
         return snapshots.saveNow(next).onSuccess {
             workspace = next
             editor.compareAndSet(draft, draft.copy(text = ""))
+            finishDraftSubmission(id)
+        }
+    }
+
+    private fun finishDraftSubmission(id: String) {
+        screen.update { state ->
+            if (id !in state.submittingDrafts) state
+            else state.copy(
+                submittingDrafts = state.submittingDrafts - id,
+                attachments = workspace.chats.firstOrNull { it.summary.id == id && state.chat?.id == id }
+                    ?.attachments ?: state.attachments,
+            )
         }
     }
 
@@ -775,7 +855,7 @@ internal class DefaultAiStudioStore(
             finish(id, turn.reply?.display() as? Reply)
             return
         }
-        val waiting = turn.permission != null && remoteTurns?.isStopping(id) != true
+        val waiting = (turn.permission != null || turn.questionnaire != null) && remoteTurns?.isStopping(id) != true
         val status = if (waiting) NavigationStatus.Attention else NavigationStatus.Working
         val navigationChanged = changeNavigationStatus(id, status)
         if (navigationChanged) save()

@@ -14,21 +14,37 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
+import io.github.aequicor.heartbeat.designsystem.components.HbProgress
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
+import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_loading
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
 
+@Composable
 internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
     val shape = RoundedCornerShape(AuroraLayout.DesktopComposerRadius)
     val shell = dropShadow(
@@ -39,7 +55,10 @@ internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
         shape,
         Shadow(AuroraLayout.ComposerContactRadius, AuroraColors.ComposerContactShadow,
             offset = DpOffset(Dp.Hairline, AuroraLayout.Stroke)),
-    ).background(AuroraColors.ComposerSurface, shape).padding(AuroraLayout.FrameStroke)
+    ).auroraFloatingBlur(shape).background(AuroraColors.ComposerSurface, shape)
+        .background(AuroraColors.ComposerSheen, shape)
+        .border(AuroraLayout.Stroke, AuroraColors.ComposerRim, shape)
+        .padding(AuroraLayout.FrameStroke + AuroraLayout.Stroke)
     return if (keyboardFocus) {
         shell.border(
             AuroraLayout.FrameStroke, AuroraColors.Primary, RoundedCornerShape(AuroraLayout.DesktopComposerInnerRadius),
@@ -107,17 +126,38 @@ internal fun AuroraAttachButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     demo: Boolean = true,
+    importing: Boolean = false,
 ) {
+    val loading = stringResource(Res.string.chat_attachment_loading)
+    var showProgress by remember(importing) { mutableStateOf(false) }
+    LaunchedEffect(importing) {
+        if (importing) {
+            delay(HbMotions.Default.busyIndicatorDelayMs.toLong())
+            showProgress = true
+        }
+    }
+    val control = modifier.semantics {
+        liveRegion = LiveRegionMode.Polite
+        if (importing) stateDescription = loading
+    }
+    val glyphSize = if (touch) AuroraLayout.LargeGlyph else AuroraLayout.Glyph
     AuroraControl(
-        onClick, if (touch) modifier else modifier.size(AuroraLayout.DesktopTarget),
+        onClick, if (touch) control else control.size(AuroraLayout.DesktopTarget),
         label = if (touch && demo) "Добавить демонстрационное вложение" else "Прикрепить файл",
-        touch = touch, enabled = enabled, background = Color.Transparent,
+        touch = touch, enabled = enabled && !importing,
+        background = if (touch) Color.Transparent else AuroraColors.ComposerAttachment,
         round = touch, horizontalPadding = AuroraLayout.Space,
     ) {
-        HbIcon(
-            HbIconGlyph.Plus, tint = if (touch) AuroraColors.Muted else AuroraColors.DesktopInk,
-            size = if (touch) AuroraLayout.LargeGlyph else AuroraLayout.Glyph,
-        )
+        Box(Modifier.size(glyphSize), contentAlignment = Alignment.Center) {
+            if (showProgress) {
+                HbProgress()
+            } else {
+                HbIcon(
+                    HbIconGlyph.Plus, tint = if (touch) AuroraColors.Muted else AuroraColors.DesktopPrimaryAction,
+                    size = glyphSize,
+                )
+            }
+        }
     }
 }
 
@@ -153,7 +193,6 @@ internal fun AuroraSendControl(working: Boolean, enabled: Boolean, touch: Boolea
 
 private fun auroraSendFace(working: Boolean, enabled: Boolean, touch: Boolean): Color = when {
     touch -> if (working || enabled) AuroraColors.Primary else AuroraColors.Lavender
-    !enabled -> AuroraColors.ComposerIdleSend
     working -> AuroraColors.Primary
-    else -> AuroraColors.DesktopPrimaryAction
+    else -> AuroraColors.ComposerSend
 }

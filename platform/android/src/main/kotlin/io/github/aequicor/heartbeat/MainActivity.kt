@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import com.arkivanov.decompose.retainedComponent
 import io.github.aequicor.heartbeat.designsystem.foundation.HbDensity
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import kotlinx.coroutines.Dispatchers
 
@@ -30,7 +29,6 @@ class MainActivity : ComponentActivity() {
         val shell = retainedComponent(key = "shell", handleBackButton = false) { context ->
             graph.shellComponentFactory.create(
                 componentContext = context,
-                initialRoute = AiStudioRoutes.main(),
                 dispatcher = Dispatchers.Main,
             )
         }

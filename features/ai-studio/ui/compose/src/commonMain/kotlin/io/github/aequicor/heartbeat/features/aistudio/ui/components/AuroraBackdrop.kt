@@ -9,9 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
@@ -21,7 +19,6 @@ import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -45,10 +42,9 @@ internal suspend fun loadAuroraBackdrop(worker: CoroutineDispatcher = Dispatcher
     withContext(worker) {
         val colors = Res.readBytes("files/aurora-gradient.png").decodeToImageBitmap()
         val pattern = Res.readBytes("files/aurora-pattern.png").decodeToImageBitmap()
-        AuroraBackdrop(colors, createPatternMask(pattern), colors.isOpaque())
+        AuroraBackdrop(colors, pattern, colors.isOpaque())
     }
 
-private const val PatternOpacity = 0.22f
 private const val ArgbAlphaShift = 24
 private const val OpaqueAlpha = 0xff
 private const val BackdropResizeSettleMillis = 100L
@@ -60,18 +56,6 @@ private fun ImageBitmap.isOpaque(): Boolean {
     return pixels.all { it ushr ArgbAlphaShift == OpaqueAlpha }
 }
 
-
-// A white base preserves the gradient through transparent texels. Modulate then matches
-// Figma's Multiply over the opaque gradient, including on Android below API 29.
-private fun createPatternMask(pattern: ImageBitmap): ImageBitmap {
-    val mask = ImageBitmap(pattern.width, pattern.height)
-    val canvas = Canvas(mask)
-    val paint = Paint().apply { color = AuroraColors.ChatPatternMaskBase }
-    canvas.drawRect(Rect(0f, 0f, mask.width.toFloat(), mask.height.toFloat()), paint)
-    paint.alpha = PatternOpacity
-    canvas.drawImage(pattern, Offset.Zero, paint)
-    return mask
-}
 
 @Composable
 internal fun Modifier.auroraBackdrop(
@@ -104,7 +88,7 @@ internal fun Modifier.auroraBackdrop(
                 baking.withLock {
                     val result = ImageBitmap(target.width, target.height)
                     Canvas(result).drawBackdrop(
-                        backdrop.colors, tile.patternPaint(), backdropGeometry(backdrop.colors, target),
+                        backdrop.colors, tile.patternPaint(), backdropGeometry(target),
                     )
                     result
                 }
@@ -115,7 +99,7 @@ internal fun Modifier.auroraBackdrop(
     val bounds = if (canBake) onSizeChanged { viewport = it } else this
     return bounds.drawWithCache {
         val target = IntSize(size.width.roundToInt(), size.height.roundToInt())
-        val geometry = backdropGeometry(backdrop.colors, target)
+        val geometry = backdropGeometry(target)
         val colors = backdrop.colors
         onDrawBehind {
             val cached = ready
@@ -141,28 +125,20 @@ private class BakedBackdrop(
 private fun IntSize.isBakeable(): Boolean =
     width > 0 && height > 0 && width.toLong() * height <= MaxBakedBackdropPixels
 
-private class BackdropGeometry(val offset: IntOffset, val imageSize: IntSize, val patternBounds: Rect) {
+private class BackdropGeometry(val imageSize: IntSize, val patternBounds: Rect) {
     val imagePaint = Paint().apply { filterQuality = FilterQuality.Low }
 }
 
-private fun backdropGeometry(colors: ImageBitmap, target: IntSize): BackdropGeometry {
-    val fillScale = maxOf(target.width.toFloat() / colors.width, target.height.toFloat() / colors.height)
-    val imageSize = IntSize((colors.width * fillScale).roundToInt(), (colors.height * fillScale).roundToInt())
-    val offset = IntOffset(
-        ((target.width - imageSize.width) / 2f).roundToInt(),
-        ((target.height - imageSize.height) / 2f).roundToInt(),
-    )
-    return BackdropGeometry(offset, imageSize, Rect(0f, 0f, target.width.toFloat(), target.height.toFloat()))
-}
+private fun backdropGeometry(target: IntSize): BackdropGeometry =
+    BackdropGeometry(target, Rect(0f, 0f, target.width.toFloat(), target.height.toFloat()))
 
 private fun Canvas.drawBackdrop(colors: ImageBitmap, pattern: Paint, geometry: BackdropGeometry) {
-    drawImageRect(colors, dstOffset = geometry.offset, dstSize = geometry.imageSize, paint = geometry.imagePaint)
+    drawImageRect(colors, dstSize = geometry.imageSize, paint = geometry.imagePaint)
     drawRect(geometry.patternBounds, pattern)
 }
 
 private fun ImageBitmap.patternPaint(): Paint = Paint().apply {
     shader = ImageShader(this@patternPaint, TileMode.Repeated, TileMode.Repeated)
-    blendMode = BlendMode.Modulate
 }
 
 private fun ImageBitmap.resizePatternTile(tileWidth: Int): ImageBitmap {

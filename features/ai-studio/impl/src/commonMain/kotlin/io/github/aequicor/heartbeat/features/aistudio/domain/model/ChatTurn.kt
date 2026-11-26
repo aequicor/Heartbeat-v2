@@ -5,6 +5,7 @@ internal data class ChatTurn(
     val reply: ChatHistoryEntry.Reply? = null,
     val permission: Permission? = null,
     val running: Boolean = true,
+    val questionnaire: ChatQuestionnaire? = null,
 ) {
 
     data class Permission(

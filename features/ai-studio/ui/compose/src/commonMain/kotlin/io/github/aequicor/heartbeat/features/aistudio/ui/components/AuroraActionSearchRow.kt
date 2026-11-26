@@ -74,6 +74,8 @@ internal fun AuroraActionSearchRow(
     actionEnabled: Boolean = true,
     searchEnabled: Boolean = true,
     target: Dp = AuroraLayout.NavigationRow,
+    collapsedSearchTarget: Dp = target,
+    centerActionContent: Boolean = false,
     actionBackground: Color = AuroraColors.NavigationPrimaryAction,
     actionInk: Color = AuroraColors.NavigationOnPrimaryAction,
     searchPlaceholder: String = searchLabel,
@@ -112,7 +114,7 @@ internal fun AuroraActionSearchRow(
         },
     ) {
         val gap = AuroraLayout.Space
-        val actionWidth = target + (maxWidth - gap - target * 2).coerceAtLeast(Dp.Hairline) * (1f - progress)
+        val actionWidth = target + (maxWidth - gap - target - collapsedSearchTarget).coerceAtLeast(Dp.Hairline) * (1f - progress)
         val compactPadding = (target - AuroraLayout.Glyph) / 2
         val actionPadding = AuroraLayout.ChromeInset + (compactPadding - AuroraLayout.ChromeInset) * progress
         Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
@@ -120,10 +122,11 @@ internal fun AuroraActionSearchRow(
                 actionLabel, expanded, progress, if (expanded) close else onAction,
                 enabled = expanded || actionEnabled, target, actionWidth, actionPadding,
                 SearchActionColors(actionBackground, actionInk, actionHoverBackground),
+                centerActionContent,
                 actionInteractionSource, actionIcon,
             )
             AuroraSearchControls(
-                searchLabel, expanded, progress, target,
+                searchLabel, expanded, progress, collapsedSearchTarget + (target - collapsedSearchTarget) * progress,
                 enabled = searchEnabled || expanded, searchFocus, onExpand, submit,
                 searchInteractionSource, modifier = Modifier.weight(1f),
             ) {
@@ -151,6 +154,7 @@ private fun AuroraSearchAction(
     width: Dp,
     padding: Dp,
     colors: SearchActionColors,
+    centerContent: Boolean,
     interactionSource: MutableInteractionSource?,
     icon: @Composable () -> Unit,
 ) {
@@ -167,14 +171,22 @@ private fun AuroraSearchAction(
         hoverBackground = colors.hover,
         interactionSource = interactionSource,
     ) {
-        icon()
-        BasicText(
-            label,
-            Modifier.padding(start = AuroraLayout.ControlGap).alpha(1f - progress),
-            style = HbTypography.Label.copy(color = colors.ink),
-            maxLines = 1,
-            overflow = TextOverflow.Clip,
-        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = if (centerContent && progress == 0f) Arrangement.Center else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            icon()
+            if (progress < 1f) {
+                BasicText(
+                    label,
+                    Modifier.padding(start = AuroraLayout.ControlGap).alpha(1f - progress),
+                    style = HbTypography.Label.copy(color = colors.ink),
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
+            }
+        }
     }
 }
 

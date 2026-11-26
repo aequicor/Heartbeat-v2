@@ -37,6 +37,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPanelDialog
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraViewer
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraSidebarSurface
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraTouchFilesFrame
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberArtifactSaveLauncher
 import kotlinx.coroutines.flow.StateFlow
@@ -73,13 +74,21 @@ internal fun AiStudioScreen(
         val panes = auroraPaneLayout(maxWidth, touch, state.filesVisible, caption)
         Row(
             Modifier.fillMaxSize().then(workspaceSemantics).padding(
-                start = panes.leading, end = AuroraLayout.Space, top = panes.top, bottom = AuroraLayout.Space,
+                start = panes.leading, end = if (touch) AuroraLayout.Space else Dp.Hairline, top = panes.top,
+                bottom = if (touch) AuroraLayout.Space else Dp.Hairline,
             ),
         ) {
             if (panes.sidebar) {
+                val captionCut = if (caption.leftInset > Dp.Hairline && panes.top < caption.height) {
+                    (caption.leftInset - AuroraLayout.WorkspaceRailWidth).coerceAtLeast(Dp.Hairline)
+                } else Dp.Hairline
                 AuroraDesktopSidebar(
-                    state, onAction, onOpenSettings, projectsSessions,
-                    Modifier.width(AuroraLayout.SidebarWithGap).padding(top = panes.sidebarTop),
+                    state, onAction, projectsSessions,
+                    Modifier.width(AuroraLayout.SidebarWithGap)
+                        .auroraSidebarSurface(captionCut, caption.height)
+                        .padding(horizontal = AuroraLayout.Space)
+                        .padding(top = AuroraLayout.NavigationBrandTop),
+                    brandStartInset = captionCut,
                 )
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
@@ -89,6 +98,7 @@ internal fun AiStudioScreen(
                         modifier = Modifier.fillMaxSize(),
                         captionOverlap = panes.captionOverlap,
                         caption = caption,
+                        castsSidebarShadow = panes.sidebar,
                     )
                 }
                 if (state.chatsVisible && !panes.sidebar) {
@@ -124,8 +134,7 @@ private class AuroraPaneLayout(
     val captionOverlap: Dp,
     private val captionOnLeft: Boolean,
 ) {
-    val leading get() = if (sidebar) AuroraLayout.PaneGap else AuroraLayout.Space
-    val sidebarTop get() = if (captionOnLeft) captionTop else Dp.Hairline
+    val leading get() = if (sidebar) Dp.Hairline else AuroraLayout.Space
     val filesTop get() = if (captionOnLeft) Dp.Hairline else captionTop
 }
 
@@ -141,7 +150,7 @@ private fun auroraPaneLayout(
     val filesSpace = if (filesAside) AuroraLayout.FilesPane + AuroraLayout.PaneGap else Dp.Hairline
     val sideInset = maxOf(caption.leftInset, caption.rightInset)
     val belowCaption = sideInset > Dp.Hairline && width < sideInset + AuroraLayout.NavigationWidth
-    val top = if (belowCaption) caption.height else AuroraLayout.Space
+    val top = if (belowCaption) caption.height else if (touch) AuroraLayout.Space else Dp.Hairline
     val captionTop = (caption.height - top).coerceAtLeast(Dp.Hairline)
     val overlap = if (belowCaption) Dp.Hairline else auroraCaptionOverlap(caption, sidebar, filesSpace)
     return AuroraPaneLayout(sidebar, filesAside, top, captionTop, overlap, caption.leftInset > Dp.Hairline)

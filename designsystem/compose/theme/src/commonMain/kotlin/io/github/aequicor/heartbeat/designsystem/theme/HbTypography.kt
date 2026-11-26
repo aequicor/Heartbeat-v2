@@ -63,6 +63,12 @@ object HbTypography {
         @ReadOnlyComposable
         get() = HbThemeDefaults.LocalTypography.current.uiLabel
 
+    val WorkspaceFooterLabel: TextStyle
+        @Composable get() = Detail.copy(fontSize = 8.sp, lineHeight = 10.sp)
+
+    val WorkspaceLabel: TextStyle
+        @Composable get() = Detail.copy(fontSize = 10.sp, lineHeight = 12.sp)
+
     val Detail: TextStyle
         @Composable
         @ReadOnlyComposable

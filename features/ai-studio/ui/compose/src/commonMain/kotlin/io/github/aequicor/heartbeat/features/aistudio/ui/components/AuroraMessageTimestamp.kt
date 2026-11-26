@@ -13,7 +13,11 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.VerticalAlignmentLine
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.constrainWidth
@@ -22,6 +26,9 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 private val ExternalTime = HorizontalAlignmentLine(::maxOf)
+private val TimestampTailBaseline = HorizontalAlignmentLine(::maxOf)
+private val TimestampTailTop = HorizontalAlignmentLine(::maxOf)
+private val TimestampTailRight = VerticalAlignmentLine(::maxOf)
 
 internal fun Placeable.needsExternalTimestamp(): Boolean = this[ExternalTime] != AlignmentLine.Unspecified
 
@@ -32,7 +39,6 @@ internal fun AuroraMessageTimestamp(
     textSetsWidth: Boolean,
     modifier: Modifier = Modifier,
     bottomPadding: Dp? = null,
-    preferStatusWithTime: Boolean = false,
     status: @Composable () -> Unit = {},
     content: @Composable ((TextLayoutResult) -> Unit) -> Unit,
 ) {
@@ -51,7 +57,7 @@ internal fun AuroraMessageTimestamp(
         val textLayout = text.layout
         val bodyWidth = if (textSetsWidth && textLayout != null) text.occupiedWidth() else body.width
         val stamp = timeSlot.singleOrNull()?.measure(loose)
-        val footerWidth = if (preferStatusWithTime && delivery != null && stamp != null) {
+        val footerWidth = if (delivery != null && stamp != null) {
             delivery.width + AuroraLayout.Space.roundToPx() + stamp.width
         } else delivery?.width ?: 0
         val width = constraints.constrainWidth(maxOf(bodyWidth, footerWidth))
@@ -63,8 +69,8 @@ internal fun AuroraMessageTimestamp(
             mapOf()
         }
         placeMessageContent(
-            width, body, delivery, fittingStamp, textLayout.takeIf { inlineAllowed }, alignment,
-            bottomPadding?.roundToPx(),
+            width, body, delivery, fittingStamp, inlineAllowed, textLayout.takeIf { textSetsWidth },
+            alignment, bottomPadding?.roundToPx(),
         )
     }
 }
@@ -74,6 +80,7 @@ private fun MeasureScope.placeMessageContent(
     body: Placeable,
     delivery: Placeable?,
     stamp: Placeable?,
+    inlineAllowed: Boolean,
     inlineText: TextLayoutResult?,
     alignment: Map<AlignmentLine, Int>,
     bottomPadding: Int?,
@@ -81,16 +88,25 @@ private fun MeasureScope.placeMessageContent(
     val gap = AuroraLayout.Space.roundToPx()
     val rowGap = AuroraLayout.SmallGap.roundToPx()
     val stampX = width - (stamp?.width ?: 0)
-    val stampInline = if (stamp != null && inlineText != null) {
-        body.timestampBaseline(stamp, inlineText, stampX, ceil(AuroraLayout.Space.toPx()).toInt())
+    val stampInline = if (stamp != null && inlineAllowed) {
+        val tail = inlineText?.timestampTail(body[LastBaseline]) ?: body.timestampTail()
+        tail?.stampTop(stamp, stampX, ceil(AuroraLayout.Space.toPx()).toInt(), body.height)
     } else {
         null
     }
-    val statusY = body.height + rowGap
-    val stampY = stampInline ?: if (delivery == null || delivery.width + gap <= stampX) {
-        statusY
-    } else {
+    val footerY = body.height + rowGap
+    val splitFooter = delivery != null && delivery.width + gap > stampX
+    val baselineShift = if (!splitFooter && stampInline == null && delivery != null && stamp != null) {
+        val statusBaseline = delivery[FirstBaseline]
+        val stampBaseline = stamp[FirstBaseline]
+        if (statusBaseline == AlignmentLine.Unspecified || stampBaseline == AlignmentLine.Unspecified) 0
+        else statusBaseline - stampBaseline
+    } else 0
+    val statusY = footerY + maxOf(0, -baselineShift)
+    val stampY = stampInline ?: if (splitFooter) {
         statusY + delivery.height + rowGap
+    } else {
+        footerY + maxOf(0, baselineShift)
     }
     val footerBottom = maxOf(stamp?.let { stampY + it.height } ?: 0, delivery?.let { statusY + it.height } ?: 0)
     val bottom = bottomPadding ?: if (stampInline != null || footerBottom == 0) gap else rowGap
@@ -100,6 +116,25 @@ private fun MeasureScope.placeMessageContent(
         delivery?.place(0, statusY)
         stamp?.place(stampX, stampY)
     }
+}
+
+@Composable
+internal fun AuroraTimestampParagraph(text: AnnotatedString, modifier: Modifier, style: TextStyle) {
+    val geometry = remember { MessageTextGeometry() }
+    val reportTail = Modifier.layout { measurable, constraints ->
+        val paragraph = measurable.measure(constraints)
+        val tail = geometry.layout?.timestampTail(paragraph[LastBaseline])
+        // Record the text coordinates so the footer sees the paragraph's position within the document.
+        val lines = if (tail == null) emptyMap() else mapOf(
+            TimestampTailBaseline to tail.baseline,
+            TimestampTailTop to tail.top,
+            TimestampTailRight to tail.right,
+        )
+        layout(paragraph.width, paragraph.height, alignmentLines = lines) {
+            paragraph.place(0, 0)
+        }
+    }
+    AuroraReplyText(text, modifier.then(reportTail), style, onTextLayout = geometry::update)
 }
 
 @Composable
@@ -129,24 +164,29 @@ private class MessageTextGeometry {
 
 private fun TextLayoutResult.occupiedWidth(): Int = ceil((0 until lineCount).maxOfOrNull(::getLineRight) ?: 0f).toInt()
 
-private fun Placeable.timestampBaseline(
-    stamp: Placeable,
-    text: TextLayoutResult,
-    stampX: Int,
-    gap: Int,
-): Int? {
-    val line = text.lineCount - 1
-    val baseline = this[LastBaseline]
-    val stampBaseline = stamp[FirstBaseline]
-    val hasTextBaseline = line >= 0 && baseline != AlignmentLine.Unspecified
-    val hasSingleLineStamp = stampBaseline != AlignmentLine.Unspecified && stampBaseline == stamp[LastBaseline]
-    if (!hasTextBaseline || !hasSingleLineStamp) return null
+private class TimestampTail(val baseline: Int, val top: Int, val right: Int) {
 
-    val lineTop = baseline - (text.getLineBaseline(line) - text.getLineTop(line)).roundToInt()
-    val stampTop = baseline - stampBaseline
-    val fitsHorizontally = ceil(text.getLineRight(line)).toInt() + gap <= stampX
-    val fitsVertically = stampTop >= lineTop && stampTop + stamp.height <= height
-    return stampTop.takeIf { fitsHorizontally && fitsVertically && text.hasLeftToRightTail(line) }
+    fun stampTop(stamp: Placeable, stampX: Int, gap: Int, bodyHeight: Int): Int? {
+        val stampBaseline = stamp[FirstBaseline]
+        if (stampBaseline == AlignmentLine.Unspecified || stampBaseline != stamp[LastBaseline]) return null
+
+        val stampTop = baseline - stampBaseline
+        return stampTop.takeIf { right + gap <= stampX && it >= top && it + stamp.height <= bodyHeight }
+    }
+}
+
+private fun Placeable.timestampTail(): TimestampTail? {
+    val right = this[TimestampTailRight]
+    if (right <= 0) return null
+    return TimestampTail(this[TimestampTailBaseline], this[TimestampTailTop], right)
+}
+
+private fun TextLayoutResult.timestampTail(baseline: Int): TimestampTail? {
+    val line = lineCount - 1
+    if (line < 0 || baseline == AlignmentLine.Unspecified || !hasLeftToRightTail(line)) return null
+
+    val top = baseline - (getLineBaseline(line) - getLineTop(line)).roundToInt()
+    return TimestampTail(baseline, top, ceil(getLineRight(line)).toInt())
 }
 
 private fun TextLayoutResult.hasLeftToRightTail(line: Int): Boolean {

@@ -23,12 +23,12 @@ import com.arkivanov.essenty.lifecycle.destroy
 import com.arkivanov.essenty.lifecycle.resume
 import dev.zacsweers.metro.createGraphFactory
 import io.github.aequicor.heartbeat.designsystem.components.HbAppName
+import io.github.aequicor.heartbeat.designsystem.components.HbAuroraFont
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbAppearance
 import io.github.aequicor.heartbeat.designsystem.resources.Res
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.di.DesktopGraph
-import io.github.aequicor.heartbeat.features.aistudio.api.AiStudioRoutes
 import io.github.aequicor.heartbeat.shell.ui.ShellScreen
 import java.awt.EventQueue
 import java.awt.Window
@@ -76,7 +76,6 @@ fun main() {
         val shell = remember(graph) {
             graph.shellComponentFactory.create(
                 componentContext = DefaultComponentContext(lifecycle),
-                initialRoute = AiStudioRoutes.main(),
                 dispatcher = Dispatchers.Main,
             )
         }
@@ -101,13 +100,12 @@ fun main() {
                 }
             }
         }
-        val state = rememberWindowState(width = 1440.dp, height = 900.dp)
+        val state = rememberWindowState(width = 1426.dp, height = 893.dp)
         val os = System.getProperty("os.name")
-        val uiFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Segoe UI") else FontFamily.Default }
         val codeFont = remember(os) { if (os.startsWith("Windows")) FontFamily("Consolas") else FontFamily.Monospace }
         val shellModifier = remember(onClose) { startupProbeModifier(onClose) }.fillMaxSize()
         val content: @Composable () -> Unit = {
-            HbTheme(appearance = appearance, fontFamily = uiFont, codeFontFamily = codeFont) {
+            HbTheme(appearance = appearance, fontFamily = HbAuroraFont(), codeFontFamily = codeFont) {
                 HbDesktopFocusIndication(Modifier.fillMaxSize()) {
                     ShellScreen(component = shell, renderers = renderers, modifier = shellModifier)
                 }

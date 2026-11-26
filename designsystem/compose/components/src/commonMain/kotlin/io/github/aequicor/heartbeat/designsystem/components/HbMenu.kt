@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -53,6 +54,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
  * must apply that modifier to the trigger. [HbMenuSeparator] is a decorative entry: it is not
  * focusable, does not take part in arrow navigation and cannot be activated.
  * [pointerAnchor] uses a point relative to the trigger's top-left corner, in pixels.
+ * [popupBackground] can supply a custom background for the menu's shape.
  */
 @Composable
 fun HbMenu(
@@ -65,6 +67,7 @@ fun HbMenu(
     restoreTriggerFocus: Boolean = true,
     pointerAnchor: IntOffset? = null,
     motion: HbMenuMotion? = null,
+    popupBackground: (@Composable (Shape) -> Modifier)? = null,
     trigger: @Composable (Modifier) -> Unit,
 ) {
     val triggerRequester = remember { FocusRequester() }
@@ -109,6 +112,7 @@ fun HbMenu(
                         presentation = presentation,
                         focusable = expanded && focusable,
                         modifier = rowsModifier,
+                        popupBackground = popupBackground,
                         onDismiss = { close() },
                         onActivate = { action ->
                             if (expanded) {
@@ -155,6 +159,7 @@ private fun HbMenuSurface(
     onDismiss: () -> Unit,
     onActivate: (HbMenuAction) -> Unit,
     modifier: Modifier = Modifier,
+    popupBackground: (@Composable (Shape) -> Modifier)? = null,
 ) {
     val enabledIndices = remember(entries) {
         entries.indices.filter { index ->
@@ -217,7 +222,11 @@ private fun HbMenuSurface(
             }
         }
     }
-    if (compact) HbAuroraMenuSurface(presentation, content = rows) else HbOptionSurface(content = rows)
+    if (compact) {
+        HbAuroraMenuSurface(presentation, popupBackground = popupBackground, content = rows)
+    } else {
+        HbOptionSurface(popupBackground = popupBackground, content = rows)
+    }
 }
 
 @Composable

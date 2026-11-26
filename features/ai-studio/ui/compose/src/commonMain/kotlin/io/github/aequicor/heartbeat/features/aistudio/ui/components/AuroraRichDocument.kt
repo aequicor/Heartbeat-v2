@@ -71,7 +71,9 @@ internal fun AuroraRichDocument(
     SelectionContainer(state = selection, modifier = modifier) {
         val blocks = visible?.blocks
         when {
-            blocks != null -> AuroraDocumentBlocks(blocks, touch, streaming, preparingHeight, archiveReveal)
+            blocks != null -> AuroraDocumentBlocks(
+                blocks, touch, streaming, preparingHeight, archiveReveal, measureTimestampTail = !streaming,
+            )
             fallbackText.isNotEmpty() -> AuroraReplyText(fallbackText, style = auroraMessageStyle())
             preparingHeight > Dp.Hairline -> AuroraPreparingReply(minHeight = preparingHeight)
         }
@@ -108,6 +110,7 @@ internal fun AuroraRichBlocks(
     firstGroup: Boolean = true,
     followsHeading: Boolean = false,
     bodyStyle: TextStyle = auroraMessageStyle(),
+    measureTimestampTail: Boolean = false,
 ) {
     Column(modifier) {
         blocks.forEachIndexed { index, prepared ->
@@ -124,7 +127,10 @@ internal fun AuroraRichBlocks(
                 val textBlock = block is ReplyBlock.Heading || block is ReplyBlock.Paragraph
                 if (!textBlock && gap > Dp.Hairline) Spacer(Modifier.height(gap))
                 CompositionLocalProvider(LocalReplyRevealBlock provides block.id) {
-                    AuroraRichBlock(prepared, touch, if (textBlock) gap else Dp.Hairline, streaming, bodyStyle)
+                    AuroraRichBlock(
+                        prepared, touch, if (textBlock) gap else Dp.Hairline, streaming, bodyStyle,
+                        measureTimestampTail && index == blocks.lastIndex,
+                    )
                 }
             }
         }
@@ -138,10 +144,15 @@ private fun AuroraRichBlock(
     textGap: Dp,
     streaming: Boolean,
     bodyStyle: TextStyle,
+    measureTimestampTail: Boolean,
 ) {
     val textPadding = if (textGap > Dp.Hairline) Modifier.padding(top = textGap) else Modifier
     when (val block = prepared.source) {
-        is ReplyBlock.Paragraph -> AuroraReplyText(prepared.text, textPadding, style = bodyStyle)
+        is ReplyBlock.Paragraph -> if (measureTimestampTail) {
+            AuroraTimestampParagraph(prepared.text, textPadding, bodyStyle)
+        } else {
+            AuroraReplyText(prepared.text, textPadding, style = bodyStyle)
+        }
         is ReplyBlock.Heading -> AuroraRichHeading(prepared.text, block.level, touch, bodyStyle, textPadding)
         is ReplyBlock.Quote -> Box(
             Modifier.drawBehind {

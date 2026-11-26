@@ -12,6 +12,9 @@ class FeatureRegistry(
 
     private val byId: Map<String, DecomposeFeatureEntry> = entries.associateBy { it.featureId }
 
+    val workspaces = byId.values.filter { it.isAvailable() }.mapNotNull { it.workspace }
+        .sortedWith(compareBy({ it.priority }, { it.route.featureId }))
+
     init {
         require(byId.size == entries.size) {
             "Duplicate feature registrations: " +
@@ -19,7 +22,7 @@ class FeatureRegistry(
         }
     }
 
-    fun find(featureId: String): DecomposeFeatureEntry? = byId[featureId]
+    fun find(featureId: String): DecomposeFeatureEntry? = byId[featureId]?.takeIf { it.isAvailable() }
 
     fun resolve(featureId: String): DecomposeFeatureEntry =
         requireNotNull(find(featureId)) {

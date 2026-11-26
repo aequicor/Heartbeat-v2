@@ -70,7 +70,7 @@ internal fun AuroraNavigationPage(
         return
     }
     val load = { row.loadNextPage(projectsSessions) }
-    if (row.page != null) {
+    if (row.kind == NavigationKind.MoreProjects && row.page != null) {
         LaunchedEffect(list, row.id, row.page) {
             snapshotFlow { list.layoutInfo.visibleItemsInfo.any { it.key == row.id } }.first { it }
             load()

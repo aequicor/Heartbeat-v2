@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -75,7 +76,7 @@ internal fun AuroraDesktopHeader(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val compact = maxWidth - edgeInset * 2 < AuroraLayout.HeaderMetricsCompactAt
         val inset = Modifier.padding(horizontal = edgeInset)
-        val projectWidth = minOf(maxWidth / 3, AuroraLayout.NavigationWidth / 2)
+        val projectWidth = minOf(maxWidth / 3, AuroraLayout.NavigationWidth)
         Column(
             Modifier.fillMaxWidth().padding(top = AuroraLayout.HeaderTop),
             verticalArrangement = Arrangement.spacedBy(AuroraLayout.HeaderRowGap),
@@ -88,18 +89,30 @@ internal fun AuroraDesktopHeader(
                 horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (showNavigation) AuroraHeaderNavigation { onAction(AiStudioAction.ExpandChats) }
-                AuroraDesktopProject(
-                    state.sessionBootstrap, chat, onAction, Modifier.widthIn(max = projectWidth),
-                )
-                AuroraTitleMenu(
-                    chat, state.filesVisible, onAction, titleFocus,
-                    onReady = { onTitleReady(titleFocus) }, modifier = Modifier.weight(1f),
-                )
-                if (hasSubagents) {
-                    AuroraSubagents(
-                        state.subagents, onAction, onFocusChange = { subagentsFocused = it }, compact = compact,
+                Row(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(AuroraLayout.ControlGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showNavigation) AuroraHeaderNavigation { onAction(AiStudioAction.ExpandChats) }
+                    AuroraDesktopProject(
+                        state.sessionBootstrap, chat, onAction, Modifier.widthIn(max = projectWidth),
                     )
+                    AuroraTitleMenu(
+                        chat, state.filesVisible, onAction, titleFocus,
+                        onReady = { onTitleReady(titleFocus) }, modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hasSubagents) {
+                        AuroraSubagents(
+                            state.subagents, onAction, onFocusChange = { subagentsFocused = it }, compact = compact,
+                        )
+                    }
+                    if (!compact) HeaderAccessControl(state, chat, onAction)
                 }
             }
             FlowRow(
@@ -110,9 +123,7 @@ internal fun AuroraDesktopHeader(
                 if (state.sessionBootstrap != null || chat.configuration != null) {
                     AuroraChatEngineParameters(state.sessionBootstrap?.picker ?: state.chatEnginePicker, chat.configuration, false, onAction)
                 } else AuroraExecutionParameters(chat, onAction)
-                if (state.sessionBootstrap != null || chat.configuration != null) {
-                    AuroraSecurityMode(state, chat, onAction, touch = false)
-                } else AuroraAccessMenu(chat.access, onAction)
+                if (compact) HeaderAccessControl(state, chat, onAction)
                 if (chat.contextPercent != null || chat.quota != null) {
                     Spacer(Modifier.weight(1f))
                     AuroraHeaderMetrics(chat, compact)
@@ -120,6 +131,15 @@ internal fun AuroraDesktopHeader(
             }
             AuroraHeaderStorageError(state.navigationErrorText(), inset)
         }
+    }
+}
+
+@Composable
+private fun HeaderAccessControl(state: AiStudioScreenState, chat: Chat, onAction: (AiStudioAction) -> Unit) {
+    if (state.sessionBootstrap != null || chat.configuration != null) {
+        AuroraSecurityMode(state, chat, onAction, touch = false)
+    } else {
+        AuroraAccessMenu(chat.access, onAction)
     }
 }
 
@@ -133,7 +153,7 @@ private fun AuroraDesktopProject(
     if (bootstrap == null) {
         Box(
             modifier.height(AuroraLayout.DesktopTarget)
-                .auroraFloatingHeaderSurface(AuroraColors.Pearl).padding(horizontal = AuroraLayout.Space),
+                .auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim).padding(horizontal = AuroraLayout.Space),
             contentAlignment = Alignment.CenterStart,
         ) { AuroraStaticProject(chat.displayProject()) }
     } else {
@@ -181,11 +201,12 @@ private fun AuroraTitleMenu(
     )
     var expanded by remember { mutableStateOf(false) }
     var truncated by remember(title) { mutableStateOf(false) }
-    Box(modifier.auroraFloatingHeaderSurface(AuroraColors.Pearl)) {
+    Box(modifier.auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim)) {
         HbWindowClientArea { clientArea ->
             HbMenu(
                 expanded, onDismissRequest = { expanded = false }, actions = actions,
                 presentation = HbMenuPresentation.AuroraMessage,
+                popupBackground = auroraBlurredMenuBackground(),
             ) { trigger ->
                 HbTooltip(title, enabled = truncated && !expanded) {
                     AuroraHeaderButton(
@@ -196,7 +217,7 @@ private fun AuroraTitleMenu(
                     ) {
                         AuroraFadingText(
                             title,
-                            HbTypography.PaneTitle.copy(color = AuroraColors.MessageInk),
+                            HbTypography.Label.copy(color = AuroraColors.MessageInk, fontWeight = FontWeight.Medium),
                             AuroraLayout.NavigationTitleFade, Modifier.weight(1f, fill = false),
                             onOverflowChange = { truncated = it },
                         )
@@ -225,23 +246,16 @@ private fun AuroraSubagents(
             AuroraHeaderButton(
                 label, open,
                 trigger.onFocusChanged { onFocusChange(it.isFocused) }
-                    .auroraFloatingHeaderSurface(AuroraColors.Pearl, AuroraColors.HeaderOutline),
+                    .auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim),
                 radius = AuroraLayout.FloatingHeaderRadius,
                 contentPadding = PaddingValues(horizontal = AuroraLayout.Space),
             ) {
                 HbIcon(HbIconGlyph.Branch, tint = AuroraColors.MessageMuted, size = AuroraLayout.Glyph)
                 if (!compact) {
                     Spacer(Modifier.width(AuroraLayout.ControlGap))
-                    BasicText(
-                        "Субагенты",
-                        style = HbTypography.Label.copy(color = AuroraColors.MessageInk),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.width(AuroraLayout.SmallGap))
-                    BasicText(
-                        "· ${agents.size}",
-                        style = HbTypography.Metadata.copy(color = AuroraColors.MessageMuted),
-                        maxLines = 1,
+                    AuroraHeaderText(
+                        label,
+                        style = HbTypography.Label.copy(fontWeight = FontWeight.Medium),
                     )
                 }
             }
@@ -255,11 +269,8 @@ private fun AuroraExecutionParameters(
     onAction: (AiStudioAction) -> Unit,
 ) {
     FlowRow(
-        Modifier.auroraFloatingHeaderSurface(AuroraColors.Pearl, AuroraColors.HeaderOutline)
-            .padding(
-                horizontal = AuroraLayout.ContentInset,
-                vertical = AuroraLayout.ExecutionParametersVerticalInset,
-            ),
+        Modifier.auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim)
+            .padding(horizontal = AuroraLayout.Space),
         horizontalArrangement = Arrangement.spacedBy(AuroraLayout.ExecutionParametersGap),
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.ControlGap),
     ) {
@@ -273,7 +284,7 @@ private fun AuroraExecutionParameters(
         AuroraExecutionParameter(
             AuroraDemoParameters.effortLabel(chat.effort), "Уровень рассуждения",
             AuroraDemoParameters.effortOptions(chat.effort, onAction),
-            displayValue = AuroraDemoParameters.effortSummary(chat.effort),
+            displayValue = chat.effort,
         )
     }
 }
@@ -324,7 +335,7 @@ internal fun AuroraAccessMenu(access: Access, onAction: (AiStudioAction) -> Unit
         val surface = if (touch) {
             trigger.auroraHeaderSurface(radius)
         } else {
-            trigger.auroraFloatingHeaderSurface(AuroraColors.HeaderAccessSurface, AuroraColors.HeaderAccessOutline)
+            trigger.auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface, AuroraColors.FloatingHeaderRim)
         }
         AuroraHeaderButton(
             "Режим доступа, ${access.label}", open, surface,

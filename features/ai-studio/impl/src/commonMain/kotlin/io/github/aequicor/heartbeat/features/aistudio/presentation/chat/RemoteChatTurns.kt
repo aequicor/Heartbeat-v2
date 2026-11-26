@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
@@ -30,6 +31,7 @@ internal class RemoteChatTurns(
 
     private val jobs = mutableMapOf<String, Job>()
     private val current = mutableMapOf<String, ChatTurn>()
+    private val questionnaires = mutableMapOf<String, Request.Questions>()
     private val cancellations = MutableStateFlow<Map<String, CompletableDeferred<Unit>>>(emptyMap())
 
     fun isRunning(chatId: String) = chatId in jobs
@@ -63,6 +65,11 @@ internal class RemoteChatTurns(
                                 }
                                 enqueue {
                                     current[chatId] = update
+                                    val questionnaire = update.questionnaire
+                                    if (questionnaire == null) questionnaires.remove(chatId)
+                                    else if (questionnaires[chatId]?.id != questionnaire.id) {
+                                        questionnaires[chatId] = questionnaire.toPanel()
+                                    }
                                     render(update)
                                 }
                             } else {
@@ -92,6 +99,7 @@ internal class RemoteChatTurns(
                     jobs.remove(chatId)
                     cancellations.value -= chatId
                     current.remove(chatId)
+                    questionnaires.remove(chatId)
                     // The domain and this turn's cancellation task have finished before exposing Idle.
                     terminal?.let(render)
                     complete(outcome)
@@ -140,13 +148,70 @@ internal class RemoteChatTurns(
         }
     }
 
+    suspend fun answerQuestionnaire(chatId: String, action: AiStudioAction) {
+        if (isStopping(chatId)) return
+        val panel = questionnaires[chatId]?.takeUnless { it.frozen } ?: return
+        when (action) {
+            is AiStudioAction.Choose -> if (panel.id == action.requestId && panel.question.id == action.questionId &&
+                action.option in panel.question.options
+            ) {
+                val options = when {
+                    !panel.question.multiple -> setOf(action.option)
+                    action.option in panel.answer.options -> panel.answer.options - action.option
+                    else -> panel.answer.options + action.option
+                }
+                questionnaires[chatId] = panel.withAnswer(panel.answer.copy(options = options, skipped = false))
+            }
+            is AiStudioAction.EditAnswer -> if (panel.id == action.requestId &&
+                panel.question.id == action.questionId && panel.question.freeText
+            ) {
+                questionnaires[chatId] = panel.withAnswer(panel.answer.copy(text = action.text, skipped = false))
+            }
+            is AiStudioAction.MoveQuestion -> if (panel.id == action.requestId) {
+                val index = (panel.index + action.offset).coerceIn(panel.questions.indices)
+                questionnaires[chatId] = panel.copy(index = index)
+            }
+            is AiStudioAction.SkipQuestion -> if (panel.id == action.requestId && !panel.question.required) {
+                questionnaires[chatId] = panel.withAnswer(AiStudioScreenState.Answer(skipped = true))
+                    .copy(index = (panel.index + 1).coerceAtMost(panel.questions.lastIndex))
+            }
+            is AiStudioAction.SubmitAnswers -> if (panel.id == action.requestId) {
+                val questionnaire = current[chatId]?.questionnaire ?: return
+                val values = mutableMapOf<String, QuestionnaireAnswer.Value>()
+                questionnaire.fields.forEachIndexed { index, field ->
+                    val answer = panel.answers[field.id]?.takeUnless { it.skipped }
+                    if (!field.required && answer == null) return@forEachIndexed
+                    val value = answer?.let(field::readAnswer)
+                    if (value == null) {
+                        questionnaires[chatId] = panel.copy(
+                            index = index, error = "Проверьте ответ на этот вопрос",
+                        )
+                        return
+                    }
+                    values[field.id] = value
+                }
+                deliverQuestionnaire(chatId, panel, QuestionnaireAnswer.Accept(values))
+            }
+            is AiStudioAction.DeclineQuestionnaire -> if (panel.id == action.requestId) {
+                deliverQuestionnaire(chatId, panel, QuestionnaireAnswer.Decline)
+            }
+            else -> Unit
+        }
+    }
+
+    private suspend fun deliverQuestionnaire(chatId: String, panel: Request.Questions, answer: QuestionnaireAnswer) {
+        val result = withContext(defaultDispatcher) { turns.answerQuestionnaire(chatId, panel.id, answer) }
+        questionnaires[chatId] = if (result.isSuccess) panel.copy(frozen = true, error = null)
+        else panel.copy(error = "Не удалось отправить ответ")
+    }
+
     fun reply(chatId: String): Reply? {
         val turn = current[chatId]?.takeIf { it.running } ?: return null
         if (turn.user.delivery == ChatHistoryEntry.Delivery.Sending) return null
         val reply = turn.reply ?: return null
         val empty = reply.text.isEmpty() && reply.steps.isEmpty() && reply.interim == null &&
             reply.result == null && reply.artifacts.isEmpty()
-        return if (turn.permission != null && empty) null else reply.display() as? Reply
+        return if ((turn.permission != null || turn.questionnaire != null) && empty) null else reply.display() as? Reply
     }
 
     fun activity(chatId: String): AiStudioScreenState.Activity? {
@@ -154,13 +219,13 @@ internal class RemoteChatTurns(
         val turn = current[chatId] ?: return if (isRunning(chatId)) AiStudioScreenState.Activity.Sending else null
         return when {
             !turn.running -> AiStudioScreenState.Activity.Idle
-            turn.permission != null -> AiStudioScreenState.Activity.Waiting
+            turn.permission != null || turn.questionnaire != null -> AiStudioScreenState.Activity.Waiting
             turn.user.delivery == ChatHistoryEntry.Delivery.Sending -> AiStudioScreenState.Activity.Sending
             else -> AiStudioScreenState.Activity.Running
         }
     }
 
-    fun request(chatId: String): Request.Permission? {
+    fun request(chatId: String): Request? {
         if (isStopping(chatId)) return null
         return current[chatId]?.permission?.let {
             val targets = (listOfNotNull(it.workingDirectory) + it.paths).distinct()
@@ -175,7 +240,7 @@ internal class RemoteChatTurns(
                 it.id, it.title, targets.joinToString("\n"), it.command.orEmpty(), scope.joinToString("\n"),
                 allowOnce = it.options.any { option -> option.kind == "allow_once" },
             )
-        }
+        } ?: questionnaires[chatId]
     }
 
     sealed interface Submission {

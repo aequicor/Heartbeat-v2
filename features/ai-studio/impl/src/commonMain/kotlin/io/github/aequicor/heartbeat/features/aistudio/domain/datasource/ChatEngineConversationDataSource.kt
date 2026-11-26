@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.domain.datasource
 
+import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineTurn
@@ -23,4 +24,6 @@ internal interface ChatEngineConversationDataSource {
     suspend fun close()
 
     fun answerPermission(requestId: String, optionId: String)
+
+    fun answerQuestionnaire(requestId: String, answer: QuestionnaireAnswer)
 }

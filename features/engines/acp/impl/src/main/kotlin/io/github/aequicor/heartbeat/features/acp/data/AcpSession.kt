@@ -4,6 +4,9 @@ import com.agentclientprotocol.annotations.UnstableApi
 import com.agentclientprotocol.model.AcpMethod.AgentMethods.V1
 import com.agentclientprotocol.model.CancelNotification
 import com.agentclientprotocol.model.ContentBlock
+import com.agentclientprotocol.model.CreateElicitationResponse
+import com.agentclientprotocol.model.ElicitationAction
+import com.agentclientprotocol.model.ElicitationSchema
 import com.agentclientprotocol.model.PermissionOptionId
 import com.agentclientprotocol.model.PromptRequest
 import com.agentclientprotocol.model.RequestPermissionOutcome
@@ -26,6 +29,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.PermissionOpti
 import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionQuestionnaire
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTurn
@@ -57,10 +61,16 @@ internal class AcpSession(
         val answer: CompletableDeferred<RequestPermissionOutcome> = CompletableDeferred(),
     )
 
+    private data class Questionnaire(
+        val request: SessionQuestionnaire,
+        val answer: CompletableDeferred<ElicitationAction> = CompletableDeferred(),
+    )
+
     private val lock = Any()
     private val id = SessionId(initialKey.id)
     private val timeline = AcpTimeline(dshAgent)
     private val permissions = linkedMapOf<String, Permission>()
+    private val questionnaires = linkedMapOf<String, Questionnaire>()
     private var status: SessionStatus = SessionStatus.Unavailable
     private var history = if (replay) HistorySyncStatus.LOADING else HistorySyncStatus.LOCAL_ONLY
     private var prompt: Job? = null
@@ -92,6 +102,7 @@ internal class AcpSession(
                 is SessionEvent.SendPrompt -> sendPrompt(event)
                 SessionEvent.Cancel -> cancel()
                 is SessionEvent.AnswerPermission -> answerPermission(event)
+                is SessionEvent.AnswerQuestionnaire -> answerQuestionnaire(event)
                 SessionEvent.LoadPreviousPartition, SessionEvent.LoadNextPartition -> Unit
             }
         }
@@ -177,6 +188,27 @@ internal class AcpSession(
         }
     }
 
+    suspend fun requestQuestionnaire(message: String, schema: ElicitationSchema): CreateElicitationResponse {
+        val questionnaire = synchronized(lock) {
+            if (status != SessionStatus.Running || cancelling) {
+                return CreateElicitationResponse(ElicitationAction.Cancel)
+            }
+            promptAccepted = true
+            val requestId = UUID.randomUUID().toString()
+            Questionnaire(schema.toQuestionnaire(requestId, message)).also {
+                questionnaires[requestId] = it
+                publish()
+            }
+        }
+        return try {
+            CreateElicitationResponse(questionnaire.answer.await())
+        } finally {
+            synchronized(lock) {
+                if (questionnaires.remove(questionnaire.request.id) != null) publish()
+            }
+        }
+    }
+
     fun terminate(finalStatus: SessionStatus, cancelTurn: Boolean = false) = synchronized(lock) {
         if (cancelTurn) cancel()
         terminated = true
@@ -185,7 +217,7 @@ internal class AcpSession(
             turn = currentTurn.copy(status = promptFailureStatus())
         }
         status = finalStatus
-        clearPermissions()
+        clearRequests()
         prompt?.cancel()
         publish()
     }
@@ -259,7 +291,7 @@ internal class AcpSession(
                             promptAccepted = true
                         }
                         turn = turn?.copy(status = outcome, failure = reportedFailure(failure, outcome))
-                        clearPermissions()
+                        clearRequests()
                         publish()
                     }
                 }
@@ -278,7 +310,7 @@ internal class AcpSession(
                 turn = turn?.copy(status = promptFailureStatus())
                 prompt?.cancel()
             } finally {
-                clearPermissions()
+                clearRequests()
                 publish()
             }
         }
@@ -290,6 +322,12 @@ internal class AcpSession(
         permissions.remove(event.requestId)
         publish()
         permission.answer.complete(RequestPermissionOutcome.Selected(PermissionOptionId(event.optionId)))
+    }
+
+    private fun answerQuestionnaire(event: SessionEvent.AnswerQuestionnaire) {
+        val questionnaire = questionnaires.remove(event.requestId) ?: return
+        publish()
+        questionnaire.answer.complete(event.answer.toElicitationAction())
     }
 
     private fun promptFailureStatus(failure: Exception? = null, hasImages: Boolean = false): SessionTurn.Status = when {
@@ -314,10 +352,13 @@ internal class AcpSession(
         }
     }
 
-    private fun clearPermissions() {
+    private fun clearRequests() {
         val pending = permissions.values.toList()
         permissions.clear()
         pending.forEach { it.answer.complete(RequestPermissionOutcome.Cancelled) }
+        val pendingQuestionnaires = questionnaires.values.toList()
+        questionnaires.clear()
+        pendingQuestionnaires.forEach { it.answer.complete(ElicitationAction.Cancel) }
     }
 
     private val snapshot: SessionState
@@ -330,6 +371,7 @@ internal class AcpSession(
                 settings = configuration.current,
                 turn = turn?.copy(accepted = promptAccepted),
                 contextWindowUsage = contextWindowUsage,
+                questionnaires = questionnaires.values.map(Questionnaire::request),
             )
         }
 

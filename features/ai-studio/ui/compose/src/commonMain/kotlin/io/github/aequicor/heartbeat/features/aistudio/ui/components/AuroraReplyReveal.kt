@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.withSave
@@ -324,11 +325,30 @@ internal fun AuroraReplyText(
     }
     val fade = if (revision == null || revision.ranges.isEmpty()) Modifier
     else Modifier.drawReplyReveal(reveal, revision, layout, revealOffset, text.length)
-    BasicText(text, modifier.then(arrival).then(fade), style, softWrap = softWrap, maxLines = maxLines, overflow = overflow,
+    val code = if (text.hasStringAnnotations(InlineCodeAnnotation, 0, text.length)) {
+        Modifier.drawInlineCode(layout)
+    } else Modifier
+    BasicText(text, modifier.then(arrival).then(fade).then(code), style, softWrap = softWrap, maxLines = maxLines, overflow = overflow,
         onTextLayout = {
         layout.value = it
         onTextLayout(it)
     })
+}
+
+private fun Modifier.drawInlineCode(layout: State<TextLayoutResult?>): Modifier = drawWithCache {
+    val measured = layout.value
+    val paths = if (measured == null) emptyList() else {
+        val text = measured.layoutInput.text
+        text.getStringAnnotations(InlineCodeAnnotation, 0, text.length).map { span ->
+            measured.getPathForRange(span.start, span.end)
+        }
+    }
+    // BasicText paints selection before its glyphs. Paint code backgrounds before both.
+    onDrawBehind {
+        clipRect {
+            for (path in paths) drawPath(path, HbAuroraColors.WorkHover)
+        }
+    }
 }
 
 private fun Modifier.drawArrivalGlyphs(

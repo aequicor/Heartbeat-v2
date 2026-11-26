@@ -134,6 +134,9 @@ val provisionedJcefRoot = layout.buildDirectory.dir("jdks/jbrsdk-jcef-25.0.4").g
 val provisionedJcefHome = if (isMacos) provisionedJcefRoot.resolve("Contents/Home") else provisionedJcefRoot
 val runJavaHome = installedJcefHome ?: toolchainHome
 val packagingJavaHome = if (shouldProvisionJcef) provisionedJcefHome else runJavaHome
+val gradleJavaHome = file(System.getProperty("java.home"))
+val jpackageExecutable = if (isWindows) "bin/jpackage.exe" else "bin/jpackage"
+val jpackageJavaHome = gradleJavaHome.takeIf { it.resolve(jpackageExecutable).isFile } ?: packagingJavaHome
 val hasJcef = installedJcefHome != null || shouldProvisionJcef
 val hasRunJcef = hasCompatibleJcef(runJavaHome)
 
@@ -252,8 +255,8 @@ afterEvaluate {
     }
     tasks.withType<AbstractJPackageTask>().configureEach {
         // JBR 25 can report writable directories as non-writable in sandboxed Windows builds.
-        // jpackage uses the Gradle JDK; the JCEF SDK is still required for jlink and the runtime image.
-        javaHome.set(System.getProperty("java.home"))
+        // Prefer the Gradle JDK when it supplies jpackage. Embedded IDE runtimes can omit it.
+        javaHome.set(jpackageJavaHome.absolutePath)
         provisionJcefJdk?.let { dependsOn(it) }
         if (hasJcef) launcherJvmArgs.add("--enable-native-access=jcef")
     }

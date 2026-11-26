@@ -54,7 +54,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_error
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_loading
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_creation_failed
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_project_unavailable
 import kotlinx.coroutines.flow.StateFlow
@@ -76,10 +75,8 @@ internal fun AuroraLowerControls(
 ) {
     val chat = state.chat ?: return
     val chatId = chat.id
-    var field by remember(chatId, draft) {
-        val text = draft.value.takeIf { it.chatId == chatId }?.text.orEmpty()
-        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
-    }
+    val text = draft.value.takeIf { it.chatId == chatId }?.text.orEmpty()
+    var field by remember(chatId, draft) { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
     LaunchedEffect(chatId, draft) {
         draft.collect { snapshot ->
             if (snapshot.chatId == chatId && snapshot == draft.value && snapshot.text != field.text) {
@@ -87,6 +84,8 @@ internal fun AuroraLowerControls(
             }
         }
     }
+    val currentField = if (field.text == text) field else TextFieldValue(text, TextRange(text.length))
+    val submitting = chatId in state.submittingDrafts
     val editing by rememberUpdatedState(state.request == null)
     val measuredPanel = Modifier.onSizeChanged { onPanelHeight(it.height) }
     Column(
@@ -104,7 +103,8 @@ internal fun AuroraLowerControls(
             )
         } else {
             AuroraComposer(
-                field = field,
+                field = currentField,
+                submitting = submitting,
                 onEdit = {
                     val current = draft.value
                     if (current.chatId == chatId) {
@@ -117,11 +117,14 @@ internal fun AuroraLowerControls(
                 sendBlocked = state.isPromptBlockedBySecurityMode(chat),
                 files = state.attachments,
                 touch = touch,
+                attachmentDraftId = chatId.takeIf { state.allowsFileImport && !submitting },
                 importingAttachment = chatId in state.importingAttachmentsFor,
                 attachmentError = state.attachmentErrorFor == chatId,
                 attach = {
                     if (state.allowsFileImport) {
-                        AuroraAttachmentPickerButton(chatId, chatId in state.importingAttachmentsFor, touch, onAction)
+                        AuroraAttachmentPickerButton(
+                            chatId, chatId in state.importingAttachmentsFor, touch, onAction, enabled = !submitting,
+                        )
                     } else {
                         AuroraAttachMenu(state.fileChoices, state.attachments, touch, onAction)
                     }
@@ -156,6 +159,7 @@ internal fun AuroraBootstrapComposer(
     modifier: Modifier = Modifier,
 ) {
     var field by remember(bootstrap.id) { mutableStateOf(TextFieldValue("")) }
+    val submitting = bootstrap.operation == SessionBootstrapState.Operation.CreatingSession
     val error = when (bootstrap.error) {
         SessionBootstrapState.Error.ProjectUnavailable -> Res.string.session_project_unavailable
         SessionBootstrapState.Error.StorageFailure -> if (bootstrap.pendingProject == null) {
@@ -170,6 +174,7 @@ internal fun AuroraBootstrapComposer(
         error?.let { AuroraHeaderStorageError(stringResource(it)) }
         AuroraComposer(
             field, { field = it }, Activity.Idle, bootstrap.attachments, touch, maxTextHeight,
+            submitting = submitting,
             onAction = { action ->
                 if (action == AiStudioAction.Send) {
                     onAction(AiStudioAction.SubmitSessionBootstrap(
@@ -181,11 +186,15 @@ internal fun AuroraBootstrapComposer(
             },
             sendBlocked = bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null ||
                 bootstrap.picker.securityModeBusy || bootstrap.picker.securityModeError != null || bootstrap.picker.securityMode?.requiresUserChoice == true,
+            attachmentDraftId = bootstrap.id.takeIf { state.allowsFileImport && bootstrap.operation == null },
             importingAttachment = bootstrap.id in state.importingAttachmentsFor,
             attachmentError = state.attachmentErrorFor == bootstrap.id,
             attach = {
-                if (state.allowsFileImport && bootstrap.operation == null) {
-                    AuroraAttachmentPickerButton(bootstrap.id, bootstrap.id in state.importingAttachmentsFor, touch, onAction)
+                if (state.allowsFileImport) {
+                    AuroraAttachmentPickerButton(
+                        bootstrap.id, bootstrap.id in state.importingAttachmentsFor, touch, onAction,
+                        enabled = bootstrap.operation == null,
+                    )
                 }
             },
         )
@@ -203,14 +212,18 @@ private fun AuroraComposer(
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
     sendBlocked: Boolean = false,
+    submitting: Boolean = false,
+    attachmentDraftId: String?,
     importingAttachment: Boolean = false,
     attachmentError: Boolean = false,
     attach: @Composable () -> Unit,
 ) {
     val working = activity != Activity.Idle
     val stopping = activity == Activity.Stopping
-    val sendEnabled = !sendBlocked && !importingAttachment && (field.text.isNotBlank() || files.isNotEmpty())
+    val sendEnabled = !submitting && !sendBlocked && !importingAttachment && (field.text.isNotBlank() || files.isNotEmpty())
+    val visibleField = if (submitting) TextFieldValue() else field
     val onSend = { onAction(AiStudioAction.Send) }
+    val attachmentInput = rememberAttachmentInput(attachmentDraftId, importingAttachment, onAction)
     var focused by remember { mutableStateOf(false) }
     val surface = if (touch) {
         Modifier.background(AuroraColors.Pearl, RoundedCornerShape(AuroraLayout.ComposerRadius))
@@ -221,18 +234,11 @@ private fun AuroraComposer(
     }
 
     Column(
-        modifier.fillMaxWidth().then(surface),
+        modifier.fillMaxWidth().then(attachmentInput.dropModifier).then(surface),
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
     ) {
-        if (files.isNotEmpty()) AuroraDraftAttachments(files, touch, onAction)
+        if (!submitting && files.isNotEmpty()) AuroraDraftAttachments(files, touch, onAction)
         if (attachmentError) AuroraHeaderStorageError(stringResource(Res.string.chat_attachment_error))
-        if (importingAttachment) {
-            AuroraText(
-                stringResource(Res.string.chat_attachment_loading),
-                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                small = true, color = AuroraColors.Muted,
-            )
-        }
         AuroraComposerActivity(activity)
         Row(
             Modifier.fillMaxWidth()
@@ -242,8 +248,11 @@ private fun AuroraComposer(
         ) {
             attach()
             AuroraComposerField(
-                field, onEdit, onSend, touch, sendEnabled && !working, maxTextHeight,
-                Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
+                visibleField, onEdit, onSend, touch, sendEnabled && !working, maxTextHeight,
+                modifier = Modifier.weight(1f)
+                    .onFocusChanged { focused = it.isFocused }
+                    .then(attachmentInput.pasteModifier),
+                readOnly = submitting,
             )
             AuroraSendControl(working, if (working) !stopping else sendEnabled, touch) {
                 if (working) onAction(AiStudioAction.CancelTurn) else onSend()
@@ -272,13 +281,15 @@ private fun AuroraComposerField(
     canSend: Boolean,
     maxTextHeight: Dp,
     modifier: Modifier = Modifier,
+    readOnly: Boolean = false,
 ) {
     val style = auroraMessageStyle()
     BasicTextField(
         value = field,
         onValueChange = onEdit,
+        readOnly = readOnly,
         modifier = modifier.heightIn(max = if (touch) AuroraLayout.ComposerMaxText else maxTextHeight)
-            .padding(vertical = AuroraLayout.ControlGap)
+            .padding(vertical = if (touch) AuroraLayout.ControlGap else AuroraLayout.ControlGap - AuroraLayout.Stroke)
             .semantics { contentDescription = "Сообщение" }
             .onPreviewKeyEvent { event ->
                 val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
@@ -294,7 +305,7 @@ private fun AuroraComposerField(
                 if (field.text.isEmpty()) {
                     BasicText(
                         if (touch) "Сообщение…" else "Сообщение",
-                        style = style.copy(color = AuroraColors.MessageMuted),
+                        style = style.copy(color = if (touch) AuroraColors.MessageMuted else AuroraColors.ComposerPlaceholder),
                     )
                 }
                 content()

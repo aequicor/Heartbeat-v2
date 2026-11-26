@@ -15,7 +15,7 @@ interface ShellComponentFactory {
 
     fun create(
         componentContext: ComponentContext,
-        initialRoute: AppRoute,
+        initialRoute: AppRoute? = null,
         dispatcher: CoroutineDispatcher,
     ): ShellComponent
 }
@@ -27,7 +27,7 @@ class DefaultShellComponentFactory(
 
     override fun create(
         componentContext: ComponentContext,
-        initialRoute: AppRoute,
+        initialRoute: AppRoute?,
         dispatcher: CoroutineDispatcher,
     ): ShellComponent =
         DefaultShellComponent(

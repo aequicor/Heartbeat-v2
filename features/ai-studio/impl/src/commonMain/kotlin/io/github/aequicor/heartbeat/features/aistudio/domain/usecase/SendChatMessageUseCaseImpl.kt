@@ -256,6 +256,7 @@ private fun ChatTurn.interrupted(
             current.copy(status = status, steps = current.steps.map { it.stop() })
         },
         permission = null,
+        questionnaire = null,
         running = false,
     )
 }
@@ -284,7 +285,7 @@ private fun ChatTurn.updated(replyId: String, progress: ChatEngineTurn): ChatTur
         artifacts = (reply?.artifacts.orEmpty() + progress.artifacts).distinctBy(ChatAttachment::id),
     )
     val delivered = user.delivery == ChatHistoryEntry.Delivery.Sent || progress.accepted ||
-        assistant.hasContent || progress.permission != null
+        assistant.hasContent || progress.permission != null || progress.questionnaire != null
     val running = status == ChatHistoryEntry.ReplyStatus.Working
     val hasReply = reply != null || assistant.hasContent || status == ChatHistoryEntry.ReplyStatus.Failed
     val delivery = when {
@@ -299,6 +300,7 @@ private fun ChatTurn.updated(replyId: String, progress: ChatEngineTurn): ChatTur
         ),
         reply = assistant.takeIf { delivery != ChatHistoryEntry.Delivery.Failed && (running || hasReply) },
         permission = progress.permission,
+        questionnaire = progress.questionnaire,
         running = running,
     )
 }

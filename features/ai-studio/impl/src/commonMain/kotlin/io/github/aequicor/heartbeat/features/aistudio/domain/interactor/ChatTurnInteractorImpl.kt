@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.domain.interactor
 
+import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.chatDirectory
@@ -138,6 +139,16 @@ internal class ChatTurnInteractorImpl(
     @Throwable(CancellationException::class)
     override suspend fun answerPermission(sessionId: String, requestId: String, optionId: String): Result<Unit> = runCatching {
         lock.withLock { active[sessionId]?.engine }?.answerPermission(requestId, optionId)
+        Unit
+    }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
+    override suspend fun answerQuestionnaire(
+        sessionId: String,
+        requestId: String,
+        answer: QuestionnaireAnswer,
+    ): Result<Unit> = runCatching {
+        lock.withLock { active[sessionId]?.engine }?.answerQuestionnaire(requestId, answer)
         Unit
     }.rethrowCancellation()
 

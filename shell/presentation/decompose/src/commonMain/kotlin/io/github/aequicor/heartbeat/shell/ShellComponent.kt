@@ -4,12 +4,15 @@ import com.arkivanov.decompose.router.stack.ChildStack
 import com.arkivanov.decompose.value.Value
 import io.github.aequicor.heartbeat.navigation.api.AppRoute
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
+import io.github.aequicor.heartbeat.navigation.decompose.WorkspaceRegistration
 
 /**
  * Root navigation of the application: the shell owns the workspace stack and the layout, while
  * each feature owns its screens.
  */
 interface ShellComponent {
+
+    val workspaces: List<WorkspaceRegistration>
 
     val childStack: Value<ChildStack<AppRoute, FeatureRoot>>
 

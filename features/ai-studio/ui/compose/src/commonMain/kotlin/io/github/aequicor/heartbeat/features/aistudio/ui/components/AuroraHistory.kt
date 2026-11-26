@@ -353,7 +353,6 @@ internal fun AuroraUserBubble(
             start = horizontalInset, end = horizontalInset, top = top,
         ),
         bottomPadding = bottom,
-        preferStatusWithTime = desktopDeliveryError,
         status = { AuroraDeliveryStatus(user, touch) },
     ) { onTextLayout ->
         Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {

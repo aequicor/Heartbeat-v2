@@ -238,7 +238,7 @@ internal fun ExtendedKit(colors: HbColors) {
         ExtendedKitMenu(colors)
         HbSettingsRow(
             title = "Автозапуск",
-            description = "Запускать Heartbeat при входе в систему",
+            description = "Запускать Heartbeat Lab при входе в систему",
             control = { controlModifier ->
                 HbSwitch(label = "", checked = true, onCheckedChange = {}, modifier = controlModifier)
             },

@@ -19,6 +19,7 @@ internal fun AuroraAttachmentPickerButton(
     importing: Boolean,
     touch: Boolean,
     onAction: (AiStudioAction) -> Unit,
+    enabled: Boolean = true,
 ) {
     var target by rememberSaveable { mutableStateOf<String?>(null) }
     val open = rememberAttachmentFileLauncher(
@@ -34,8 +35,14 @@ internal fun AuroraAttachmentPickerButton(
             target = null
         },
     )
-    AuroraAttachButton(touch, onClick = {
-        target = draftId
-        open()
-    }, enabled = !importing && target == null, demo = false)
+    AuroraAttachButton(
+        touch,
+        onClick = {
+            target = draftId
+            open()
+        },
+        enabled = enabled && target == null,
+        demo = false,
+        importing = importing,
+    )
 }

@@ -33,6 +33,7 @@ internal class BootstrapEnginePicker(
     private val screen: MutableStateFlow<AiStudioScreenState>,
     private val enqueue: (suspend () -> Unit) -> Unit,
     private val onConfigurationApplied: (String, Selection) -> Unit,
+    private val configurationLabels: (Selection) -> Selection,
 ) {
 
     private var lifetime: Job? = null
@@ -50,13 +51,12 @@ internal class BootstrapEnginePicker(
 
     val isApplyingToChat: Boolean get() = existingChat != null && applyAttempt != null
 
-    fun start() {
-        val bootstrap = screen.value.sessionBootstrap ?: return
+    fun start(bootstrap: AiStudioScreenState.SessionBootstrapState, onReady: (ChatEnginePickerState) -> Unit) {
         val project = when (val target = bootstrap.project) {
             Project.Ungrouped -> ProjectId.Ungrouped
             is Project.Existing -> ProjectId.parse(target.id)
         }
-        startDraft { use -> interactor.withDraft(project, use) }
+        startDraft(onReady = onReady) { use -> interactor.withDraft(project, use) }
     }
 
     fun startExisting(chatId: String, configuration: Selection, openAt: Step) {
@@ -67,6 +67,7 @@ internal class BootstrapEnginePicker(
         chatId: String? = null,
         configuration: Selection? = null,
         openAt: Step? = null,
+        onReady: ((ChatEnginePickerState) -> Unit)? = null,
         withDraft: suspend (suspend (ChatCreationDraft) -> Unit) -> Result<Unit>,
     ) {
         close()
@@ -76,14 +77,15 @@ internal class BootstrapEnginePicker(
         step = openAt
         val commands = Channel<Job>(Channel.UNLIMITED)
         queue = commands
-        publish(ChatEnginePickerState(confirmed = configuration, step = openAt, loading = openAt != null))
+        if (onReady == null) publish(ChatEnginePickerState(confirmed = configuration, step = openAt, loading = openAt != null))
         lifetime = scope.launch {
             val opened = withContext(defaultDispatcher) {
                 withDraft { active ->
                     enqueue {
                         if (queue === commands) {
                             draft = active
-                            if (openAt != null) handle(EnginePicker.Open(openAt)) else render(active.state.value)
+                            if (onReady != null) onReady(pickerState(active.state.value))
+                            else if (openAt != null) handle(EnginePicker.Open(openAt))
                         }
                     }
                     coroutineScope {
@@ -97,9 +99,10 @@ internal class BootstrapEnginePicker(
                 }
             }
             if (opened.isFailure) enqueue {
-                if (queue === commands && existingChat != null) {
+                if (queue === commands) {
                     draft = null
-                    publish(ChatEnginePickerState(confirmed = existingConfiguration, step = step, failure = Failure.LoadOptions))
+                    val failed = ChatEnginePickerState(confirmed = existingConfiguration, step = step, failure = Failure.LoadOptions)
+                    if (onReady != null) onReady(failed) else publish(failed)
                 }
             }
         }
@@ -252,6 +255,8 @@ internal class BootstrapEnginePicker(
         return withContext(defaultDispatcher) { draft?.create(prompt, firstAttachmentName) }
     }
 
+    fun confirmedConfiguration(): Selection? = draft?.state?.value?.confirmed?.display()?.let(configurationLabels)
+
     private fun finishApply(attempt: Any, target: ChatCreationDraft, result: Result<Unit>) {
         if (applyAttempt !== attempt || draft !== target) return
         applyAttempt = null
@@ -272,6 +277,10 @@ internal class BootstrapEnginePicker(
 
     private fun render(snapshot: ChatDraftState) {
         if (screen.value.sessionBootstrap == null && existingChat == null) return
+        publish(pickerState(snapshot))
+    }
+
+    private fun pickerState(snapshot: ChatDraftState): ChatEnginePickerState {
         val target = optionLoad?.selection?.engine?.id
         if (target != null && snapshot.engines.none { it.id == target }) {
             optionLoad = null
@@ -299,9 +308,9 @@ internal class BootstrapEnginePicker(
             failedApply || showingModelsDuringReasoningLoad -> null
             else -> Failure.LoadOptions
         }
-        publish(ChatEnginePickerState(
+        return ChatEnginePickerState(
             engines = state.engines.map { it.display() },
-            confirmed = existingConfiguration ?: state.confirmed?.display(), step = displayedStep,
+            confirmed = existingConfiguration ?: state.confirmed?.display()?.let(configurationLabels), step = displayedStep,
             engine = editing?.engine?.display(), models = state.options?.model?.choices?.map { it.display() },
             model = editing?.model?.display(), levels = state.options?.reasoning?.choices?.map { it.display() },
             level = editing?.level?.display(),
@@ -309,7 +318,7 @@ internal class BootstrapEnginePicker(
                 (displayedStep != null && displayedStep != Step.Engine && editing == null && !state.failed),
             failure = failure, canApply = !applying && state.canConfirm,
             securityMode = state.securityMode?.display(), securityModeBusy = state.busy, securityModeError = state.securityModeError,
-        ))
+        )
     }
 
     private fun publish(picker: ChatEnginePickerState) {

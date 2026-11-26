@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.items
@@ -56,7 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.components.HbAppName
-import io.github.aequicor.heartbeat.designsystem.components.HbBrandMark
+import io.github.aequicor.heartbeat.designsystem.components.HbBrandLogo
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
@@ -106,10 +107,8 @@ internal fun AuroraChats(
                     HbIcon(HbIconGlyph.Close, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
                 }
             }
-            HbBrandMark(
-                Modifier.padding(start = AuroraLayout.ControlGap, end = AuroraLayout.Space).size(AuroraLayout.Glyph),
-            )
-            AuroraText(HbAppName, Modifier.weight(1f))
+            HbBrandLogo(Modifier.padding(start = AuroraLayout.ControlGap))
+            Spacer(Modifier.weight(1f))
             AuroraControl(
                 onOpenSettings,
                 label = stringResource(Res.string.settings),

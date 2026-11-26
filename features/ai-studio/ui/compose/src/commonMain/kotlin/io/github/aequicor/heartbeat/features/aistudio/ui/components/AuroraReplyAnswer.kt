@@ -156,7 +156,6 @@ private fun AuroraReplyContent(
         textSetsWidth = simple && textPresent && !reply.hasFiles && liveText == null,
         modifier = padding,
         bottomPadding = if (compact) AuroraLayout.DesktopCompactMessageBottomInset else verticalInset,
-        preferStatusWithTime = !working,
         status = { AuroraReplyStatus(reply, touch) },
     ) { onTextLayout ->
         Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
@@ -235,7 +234,7 @@ internal fun AuroraWorkActivityDots(modifier: Modifier = Modifier) {
 }
 
 private val Reply.inlineAnswerTime: Boolean
-    get() = historyContent?.plain != false && status == ReplyStatus.Completed && !hasFiles && text.isNotEmpty()
+    get() = status == ReplyStatus.Completed && !hasFiles && text.isNotEmpty()
 
 private val Reply.hasFiles: Boolean get() = result != null || artifacts.isNotEmpty()
 

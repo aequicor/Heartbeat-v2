@@ -7,6 +7,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfigura
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatDraftState
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPrompt
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.PreparedChatSession
@@ -18,9 +19,6 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatDraftStat
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions.Choice
 import io.github.aequicor.heartbeat.features.aistudio.domain.repository.ProjectsSessionsRepository
 import io.github.aequicor.heartbeat.features.aistudio.domain.util.rethrowCancellation
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.NonCancellable
@@ -53,16 +51,17 @@ internal class ChatCreationDraftImpl(
         set(value) { acceptedSession.value = value }
 
     private var defaults: ChatConfiguration? = null
-    private var restoreDefaults = applyToChat == null
-    private val restoring = MutableStateFlow<Job?>(null)
+    private var useSavedConfiguration = applyToChat == null
     private var retryOperation: (suspend () -> Unit)? = null
     private var created = false
 
+    suspend fun initialize() {
+        if (applyToChat != null) return
+        defaults = runCatching { sessions.lastConfiguration() }.rethrowCancellation().getOrNull()
+        updateCatalog(engines.engines.first())
+    }
+
     suspend fun observeCatalog(): Unit = coroutineScope {
-        val saved = if (applyToChat == null) {
-            runCatching { sessions.lastConfiguration() }.rethrowCancellation().getOrNull()
-        } else null
-        defaults = saved
         if (applyToChat == null) launch {
             acceptedSession.collectLatest { session ->
                 session?.settingsUpdates?.collect {
@@ -75,32 +74,32 @@ internal class ChatCreationDraftImpl(
             }
         }
         engines.engines.collect { choices ->
-            mutex.withLock {
-                current.value = current.value.copy(engines = choices)
-                val selected = current.value.confirmed
-                if (applyToChat == null && selected != null && choices.none { it.id == selected.engine.id }) {
-                    release(accepted)
-                    accepted = null
-                    current.value = current.value.copy(confirmed = null, securityMode = null, securityModeError = null)
-                }
-                val editing = current.value.editing
-                if (editing != null && choices.none { it.id == editing.engine.id }) discard()
-                val previous = choices.firstOrNull { it.id == saved?.engineId }
-                if (previous != null && restoreDefaults && !created) {
-                    restoreDefaults = false
-                    if (saved?.securityMode != null) {
-                        val selection = Selection(previous, saved.model?.let { Choice(it, it) }, saved.reasoning?.let { Choice(it, it) })
-                        current.value = current.value.copy(confirmed = selection, securityMode = saved.securityMode)
-                        return@withLock
-                    }
-                    val task = launch(start = CoroutineStart.LAZY) {
-                        mutex.withLock { perform { open(previous, saved, restore = true) } }
-                    }
-                    restoring.value = task
-                    task.start()
-                }
-            }
+            mutex.withLock { updateCatalog(choices) }
         }
+    }
+
+    private suspend fun updateCatalog(choices: List<Choice>) {
+        val saved = defaults
+        val previous = choices.firstOrNull { it.id == saved?.engineId }
+        if (previous != null && saved != null && useSavedConfiguration) {
+            useSavedConfiguration = false
+            val selection = Selection(
+                previous,
+                saved.model?.let { Choice(it, it) },
+                saved.reasoning?.let { Choice(it, it) },
+            )
+            current.value = current.value.copy(engines = choices, confirmed = selection, securityMode = saved.securityMode)
+            return
+        }
+        current.value = current.value.copy(engines = choices)
+        val selected = current.value.confirmed
+        if (applyToChat == null && selected != null && choices.none { it.id == selected.engine.id }) {
+            release(accepted)
+            accepted = null
+            current.value = current.value.copy(confirmed = null, securityMode = null, securityModeError = null)
+        }
+        val editing = current.value.editing
+        if (editing != null && choices.none { it.id == editing.engine.id }) discard()
     }
 
     override suspend fun chooseEngine(id: String) = command {
@@ -260,15 +259,11 @@ internal class ChatCreationDraftImpl(
         }
     }
 
-    private suspend fun command(operation: suspend () -> Unit): Result<Unit> {
-        restoring.value?.cancelAndJoin()
-        return mutex.withLock {
-            restoreDefaults = false
-            // A catalog emission may have scheduled restoration just before this command acquired the lock.
-            restoring.value?.cancel()
+    private suspend fun command(operation: suspend () -> Unit): Result<Unit> =
+        mutex.withLock {
+            useSavedConfiguration = false
             perform(operation)
         }
-    }
 
     private suspend fun perform(operation: suspend () -> Unit): Result<Unit> {
         retryOperation = null

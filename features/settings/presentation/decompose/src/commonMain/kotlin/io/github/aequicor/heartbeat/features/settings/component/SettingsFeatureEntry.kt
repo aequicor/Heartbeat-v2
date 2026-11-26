@@ -2,12 +2,14 @@ package io.github.aequicor.heartbeat.features.settings.component
 
 import com.arkivanov.decompose.ComponentContext
 import dev.zacsweers.metro.ContributesIntoSet
+import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.settings.api.SettingsRoutes
 import io.github.aequicor.heartbeat.navigation.api.AppRoute
 import io.github.aequicor.heartbeat.navigation.decompose.DecomposeFeatureEntry
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureHost
 import io.github.aequicor.heartbeat.navigation.decompose.FeatureRoot
+import io.github.aequicor.heartbeat.navigation.decompose.WorkspaceRegistration
 import kotlinx.coroutines.CoroutineDispatcher
 
 /** Registers the settings shell in the shell feature registry. */
@@ -17,6 +19,14 @@ class SettingsFeatureEntry(
 ) : DecomposeFeatureEntry {
 
     override val featureId: String = SettingsRoutes.FEATURE_ID
+
+    override val workspace = WorkspaceRegistration(
+        route = SettingsRoutes.main(),
+        label = "Настройки",
+        icon = HbIconGlyph.SettingsWorkspace,
+        priority = 100,
+        inFooter = true,
+    )
 
     override fun create(
         route: AppRoute,

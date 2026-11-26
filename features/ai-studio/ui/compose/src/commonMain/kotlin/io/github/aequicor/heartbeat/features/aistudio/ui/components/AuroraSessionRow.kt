@@ -1,5 +1,8 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -127,23 +130,32 @@ private fun AuroraChatRow(chat: Chat, selected: Boolean, touch: Boolean, onActio
 }
 
 @Composable
-internal fun AuroraSessionActions(row: NavigationRow, archiveVisible: Boolean, onAction: (AiStudioAction) -> Unit) {
+internal fun AuroraSessionActions(
+    row: NavigationRow,
+    archiveVisible: Boolean,
+    onAction: (AiStudioAction) -> Unit,
+    rowHeight: Dp,
+) {
     if (row.kind != NavigationKind.Chat) return
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(
+        Modifier.width(AuroraLayout.NavigationSearchTarget).height(rowHeight),
+        contentAlignment = Alignment.Center,
+    ) {
         if (archiveVisible) {
             SidebarAction(
                 stringResource(Res.string.archive_named_session, row.displayTitle()),
                 { onAction(AiStudioAction.ArchiveChat(row.id)) },
-                Modifier.width(AuroraLayout.DesktopTarget),
+                Modifier.fillMaxWidth(),
+                rowHeight = rowHeight,
             ) {
                 Image(
                     painterResource(Res.drawable.aurora_archive_chat_icon), null, Modifier.size(AuroraLayout.Glyph),
                     colorFilter = ColorFilter.tint(AuroraColors.NavigationIcon),
                 )
             }
+        } else {
+            row.status?.let { SidebarStatus(it) }
         }
-        val status = row.status
-        if (status != null) SidebarStatus(status, Modifier.width(AuroraLayout.DesktopTarget))
     }
 }
 

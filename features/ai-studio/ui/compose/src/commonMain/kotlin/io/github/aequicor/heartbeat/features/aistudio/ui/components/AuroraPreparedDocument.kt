@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -31,6 +30,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 private const val SelectionBlockAnnotation = "AuroraSelectionBlock"
+internal const val InlineCodeAnnotation = "AuroraInlineCode"
 
 @Composable
 @ReadOnlyComposable
@@ -182,9 +182,11 @@ private fun AnnotatedString.Builder.appendReplySpans(spans: List<ReplyInline>, m
         val url = span.url?.takeIf { candidate ->
             !candidate.any(Char::isISOControl) && safeLinkPrefixes.any { candidate.startsWith(it, ignoreCase = true) }
         }
+        val start = length
         withStyle(span.textStyle(monospace)) {
             if (url == null) append(span.text) else withLink(linkForSpan(url, span.strike)) { append(span.text) }
         }
+        if (span.code && start < length) addStringAnnotation(InlineCodeAnnotation, "", start, length)
     }
 }
 
@@ -192,7 +194,6 @@ private fun ReplyInline.textStyle(monospace: FontFamily) = SpanStyle(
     fontWeight = if (bold) FontWeight.SemiBold else null,
     fontStyle = if (italic) FontStyle.Italic else null,
     fontFamily = if (code) monospace else null,
-    background = if (code) AuroraColors.WorkHover else Color.Unspecified,
     textDecoration = if (strike) TextDecoration.LineThrough else null,
 )
 

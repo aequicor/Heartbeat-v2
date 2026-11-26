@@ -34,6 +34,9 @@ import io.github.aequicor.heartbeat.designsystem.resources.ic_search
 import io.github.aequicor.heartbeat.designsystem.resources.ic_send
 import io.github.aequicor.heartbeat.designsystem.resources.ic_stop
 import io.github.aequicor.heartbeat.designsystem.resources.ic_terminal
+import io.github.aequicor.heartbeat.designsystem.resources.ic_workspace_chat
+import io.github.aequicor.heartbeat.designsystem.resources.ic_workspace_settings
+import io.github.aequicor.heartbeat.designsystem.resources.ic_workspace_skills
 import io.github.aequicor.heartbeat.designsystem.theme.HbSizes
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import org.jetbrains.compose.resources.DrawableResource
@@ -82,6 +85,9 @@ private val glyphAssets: Map<HbIconGlyph, DrawableResource> = mapOf(
     HbIconGlyph.Thinking to Res.drawable.ic_lucide_brain,
     HbIconGlyph.Branch to Res.drawable.ic_lucide_git_branch,
     HbIconGlyph.ArrowUp to Res.drawable.ic_lucide_arrow_up,
+    HbIconGlyph.SkillsWorkspace to Res.drawable.ic_workspace_skills,
+    HbIconGlyph.ChatWorkspace to Res.drawable.ic_workspace_chat,
+    HbIconGlyph.SettingsWorkspace to Res.drawable.ic_workspace_settings,
     HbIconGlyph.Settings to Res.drawable.ic_lucide_settings,
     HbIconGlyph.Copy to Res.drawable.ic_lucide_copy,
     HbIconGlyph.Pencil to Res.drawable.ic_lucide_pencil,

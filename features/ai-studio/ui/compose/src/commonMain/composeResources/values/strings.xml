@@ -9,7 +9,7 @@
     <string name="project_name_already_exists">Проект «%1$s» уже существует.</string>
     <string name="projects_sessions">Диалоги</string>
     <string name="ungrouped_sessions">Без проекта</string>
-    <string name="more_sessions">Ещё диалоги</string>
+    <string name="more_sessions">Показать ещё</string>
     <string name="more_projects">Ещё проекты</string>
     <string name="navigation_projects_failed">Не удалось загрузить проекты</string>
     <string name="navigation_page_failed">Ошибка загрузки</string>

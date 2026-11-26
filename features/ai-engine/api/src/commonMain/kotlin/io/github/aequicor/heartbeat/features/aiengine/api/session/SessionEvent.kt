@@ -15,6 +15,7 @@ public sealed interface SessionEvent {
     }
     public data object Cancel : SessionEvent
     public data class AnswerPermission(val requestId: String, val optionId: String) : SessionEvent
+    public data class AnswerQuestionnaire(val requestId: String, val answer: QuestionnaireAnswer) : SessionEvent
 
     /** Loads an older partition using the current window. With no previous cursor, it does nothing. */
     public data object LoadPreviousPartition : SessionEvent

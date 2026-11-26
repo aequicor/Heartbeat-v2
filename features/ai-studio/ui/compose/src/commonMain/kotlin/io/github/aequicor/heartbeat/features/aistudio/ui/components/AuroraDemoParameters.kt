@@ -19,8 +19,6 @@ internal object AuroraDemoParameters {
         else -> value
     }
 
-    fun effortSummary(value: String): String = "Рассуждение: ${if (value in efforts) value.lowercase() else value}"
-
     fun effortOptions(selected: String, onAction: (AiStudioAction) -> Unit): List<HbMenuEntry> =
         efforts.map { effort ->
             HbMenuAction(

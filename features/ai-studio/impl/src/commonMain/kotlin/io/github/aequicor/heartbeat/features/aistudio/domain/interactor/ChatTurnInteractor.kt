@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.domain.interactor
 
+import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
@@ -36,4 +37,7 @@ internal interface ChatTurnInteractor {
 
     @Throwable(CancellationException::class)
     suspend fun answerPermission(sessionId: String, requestId: String, optionId: String): Result<Unit>
+
+    @Throwable(CancellationException::class)
+    suspend fun answerQuestionnaire(sessionId: String, requestId: String, answer: QuestionnaireAnswer): Result<Unit>
 }

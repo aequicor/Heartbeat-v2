@@ -16,6 +16,7 @@ internal fun AuroraWorkspace.withProjectsSessions(
         else row.copy(
             title = if (navigation.query.isNotBlank()) row.title else chat.title,
             status = chat.navigationStatus,
+            selected = row.id == screen.chat?.id || row.id == screen.sessionBootstrap?.id,
         )
     }
     return next.copy(navigation = rows)

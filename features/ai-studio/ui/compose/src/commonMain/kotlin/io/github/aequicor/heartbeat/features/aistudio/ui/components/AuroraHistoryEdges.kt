@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
@@ -31,7 +32,14 @@ internal fun Modifier.auroraHistoryEdges(
     bottomHeightPx: Int,
     readingWidth: Dp,
 ): Modifier {
+    val backdrop = LocalAuroraFloatingBackdrop.current
     val history = rememberGraphicsLayer()
+    DisposableEffect(backdrop, history) {
+        backdrop?.history = history
+        onDispose {
+            if (backdrop?.history === history) backdrop.history = null
+        }
+    }
     val topLayer = rememberGraphicsLayer()
     val bottomLayer = if (bottomHeightPx > 0) rememberGraphicsLayer() else null
     return drawWithCache {

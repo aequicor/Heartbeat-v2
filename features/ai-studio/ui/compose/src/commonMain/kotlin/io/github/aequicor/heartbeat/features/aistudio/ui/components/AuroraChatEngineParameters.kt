@@ -6,19 +6,26 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -37,6 +44,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Selection
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Step
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
 internal fun AuroraChatEngineParameters(
@@ -47,50 +55,96 @@ internal fun AuroraChatEngineParameters(
     modifier: Modifier = Modifier,
 ) {
     val current = picker?.confirmed ?: configuration
+    val step = picker?.step
     var opener by remember { mutableStateOf<FocusRequester?>(null) }
-    LaunchedEffect(picker?.step) {
-        if (picker?.step == null) {
+    var panelLeft by remember { mutableIntStateOf(0) }
+    var visiblePanel by remember { mutableStateOf(IntRect.Zero) }
+    val stepBounds = remember { mutableStateMapOf<Step, IntRect>() }
+    LaunchedEffect(step) {
+        if (step == null) {
             opener?.requestFocus()
             opener = null
         }
     }
-    Row(
-        modifier.then(if (touch) Modifier else Modifier.horizontalScroll(rememberScrollState()))
-            .auroraFloatingHeaderSurface(Colors.Pearl, Colors.HeaderOutline)
-            .padding(horizontal = Layout.Space),
-        verticalAlignment = Alignment.CenterVertically,
+    val controls = if (touch) {
+        Modifier.padding(horizontal = Layout.Space)
+    } else {
+        Modifier.clip(RoundedCornerShape(Layout.FloatingHeaderRadius)).horizontalScroll(rememberScrollState())
+    }
+    val edgeInset = if (touch) Dp.Hairline else Layout.Space
+    Box(
+        modifier.onGloballyPositioned {
+            panelLeft = it.positionInWindow().x.roundToInt()
+            visiblePanel = it.boundsInWindow().roundToIntRect()
+        },
+        propagateMinConstraints = true,
     ) {
-        for (step in Step.entries) key(step) {
-            val value = when (step) {
-                Step.Engine -> current?.engine?.name
-                Step.Model -> current?.model?.name
-                Step.Reasoning -> current?.level?.name
-            }
-            val label = value ?: step.label
-            if (picker == null && configuration == null) {
-                if (value != null) AuroraHeaderText(value, Modifier.padding(Layout.Space))
-            } else {
-                val focus = remember { FocusRequester() }
-                val anchor = remember { BringIntoViewRequester() }
-                val active = picker?.step == step
-                Box(Modifier.bringIntoViewRequester(anchor)) {
-                    AuroraHeaderButton(
-                        "${step.label}, $label", {
-                            opener = focus
-                            onAction(EnginePicker.Open(step))
-                        }, Modifier.focusRequester(focus),
-                        height = if (touch) Layout.TouchTarget else Layout.DesktopTarget,
-                        contentPadding = PaddingValues(horizontal = Layout.Space),
+        Row(
+            Modifier.auroraFloatingHeaderSurface(Colors.FloatingHeaderSurface, Colors.FloatingHeaderRim).then(controls),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (parameter in Step.entries) key(parameter) {
+                val value = when (parameter) {
+                    Step.Engine -> current?.engine?.name
+                    Step.Model -> current?.model?.name
+                    Step.Reasoning -> current?.level?.name
+                }
+                val label = value ?: parameter.label
+                if (parameter != Step.Engine && !touch) {
+                    Box(Modifier.size(Layout.Stroke, Layout.HeaderRuleHeight).background(Colors.HeaderMetricTrack))
+                }
+                if (picker == null && configuration == null) {
+                    if (value != null) AuroraHeaderText(value, Modifier.padding(Layout.Space))
+                } else {
+                    val focus = remember { FocusRequester() }
+                    val anchor = remember { BringIntoViewRequester() }
+                    val active = step == parameter
+                    Box(
+                        Modifier.bringIntoViewRequester(anchor).onGloballyPositioned {
+                            stepBounds[parameter] = it.boundsInWindow(clipBounds = false).roundToIntRect()
+                        },
                     ) {
-                        AuroraHeaderText(label, Modifier.widthIn(max = Layout.ParameterMaxWidth),
-                            color = if (active) Colors.Primary else Colors.Ink)
-                        HbIcon(HbIconGlyph.ChevronDown, tint = Colors.Muted, size = Layout.SmallGlyph)
-                    }
-                    if (active && picker != null) {
-                        LaunchedEffect(Unit) { anchor.bringIntoView() }
-                        EngineMenu(picker, step, touch, onAction)
+                        AuroraHeaderButton(
+                            "${parameter.label}, $label", {
+                                opener = focus
+                                onAction(EnginePicker.Open(parameter))
+                            }, Modifier.focusRequester(focus),
+                            height = if (touch) Layout.TouchTarget else Layout.DesktopTarget,
+                            radius = if (touch) Layout.SmallRadius else Dp.Hairline,
+                            contentPadding = PaddingValues(
+                                start = Layout.Space + if (parameter == Step.Engine) edgeInset else Dp.Hairline,
+                                end = Layout.Space + if (parameter == Step.Reasoning) edgeInset else Dp.Hairline,
+                            ),
+                        ) {
+                            AuroraHeaderText(label, Modifier.widthIn(max = Layout.ParameterMaxWidth),
+                                color = if (active) Colors.Primary else Colors.Ink)
+                            Spacer(Modifier.width(Layout.ControlGap))
+                            HbIcon(HbIconGlyph.ChevronDown, tint = Colors.Muted, size = Layout.SmallGlyph)
+                        }
+                        if (active) LaunchedEffect(Unit) { anchor.bringIntoView() }
                     }
                 }
+            }
+        }
+        val activeBounds = step?.let(stepBounds::get)
+        if (picker != null && step != null && activeBounds != null && visiblePanel.width > 0) {
+            val density = LocalDensity.current
+            val gap = with(density) { Layout.SmallGap.roundToPx() }
+            val windowHeight = LocalWindowInfo.current.containerSize.height
+            val menuWidth = with(density) { visiblePanel.width.toDp().coerceAtMost(Layout.EngineMenuWidth) }
+            val maxHeight = if (windowHeight > 0) {
+                val room = windowHeight - visiblePanel.bottom - gap
+                with(density) { room.coerceAtLeast(0).toDp().coerceAtMost(Layout.EngineMenuMaxHeight) }
+            } else Layout.EngineMenuMaxHeight
+            val position = remember(panelLeft, visiblePanel, activeBounds, gap) {
+                EngineMenuPosition(
+                    panel = visiblePanel.translate(-panelLeft, 0),
+                    step = activeBounds.translate(-panelLeft, 0),
+                    gap = gap,
+                )
+            }
+            if (maxHeight > Dp.Hairline) {
+                key(step) { EngineMenu(picker, step, touch, menuWidth, maxHeight, position, onAction) }
             }
         }
     }
@@ -102,14 +156,26 @@ private val Step.label: String get() = when (this) {
     Step.Reasoning -> "Уровень рассуждения"
 }
 
-private object EngineMenuPosition : PopupPositionProvider {
+private class EngineMenuPosition(
+    private val panel: IntRect,
+    private val step: IntRect,
+    private val gap: Int,
+) : PopupPositionProvider {
 
     override fun calculatePosition(
         anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize,
-    ): IntOffset = IntOffset(
-        (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-        anchorBounds.bottom.coerceAtMost((windowSize.height - popupContentSize.height).coerceAtLeast(0)),
-    )
+    ): IntOffset {
+        // Relative offsets use the same panel origin even if Popup adjusts it for window insets.
+        val origin = anchorBounds.left
+        val start = if (layoutDirection == LayoutDirection.Ltr) origin + step.left
+        else origin + step.right - popupContentSize.width
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val maxY = (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+        val minLeft = (origin + panel.left).coerceIn(0, maxX)
+        val maxLeft = (origin + panel.right - popupContentSize.width).coerceIn(minLeft, maxX)
+        val y = anchorBounds.bottom + gap
+        return IntOffset(start.coerceIn(minLeft, maxLeft), y.coerceIn(0, maxY))
+    }
 }
 
 @Composable
@@ -117,10 +183,13 @@ private fun EngineMenu(
     state: ChatEnginePickerState,
     step: Step,
     touch: Boolean,
+    width: Dp,
+    maxHeight: Dp,
+    position: PopupPositionProvider,
     onAction: (EnginePicker) -> Unit,
 ) {
     Popup(
-        popupPositionProvider = EngineMenuPosition,
+        popupPositionProvider = position,
         onDismissRequest = { onAction(EnginePicker.Dismiss) },
         properties = PopupProperties(focusable = true, dismissOnBackPress = false),
     ) {
@@ -129,9 +198,11 @@ private fun EngineMenu(
         val back = remember { FocusRequester() }
         LaunchedEffect(step) { back.requestFocus() }
         val target = if (touch) Layout.TouchTarget else Layout.EngineMenuRow
+        val fill = if (LocalAuroraFloatingBackdrop.current == null) Colors.Pearl else Colors.FloatingHeaderSurface
         Column(
-            Modifier.width(Layout.EngineMenuWidth).heightIn(max = Layout.EngineMenuMaxHeight)
-                .auroraFloatingHeaderSurface(Colors.Pearl, Colors.HeaderOutline)
+            Modifier.width(width).heightIn(max = maxHeight)
+                .auroraFloatingHeaderSurface(fill, Colors.FloatingHeaderRim)
+                .clip(RoundedCornerShape(Layout.FloatingHeaderRadius))
                 .onPreviewKeyEvent {
                     if (it.type != KeyEventType.KeyDown) false
                     else when (it.key) {
@@ -164,7 +235,7 @@ private fun EngineMenu(
                 )
             }
             EngineMenuDivider(Layout.ContentInset)
-            Column(Modifier.fillMaxWidth().padding(horizontal = Layout.SmallGap).verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 val failure = state.failure
                 when {
                     failure != null -> {
@@ -199,7 +270,7 @@ private fun EngineMenu(
                             val hint = if (levels == null) "Модель не поддерживает выбор уровня рассуждения"
                             else "Нет доступных уровней рассуждения"
                             MenuHint(hint)
-                            EngineMenuDivider(Layout.Space)
+                            EngineMenuDivider(Layout.Space + Layout.SmallGap)
                             ApplyEngineConfiguration(touch, state.canApply) { onAction(EnginePicker.Apply) }
                         } else {
                             MenuChoices(levels, state.level, target) { onAction(EnginePicker.Reasoning(it)) }
@@ -216,9 +287,10 @@ private fun MenuChoices(choices: List<Choice>, selected: Choice?, height: Dp, on
     for (choice in choices) key(choice.id) {
         val checked = selected?.id == choice.id
         AuroraHeaderButton(choice.name, { onSelect(choice.id) }, Modifier.fillMaxWidth(), height = height,
+            radius = Dp.Hairline,
             fill = if (checked) Colors.Current else Color.Transparent,
             hoverFill = if (checked) Colors.Current else Colors.NavigationHover,
-            contentPadding = PaddingValues(horizontal = Layout.ContentInset)) {
+            contentPadding = PaddingValues(horizontal = Layout.ContentInset + Layout.SmallGap)) {
             AuroraHeaderText(choice.name, Modifier.weight(1f))
             if (checked) HbIcon(HbIconGlyph.Check, tint = Colors.Green, size = Layout.SmallGlyph)
         }
@@ -233,7 +305,7 @@ private fun EngineMenuDivider(inset: Dp) {
 @Composable
 private fun ApplyEngineConfiguration(touch: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().padding(horizontal = Layout.Space, vertical = Layout.ChromeInset),
+        Modifier.fillMaxWidth().padding(horizontal = Layout.Space + Layout.SmallGap, vertical = Layout.ChromeInset),
         contentAlignment = Alignment.CenterEnd,
     ) {
         AuroraHeaderButton(
@@ -257,7 +329,8 @@ private fun ApplyEngineConfiguration(touch: Boolean, enabled: Boolean, onClick: 
 
 @Composable
 private fun MenuAction(label: String, height: Dp, enabled: Boolean = true, onClick: () -> Unit) {
-    AuroraHeaderButton(label, onClick, Modifier.fillMaxWidth(), height = height, enabled = enabled,
+    AuroraHeaderButton(
+        label, onClick, Modifier.fillMaxWidth().padding(horizontal = Layout.SmallGap), height = height, enabled = enabled,
         contentPadding = PaddingValues(horizontal = Layout.ContentInset)) {
         AuroraHeaderText(label, color = if (enabled) Colors.Primary else Colors.Muted)
     }
@@ -265,7 +338,11 @@ private fun MenuAction(label: String, height: Dp, enabled: Boolean = true, onCli
 
 @Composable
 private fun MenuHint(text: String, color: Color = Colors.Muted) {
-    BasicText(text, Modifier.padding(Layout.ContentInset), style = HbTypography.Label.copy(color = color))
+    BasicText(
+        text,
+        Modifier.padding(horizontal = Layout.ContentInset + Layout.SmallGap, vertical = Layout.ContentInset),
+        style = HbTypography.Label.copy(color = color),
+    )
 }
 
 @Composable
@@ -273,7 +350,7 @@ private fun LoadingHint(step: Step) {
     var delayed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { delay(400); delayed = true }
     MenuHint(if (step == Step.Model) "Загружаем модели…" else "Обновляем настройки…")
-    if (delayed) HbProgress(Modifier.padding(horizontal = Layout.ContentInset, vertical = Layout.Space))
+    if (delayed) HbProgress(Modifier.padding(horizontal = Layout.ContentInset + Layout.SmallGap, vertical = Layout.Space))
 }
 
 @Composable

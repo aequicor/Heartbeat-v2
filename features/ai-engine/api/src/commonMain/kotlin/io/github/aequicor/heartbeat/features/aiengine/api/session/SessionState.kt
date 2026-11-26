@@ -6,4 +6,5 @@ public data class SessionState(
     val settings: SessionSettings = SessionSettings(),
     val turn: SessionTurn? = null,
     val contextWindowUsage: ContextWindowUsage? = null,
+    val questionnaires: List<SessionQuestionnaire> = emptyList(),
 )

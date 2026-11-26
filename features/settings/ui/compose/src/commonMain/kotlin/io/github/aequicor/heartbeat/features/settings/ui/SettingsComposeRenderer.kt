@@ -17,6 +17,19 @@ class SettingsComposeRenderer(
 
     override val featureId: String = SettingsRoutes.FEATURE_ID
 
+    override suspend fun requestLeave(component: FeatureRoot, leave: () -> Unit) {
+        require(component is SettingsComponent)
+        val page = component.selectedPageId.value
+        val provider = providers.firstOrNull { page?.value in it.pageIds }
+        if (page == null || provider == null) {
+            leave()
+        } else {
+            provider.requestLeave(page.value, component) {
+                if (component.selectedPageId.value == page) leave()
+            }
+        }
+    }
+
     @Composable
     override fun Render(component: FeatureRoot) {
         require(component is SettingsComponent) {

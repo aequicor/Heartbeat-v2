@@ -17,15 +17,15 @@ internal suspend fun submitSessionBootstrap(
     val bootstrap = screen.value.sessionBootstrap ?: return
     val selection = bootstrap.picker.confirmed ?: return
     if (bootstrap.project != action.project || bootstrap.picker.step != null || picker == null) return
-    if (bootstrap.id in screen.value.importingAttachmentsFor) return
+    if (bootstrap.operation != null || bootstrap.id in screen.value.importingAttachmentsFor) return
     screen.update {
         it.copy(sessionBootstrap = bootstrap.copy(operation = SessionBootstrapState.Operation.CreatingSession))
     }
     when (val result = picker.create(action.prompt, bootstrap.attachments.firstOrNull()?.name)?.getOrNull()) {
         is SessionBootstrapResult.Created -> {
+            val confirmed = picker.confirmedConfiguration() ?: selection
             picker.close()
-            screen.update { it.copy(sessionBootstrap = null) }
-            onCreated(action, result, selection, bootstrap.attachments)
+            onCreated(action, result, confirmed, bootstrap.attachments)
         }
         SessionBootstrapResult.EmptyPrompt -> screen.update {
             it.copy(sessionBootstrap = bootstrap.copy(error = SessionBootstrapState.Error.EmptyPrompt))

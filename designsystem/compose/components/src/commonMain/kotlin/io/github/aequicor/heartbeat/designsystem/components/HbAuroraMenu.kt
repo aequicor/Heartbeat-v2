@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.designsystem.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -43,7 +45,11 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 
 @Composable
-internal fun HbAuroraMenuSurface(presentation: HbMenuPresentation, content: @Composable (Dp) -> Unit) {
+internal fun HbAuroraMenuSurface(
+    presentation: HbMenuPresentation,
+    popupBackground: (@Composable (Shape) -> Modifier)?,
+    content: @Composable (Dp) -> Unit,
+) {
     val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
     val settings = presentation == HbMenuPresentation.AuroraSettings
     val (surface, outline) = when (presentation) {
@@ -55,9 +61,13 @@ internal fun HbAuroraMenuSurface(presentation: HbMenuPresentation, content: @Com
     val width = if (settings) Modifier.width(SettingsMenuWidth) else Modifier.compactMenuWidth()
     BoxWithConstraints {
         val height = minOf(maxHeight, AuroraPopupMaxHeight)
+        val surfaceModifier = if (popupBackground == null) {
+            HbAuroraOutline(surface, outline, AuroraLayout.SmallRadius)
+        } else {
+            Modifier.clip(shape).then(popupBackground(shape)).border(AuroraLayout.Stroke, outline, shape)
+        }
         Box(
-            width.shadow(AuroraLayout.Space, shape, clip = false)
-                .then(HbAuroraOutline(surface, outline, AuroraLayout.SmallRadius)),
+            width.shadow(AuroraLayout.Space, shape, clip = false).then(surfaceModifier),
         ) { content(height) }
     }
 }

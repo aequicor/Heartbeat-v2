@@ -70,7 +70,7 @@ class AuroraDesktopHoverTest {
             AuroraTestTheme(appearance = HbAppearance.Light) {
                 HbDesktopFocusIndication(Modifier.fillMaxSize().background(HbAuroraColors.Canvas)) {
                     AuroraDesktopSidebar(
-                        state, received::add, {}, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap),
+                        state, received::add, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap),
                     )
                 }
             }
@@ -117,7 +117,7 @@ class AuroraDesktopHoverTest {
         ) {
             AuroraTestTheme(appearance = HbAppearance.Light) {
                 AuroraDesktopSidebar(
-                    state, actions::add, {}, TestProjectsSessionsComponent(),
+                    state, actions::add, TestProjectsSessionsComponent(),
                     Modifier.width(HbAuroraLayout.SidebarWithGap),
                 )
             }
@@ -147,7 +147,7 @@ class AuroraDesktopHoverTest {
 
     @Test
     fun moreChatsLeavesTheRestOfTheLineInactiveAndFocusFollowsSelection() {
-        val more = NavigationRow("more:project", "Ещё диалоги", NavigationKind.More, "Проверки")
+        val more = NavigationRow("more:project", "Показать ещё", NavigationKind.More, "Проверки")
         val added = NavigationRow("entry", "Новая сессия", NavigationKind.Chat, "Проверки")
         val state = mutableStateOf(AiStudioScreenState(navigation = listOf(more)))
         val scale = mutableFloatStateOf(1f)
@@ -170,7 +170,7 @@ class AuroraDesktopHoverTest {
                             state.value.copy(navigation = listOf(added.copy(selected = true)))
                         else -> error("Unexpected action: $action")
                     }
-                }, {}, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap))
+                }, projectsSessions, Modifier.width(HbAuroraLayout.SidebarWithGap))
             }
         }
         try {

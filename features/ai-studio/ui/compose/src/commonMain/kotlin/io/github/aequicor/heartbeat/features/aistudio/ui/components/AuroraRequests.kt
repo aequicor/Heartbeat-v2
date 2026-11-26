@@ -166,7 +166,9 @@ private fun AuroraQuestions(
         Modifier.fillMaxWidth().padding(if (touch) AuroraLayout.RequestPadding else AuroraLayout.ContentInset),
         verticalArrangement = Arrangement.spacedBy(if (touch) AuroraLayout.ContentInset else AuroraLayout.Space),
     ) {
+        panel.message?.let { AuroraRequestLabel(it, color = AuroraColors.RequestSecondary) }
         AuroraQuestionHeader(panel, touch, onAction, inlineStop)
+        panel.question.description?.let { AuroraRequestLabel(it, color = AuroraColors.RequestSecondary) }
         panel.error?.let { error ->
             AuroraRequestLabel(
                 error, color = AuroraColors.RequestError,

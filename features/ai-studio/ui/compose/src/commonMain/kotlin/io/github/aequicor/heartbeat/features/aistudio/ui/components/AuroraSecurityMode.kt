@@ -48,7 +48,7 @@ internal fun AuroraSecurityMode(
     }
     AuroraHeaderMenu(actions, touch = touch) { trigger, open ->
         val surface = if (touch) trigger.auroraHeaderSurface(radius)
-        else trigger.auroraFloatingHeaderSurface(Colors.HeaderAccessSurface, Colors.HeaderAccessOutline)
+        else trigger.auroraFloatingHeaderSurface(Colors.FloatingHeaderSurface, Colors.FloatingHeaderRim)
         AuroraHeaderButton(
             "Режим доступа, $label", { if (required) history = false else open() }, surface,
             height = target, radius = radius, enabled = idle && !busy,

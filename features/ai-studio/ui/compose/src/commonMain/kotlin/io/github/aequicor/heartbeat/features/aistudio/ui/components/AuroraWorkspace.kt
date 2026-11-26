@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -37,7 +39,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -47,9 +52,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -77,63 +85,96 @@ internal fun AuroraWorkspace(
     modifier: Modifier = Modifier,
     captionOverlap: Dp = Dp.Hairline,
     caption: HbWindowCaption = HbWindowCaption.current,
+    castsSidebarShadow: Boolean = false,
 ) {
     val chatId = state.chat?.id
     var preferredWidth by rememberSaveable { mutableStateOf(AuroraLayout.Header.value) }
     // The chat key recreates the header, so the requested focus target lives in the workspace.
     var subagentFocusTarget by remember { mutableStateOf<String?>(null) }
     val clearance = auroraCaptionClearance(captionOverlap)
-    Box(
-        modifier.auroraWindowFrame(clearance, caption.height, caption.leftInset > Dp.Hairline).auroraBackdrop(backdrop),
-    ) {
-        val bootstrap = state.sessionBootstrap
-        if (bootstrap != null) {
-            key(bootstrap.id) {
-                AuroraBootstrapWorkspace(
-                    state, bootstrap, touch, showNavigation, Dp(preferredWidth), clearance, caption, onAction,
-                )
+    val frame = if (touch) {
+        Modifier.auroraWindowFrame(clearance, caption.height, caption.leftInset > Dp.Hairline)
+    } else {
+        val shape = RoundedCornerShape(
+            topStart = AuroraLayout.ChatSurfaceRadius,
+            bottomStart = AuroraLayout.ChatSurfaceRadius,
+        )
+        val direction = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
+        val shadow = if (castsSidebarShadow) {
+            Modifier.dropShadow(
+                shape,
+                Shadow(
+                    radius = AuroraLayout.ChatPanelShadowRadius,
+                    color = AuroraColors.ChatPanelShadow,
+                    offset = DpOffset(AuroraLayout.ChatPanelShadowOffset * direction, Dp.Hairline),
+                ),
+            ).dropShadow(
+                shape,
+                Shadow(
+                    radius = AuroraLayout.ChatPanelContactRadius,
+                    color = AuroraColors.ChatPanelContactShadow,
+                    offset = DpOffset(AuroraLayout.Stroke * direction, Dp.Hairline),
+                ),
+            )
+        } else Modifier
+        shadow.clip(shape)
+    }
+    val floatingBackdrop = if (touch) null else rememberAuroraFloatingBackdrop()
+    val surface = modifier.then(frame)
+    Box(if (touch) surface.auroraBackdrop(backdrop) else surface) {
+        CompositionLocalProvider(LocalAuroraFloatingBackdrop provides floatingBackdrop) {
+            if (floatingBackdrop != null) {
+                Box(Modifier.matchParentSize().then(floatingBackdrop.recordWallpaper()).auroraBackdrop(backdrop))
             }
-        } else if (chatId != null) {
-            AuroraChatHost(chatId) {
-                val chatAction: (AiStudioAction) -> Unit = { action ->
-                    onAction(
-                        when (action) {
-                            AiStudioAction.Send -> AiStudioAction.SendChatDraft(chatId)
-                            AiStudioAction.CancelTurn -> AiStudioAction.CancelChatTurn(chatId)
-                            is AiStudioAction.AnswerPermission -> action.copy(chatId = chatId)
-                            else -> action
+            val bootstrap = state.sessionBootstrap
+            if (bootstrap != null) {
+                key(bootstrap.id) {
+                    AuroraBootstrapWorkspace(
+                        state, bootstrap, touch, showNavigation, Dp(preferredWidth), clearance, caption, onAction,
+                    )
+                }
+            } else if (chatId != null) {
+                AuroraChatHost(chatId) {
+                    val chatAction: (AiStudioAction) -> Unit = { action ->
+                        onAction(
+                            when (action) {
+                                AiStudioAction.Send -> AiStudioAction.SendChatDraft(chatId)
+                                AiStudioAction.CancelTurn -> AiStudioAction.CancelChatTurn(chatId)
+                                is AiStudioAction.AnswerPermission -> action.copy(chatId = chatId)
+                                else -> action
+                            },
+                        )
+                    }
+                    AuroraChatViewport(
+                        state, draft, liveText, touch, chatAction, showNavigation, Dp(preferredWidth),
+                        onWidthChange = { preferredWidth = it.value },
+                        captionClearance = clearance,
+                        caption = caption,
+                        onHeaderAction = { action ->
+                            if (!touch && action is AiStudioAction.OpenChat) subagentFocusTarget = action.id
+                            onAction(action)
+                        },
+                        onDesktopTitleReady = { focus ->
+                            if (subagentFocusTarget == chatId) focus.requestFocus()
+                            subagentFocusTarget = null
                         },
                     )
                 }
-                AuroraChatViewport(
-                    state, draft, liveText, touch, chatAction, showNavigation, Dp(preferredWidth),
-                    onWidthChange = { preferredWidth = it.value },
-                    captionClearance = clearance,
-                    caption = caption,
-                    onHeaderAction = { action ->
-                        if (!touch && action is AiStudioAction.OpenChat) subagentFocusTarget = action.id
-                        onAction(action)
-                    },
-                    onDesktopTitleReady = { focus ->
-                        if (subagentFocusTarget == chatId) focus.requestFocus()
-                        subagentFocusTarget = null
-                    },
-                )
-            }
-        } else if (state.loading) {
-            AuroraText("Загрузка истории…", Modifier.align(Alignment.Center))
-        } else {
-            Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space)) {
-                if (showNavigation) {
+            } else if (state.loading) {
+                AuroraText("Загрузка истории…", Modifier.align(Alignment.Center))
+            } else {
+                Row(Modifier.align(Alignment.Center), horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space)) {
+                    if (showNavigation) {
+                        AuroraChip(
+                            stringResource(Res.string.projects_sessions), { onAction(AiStudioAction.ExpandChats) },
+                            touch = touch,
+                        )
+                    }
                     AuroraChip(
-                        stringResource(Res.string.projects_sessions), { onAction(AiStudioAction.ExpandChats) },
+                        stringResource(Res.string.new_session), { onAction(AiStudioAction.CreateSessionWithoutProject) },
                         touch = touch,
                     )
                 }
-                AuroraChip(
-                    stringResource(Res.string.new_session), { onAction(AiStudioAction.CreateSessionWithoutProject) },
-                    touch = touch,
-                )
             }
         }
     }
@@ -323,8 +364,8 @@ private fun BoxScope.AuroraResizeHandles(
 
 internal fun Modifier.auroraLowerLayout(touch: Boolean, corridor: Dp): Modifier =
     widthIn(max = corridor).padding(
-        start = AuroraLayout.ContentInset,
-        end = AuroraLayout.ContentInset,
+        start = if (touch) AuroraLayout.ContentInset else Dp.Hairline,
+        end = if (touch) AuroraLayout.ContentInset else Dp.Hairline,
         top = if (touch) AuroraLayout.ChromeInset else Dp.Hairline,
         bottom = if (touch) AuroraLayout.ChromeInset else AuroraLayout.DesktopComposerBottom,
     )

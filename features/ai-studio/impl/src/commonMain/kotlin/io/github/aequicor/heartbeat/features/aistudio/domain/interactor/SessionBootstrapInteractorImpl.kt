@@ -78,6 +78,7 @@ internal class SessionBootstrapInteractorImpl(
 
     private suspend fun useDraft(draft: ChatCreationDraftImpl, use: suspend (ChatCreationDraft) -> Unit) {
         try {
+            draft.initialize()
             coroutineScope {
                 val catalog = launch { draft.observeCatalog() }
                 try { use(draft) } finally { catalog.cancel() }

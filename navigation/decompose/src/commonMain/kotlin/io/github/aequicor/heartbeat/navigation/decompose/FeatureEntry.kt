@@ -24,7 +24,12 @@ interface FeatureHost {
  */
 interface DecomposeFeatureEntry {
 
+    /** Null for features without a rail entry. Availability is evaluated when creating the window. */
+    val workspace: WorkspaceRegistration? get() = null
+
     val featureId: String
+
+    fun isAvailable(): Boolean = true
 
     fun create(
         route: AppRoute,

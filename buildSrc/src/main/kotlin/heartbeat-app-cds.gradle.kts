@@ -25,6 +25,8 @@ afterEvaluate {
             val runtimeHome = destinationDir.get().asFile
             val javaExecutable = if (isWindows) "java.exe" else "java"
             val javaLauncher = runtimeHome.resolve("bin/$javaExecutable")
+            // jlink strips native commands, so the linked image may have no bin directory.
+            Files.createDirectories(javaLauncher.toPath().parent)
             Files.copy(
                 jcefJdk.packagingJavaHome.resolve("bin/$javaExecutable").toPath(),
                 javaLauncher.toPath(),

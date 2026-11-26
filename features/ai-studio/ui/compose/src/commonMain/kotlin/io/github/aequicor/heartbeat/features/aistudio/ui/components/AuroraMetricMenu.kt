@@ -93,7 +93,7 @@ private fun MetricPanel(chat: Chat, touch: Boolean, dismiss: () -> Unit) {
     val shape = RoundedCornerShape(Layout.ControlGap)
     Column(
         Modifier.width(Layout.MetricMenuWidth).heightIn(max = Layout.EngineMenuMaxHeight)
-            .background(Colors.Canvas, shape).border(Layout.Stroke, Colors.HeaderOutline, shape)
+            .auroraMenuBackground(shape, Colors.Canvas).border(Layout.Stroke, Colors.HeaderOutline, shape)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {

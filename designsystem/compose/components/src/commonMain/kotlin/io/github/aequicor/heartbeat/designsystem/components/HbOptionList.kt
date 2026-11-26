@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -235,9 +236,12 @@ private fun <T> optionListKeyEvent(
 @Composable
 internal fun HbOptionSurface(
     modifier: Modifier = Modifier,
+    popupBackground: (@Composable (Shape) -> Modifier)? = null,
     content: @Composable (maxHeight: Dp) -> Unit,
 ) {
     val colors = HbTheme.colors
+    val shape = HbShapes.Medium
+    val background = popupBackground?.invoke(shape) ?: Modifier.background(colors.surface.raised)
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = maxWidth
@@ -253,9 +257,9 @@ internal fun HbOptionSurface(
         Box(
             modifier = Modifier
                 .widthIn(min = minWidth, max = maxWidth)
-                .clip(HbShapes.Medium)
-                .background(colors.surface.raised)
-                .border(POPUP_BORDER, colors.border.subtle, HbShapes.Medium),
+                .clip(shape)
+                .then(background)
+                .border(POPUP_BORDER, colors.border.subtle, shape),
         ) {
             content(height)
         }

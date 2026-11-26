@@ -173,7 +173,7 @@ private fun ProjectSelectorButton(
         stringResource(Res.string.select_project, title),
         onOpen,
         Modifier.focusRequester(triggerFocus).then(
-            if (touch) Modifier.fillMaxWidth() else Modifier.auroraFloatingHeaderSurface(AuroraColors.Pearl),
+            if (touch) Modifier.fillMaxWidth() else Modifier.auroraFloatingHeaderSurface(AuroraColors.FloatingHeaderSurface),
         ),
         height = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget,
         enabled = !busy,
@@ -267,7 +267,7 @@ private fun ProjectChoices(
     Column(
         width
             .clip(shape)
-            .background(AuroraColors.NavigationSearchSurface)
+            .auroraMenuBackground(shape, AuroraColors.NavigationSearchSurface)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) false
                 else when (event.key) {

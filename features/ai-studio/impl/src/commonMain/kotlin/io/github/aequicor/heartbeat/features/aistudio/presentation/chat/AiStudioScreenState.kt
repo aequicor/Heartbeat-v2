@@ -54,6 +54,7 @@ public data class AiStudioScreenState(
     val attachmentErrorFor: String? = null,
     val openedHistory: OpenedHistory? = null,
     val artifactToSave: File? = null,
+    val submittingDrafts: Set<String> = emptySet(),
 ) {
 
     public fun isPromptBlockedBySecurityMode(chat: Chat): Boolean =
@@ -564,6 +565,8 @@ public data class AiStudioScreenState(
             val remaining: Float = 1f,
             val timed: Boolean = false,
             val frozen: Boolean = false,
+            val message: String? = null,
+            val canDecline: Boolean = false,
         ) : Request {
             public val question: Question get() = questions[index]
             public val answer: Answer get() = answers[question.id] ?: Answer()
@@ -587,6 +590,8 @@ public data class AiStudioScreenState(
         val multiple: Boolean = false,
         val freeText: Boolean = false,
         val required: Boolean = false,
+        val optionLabels: Map<String, String> = emptyMap(),
+        val description: String? = null,
     )
 
     public data class Answer(

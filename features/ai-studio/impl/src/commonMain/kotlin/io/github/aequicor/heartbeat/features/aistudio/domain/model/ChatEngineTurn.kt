@@ -10,6 +10,7 @@ internal data class ChatEngineTurn(
     val failure: ChatHistoryEntry.ReplyFailure? = null,
     val rejection: Rejection? = null,
     val artifacts: List<ChatAttachment> = emptyList(),
+    val questionnaire: ChatQuestionnaire? = null,
 ) {
 
     enum class Status { Running, Completed, Stopped, CancelledBeforeDispatch, Rejected, SendFailed, Failed }

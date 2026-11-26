@@ -36,16 +36,16 @@ import kotlin.test.assertTrue
 class AuroraBackdropTest {
     @Test
     fun thinLinesSurviveDownsamplingAndRepeatOnBothAxes() {
-        assertFilteredTile(1f, 720)
-        assertFilteredTile(1.25f, 900)
+        assertFilteredTile(1f, 640)
+        assertFilteredTile(1.25f, 800)
     }
 
     @Test
     fun nativeTileResolutionPreservesSourcePixels() {
-        renderBackdrop(2f, 1440) { pixels ->
+        renderBackdrop(2f, 1280) { pixels ->
             assertEquals(Color.White.toArgb(), pixels.getColor(0, 5))
             assertEquals(Color.Black.toArgb(), pixels.getColor(1, 5))
-            assertEquals(Color.Black.toArgb(), pixels.getColor(1441, 5))
+            assertEquals(Color.Black.toArgb(), pixels.getColor(1281, 5))
         }
     }
 
@@ -153,7 +153,7 @@ class AuroraBackdropTest {
     }
 
     private fun renderBackdrop(density: Float, tilePixels: Int, verify: (Bitmap) -> Unit) {
-        val sourceSize = 1440
+        val sourceSize = 1280
         val white = Paint().apply { color = Color.White }
         val ink = Paint().apply { color = Color.Black }
         val gradient = ImageBitmap(1, 1)

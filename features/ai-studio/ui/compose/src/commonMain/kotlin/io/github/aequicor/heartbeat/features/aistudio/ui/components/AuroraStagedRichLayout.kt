@@ -66,6 +66,7 @@ internal fun AuroraDocumentBlocks(
     blocks: List<PreparedBlock>, touch: Boolean, streaming: Boolean, preparingHeight: Dp,
     archiveReveal: ArchiveReveal? = null,
     bodyStyle: TextStyle = auroraMessageStyle(),
+    measureTimestampTail: Boolean = false,
 ) {
     val stageOpening = remember {
         supportsAuroraStagedRichLayout() &&
@@ -73,7 +74,9 @@ internal fun AuroraDocumentBlocks(
     }
     if (!stageOpening) {
         val body = archiveReveal?.let { reveal -> Modifier.onPlaced { reveal.markPlaced() } } ?: Modifier
-        AuroraRichBlocks(blocks, touch, streaming, modifier = body, bodyStyle = bodyStyle)
+        AuroraRichBlocks(
+            blocks, touch, streaming, modifier = body, bodyStyle = bodyStyle, measureTimestampTail = measureTimestampTail,
+        )
         return
     }
 
@@ -81,14 +84,16 @@ internal fun AuroraDocumentBlocks(
         val group = blocks.subList(range.first, range.last + 1)
         val id = group.first().source.id
         val followsHeading = blocks.getOrNull(range.first - 1)?.source is ReplyBlock.Heading
+        val containsTimestampTail = measureTimestampTail && range.last == blocks.lastIndex
         key(id) {
-            remember(group, followsHeading, touch, streaming, bodyStyle) {
+            remember(group, followsHeading, touch, streaming, bodyStyle, containsTimestampTail) {
                 val viewport = group.first().takeIf { it.hasOwnViewport }?.source?.let { it::class }
                 AuroraRichLayoutSlot(id, viewport) {
                     AuroraRichBlocks(
                         group, touch, streaming,
                         modifier = CullRichGroupElement,
                         firstGroup = range.first == 0, followsHeading = followsHeading, bodyStyle = bodyStyle,
+                        measureTimestampTail = containsTimestampTail,
                     )
                 }
             }

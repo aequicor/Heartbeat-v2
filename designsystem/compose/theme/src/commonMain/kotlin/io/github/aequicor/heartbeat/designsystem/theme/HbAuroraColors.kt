@@ -8,6 +8,7 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbColorPalettes
 /** Light Aurora roles from the Aurora catalog, including its trusted request surface. */
 object HbAuroraColors {
     private val text = HbColorPalettes.Light.toHbColors().text
+    private val floatingPanelTint = Color(0xFFE0F6D9)
     val SyntaxKeyword = Color(0xFF643B83)
     val SyntaxString = Color(0xFF315E39)
     val SyntaxComment = Color(0xFF62665F)
@@ -48,10 +49,16 @@ object HbAuroraColors {
     val HeaderMetricAccent = Color(0xFF965900)
     val TouchHeaderMetricAccent = Color(0xFFA26B13)
     val ContentMask = Color.Black
-    val ComposerSurface = Color.White
-    val ComposerShadow = Color(0x1A222B27)
-    val ComposerContactShadow = Color(0x0A222B27)
-    val ComposerIdleSend = Color(0xFF8C819D)
+    val ComposerSurface = floatingPanelTint.copy(alpha = 0.90f)
+    val ComposerSheen = Brush.horizontalGradient(
+        0f to Color(0x50F4FFF0), 0.38f to Color.Transparent, 1f to Color(0x60D5F0DD),
+    )
+    val ComposerRim = Color(0xD9FFFFFF)
+    val ComposerPlaceholder = Color(0xFF56566B)
+    val ComposerAttachment = Color(0xFFEDE4F6)
+    val ComposerSend = Color(0xFF8062A8)
+    val ComposerShadow = Color(0x33203D30)
+    val ComposerContactShadow = Color(0x1A203D30)
     val User = Color(0xFFF1FEE1)
     val DesktopInk = text.primary
     val DesktopPrimaryAction = Color(0xFF3F1D62)
@@ -83,17 +90,30 @@ object HbAuroraColors {
     val RequestBorder = Color(0xFF9F8A70)
     val RequestTrack = Color(0xFF5C4832)
     val RequestError = Color(0xFFFFB4AB)
+    val ChatPanelShadow = Color(0x1F1F2624)
+    val ChatPanelContactShadow = Color(0x0F1F2624)
     val ChatBackdrop = Color(0xFFEDF1EB)
-    val ChatPatternMaskBase = Color.White
-    val NavigationHover = Color(0xFFECEFF4)
+    val WorkspaceRail = Color(0xFFEDEEF0)
+    val WorkspaceDisabled = Color(0xFF969BA1)
+    val WorkspaceFooterInk = Color(0xFF555D68)
+    val NavigationPanelOutline = Color(0xFFC9CDD6)
+    val NavigationPanelShadow = Color(0x2120232A)
+    val FloatingHeaderSurface = floatingPanelTint.copy(alpha = 0.86f)
+    val FloatingHeaderRim = Color(0x6EFFFFFF)
+    val WorkspaceDivider = Color(0xFFD9DBE0)
+    val WorkspaceActive = Color(0xFF20232A)
+    val WorkspaceInactive = Color(0xFF5F6368)
+    val NavigationHover = Color(0xFFF7F6F9)
     val NavigationPrimaryAction = DesktopPrimaryAction
     val NavigationOnPrimaryAction = DesktopOnPrimaryAction
     val NavigationSearchSurface = Color.White
-    val NavigationSearchOutline = Color(0xFFCDD7CC)
+    val NavigationSearchOutline = Color(0xFFDFE2D8)
     val NavigationInk = text.primary
-    val NavigationIcon = Color(0xFF707579)
+    val NavigationIcon = Color(0xFF555D67)
+    val NavigationFolderActive = Color(0xFF8062A8)
     val NavigationMuted = text.secondary
-    val NavigationSelected = Color(0xFFE5D9F5)
+    val NavigationSelected = Color(0xFFF2EFF5)
+    val NavigationSelectedHover = Color(0xFFE9E4EF)
     val NavigationBranch = Color(0xFF918B99)
     val SessionWorking = Color(0xFFC64157)
     val SessionAttention = Color(0xFF965900)

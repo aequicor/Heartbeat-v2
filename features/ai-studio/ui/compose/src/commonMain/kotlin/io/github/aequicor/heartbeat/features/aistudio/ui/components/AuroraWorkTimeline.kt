@@ -278,7 +278,6 @@ private fun AuroraStageResult(
                 start = workContentInset(touch),
                 top = if (showEvents) AuroraLayout.ContentInset else Dp.Hairline,
             ),
-            color = if (touch) AuroraColors.WorkInk else AuroraColors.WorkMuted,
             contentModifier = Modifier.auroraFadeInOnEntry(animateOnEntry),
         )
     }
@@ -350,7 +349,7 @@ private fun AuroraPastWorkHeader(
     val marker = Modifier.fillMaxWidth().timelineMarker(step.status, axis, markerY, before, after, touch)
         .padding(start = workContentInset(touch) - labelInset)
     val role = if (touch) AuroraWorkRole.Action else AuroraWorkRole.StageTitle
-    val ink = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopInk
+    val ink = if (touch || step.result != null) AuroraColors.WorkMuted else AuroraColors.DesktopInk
     val inset = if (touch) AuroraLayout.ControlGap else AuroraLayout.SmallGap
     if (!expandable) {
         AuroraWorkText(step.title, role, marker.padding(vertical = inset), color = ink)

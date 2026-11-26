@@ -3,10 +3,10 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,19 +30,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
@@ -53,16 +51,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import io.github.aequicor.heartbeat.designsystem.components.HbAppName
-import io.github.aequicor.heartbeat.designsystem.components.HbBrandMark
+import io.github.aequicor.heartbeat.designsystem.components.HbBrandLogo
 import io.github.aequicor.heartbeat.designsystem.components.HbFocusIndication
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
-import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
@@ -85,7 +82,6 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessio
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_needs_answer
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_new_result
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.session_working
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.settings
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -93,15 +89,16 @@ import org.jetbrains.compose.resources.stringResource
 internal fun AuroraDesktopSidebar(
     state: AiStudioScreenState,
     onAction: (AiStudioAction) -> Unit,
-    onOpenSettings: () -> Unit,
     projectsSessions: ProjectsSessionsComponent,
     modifier: Modifier = Modifier,
+    brandStartInset: Dp = Dp.Hairline,
 ) {
     val list = rememberLazyListState()
+    val activeProject = state.navigation.firstOrNull { it.selected }?.project
     val selectedSessionFocus = rememberSelectedSessionFocus(list, state.navigation)
     Column(modifier.fillMaxHeight()) {
-        SidebarHeader(state.chatSearchVisible, state.chatSearch, onAction, onOpenSettings)
-        Box(Modifier.weight(1f).fillMaxWidth().padding(top = AuroraLayout.SmallGap, bottom = AuroraLayout.Space)) {
+        SidebarHeader(state.chatSearchVisible, state.chatSearch, onAction, brandStartInset)
+        Box(Modifier.weight(1f).fillMaxWidth().padding(top = AuroraLayout.NavigationListGap)) {
             LazyColumn(
                 Modifier.fillMaxHeight().fillMaxWidth(),
                 state = list,
@@ -113,19 +110,19 @@ internal fun AuroraDesktopSidebar(
                         row.isProjectGroup -> AuroraLayout.NavigationProjectGap
                         else -> AuroraLayout.NavigationRowGap
                     }
-                    val rowModifier = Modifier.width(AuroraLayout.NavigationWidth).padding(top = gap)
+                    val rowModifier = Modifier.width(AuroraLayout.NavigationListWidth).padding(top = gap)
                     if (row.kind.isPagination) {
                         AuroraNavigationPage(row, list, touch = false, projectsSessions, rowModifier)
                     } else {
                         val focus = if (row.selected) Modifier.focusRequester(selectedSessionFocus) else Modifier
-                        SidebarRow(row, onAction, projectsSessions, rowModifier, titleFocusModifier = focus)
+                        SidebarRow(row, onAction, projectsSessions, rowModifier, activeProject, titleFocusModifier = focus)
                     }
                 }
             }
             AuroraHistoryScrollbar(
                 list,
                 stringResource(Res.string.scroll_sessions),
-                Modifier.align(Alignment.CenterEnd).padding(end = AuroraLayout.SmallGap / 2),
+                Modifier.align(Alignment.CenterEnd).offset(x = AuroraLayout.SmallGap * 2),
                 reverse = false,
             )
         }
@@ -137,32 +134,10 @@ private fun SidebarHeader(
     searchVisible: Boolean,
     query: String,
     onAction: (AiStudioAction) -> Unit,
-    onOpenSettings: () -> Unit,
+    brandStartInset: Dp,
 ) {
     Column(Modifier.width(AuroraLayout.NavigationWidth)) {
-        Row(
-            Modifier.heightIn(min = AuroraLayout.NavigationHeading),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HbBrandMark(Modifier.size(AuroraLayout.Glyph))
-            SidebarText(
-                HbAppName, Modifier.padding(start = AuroraLayout.NavigationCaptionGap), style = HbTypography.Label,
-            )
-            Spacer(Modifier.width(AuroraLayout.Space))
-            HbWindowClientArea { clientArea ->
-                AuroraControl(
-                    onOpenSettings,
-                    clientArea,
-                    label = stringResource(Res.string.settings),
-                    background = Color.Transparent,
-                    horizontalPadding = (AuroraLayout.DesktopTarget - AuroraLayout.NavigationSymbol) / 2,
-                ) {
-                    HbIcon(HbIconGlyph.Settings, tint = AuroraColors.NavigationIcon,
-                        size = AuroraLayout.NavigationSymbol,
-                    )
-                }
-            }
-        }
+        HbBrandLogo(Modifier.padding(start = brandStartInset))
         AuroraActionSearchRow(
             actionLabel = stringResource(Res.string.new_session),
             searchLabel = stringResource(Res.string.search_sessions),
@@ -172,7 +147,9 @@ private fun SidebarHeader(
             onExpand = { onAction(AiStudioAction.ExpandChatSearch) },
             onCollapse = { onAction(AiStudioAction.CollapseChatSearch) },
             onSearch = { onAction(AiStudioAction.SearchChats(it)) },
-            modifier = Modifier.padding(vertical = AuroraLayout.Space),
+            modifier = Modifier.padding(top = AuroraLayout.NavigationHeaderGap),
+            collapsedSearchTarget = AuroraLayout.NavigationSearchTarget,
+            centerActionContent = true,
             searchPlaceholder = stringResource(Res.string.search_sessions_placeholder),
         ) {
             Image(painterResource(Res.drawable.aurora_new_chat_icon), null, Modifier.size(AuroraLayout.Glyph))
@@ -185,19 +162,21 @@ private fun SidebarRow(
     row: NavigationRow,
     onAction: (AiStudioAction) -> Unit,
     projectsSessions: ProjectsSessionsComponent,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
+    activeProject: String?,
     titleFocusModifier: Modifier = Modifier,
 ) {
     val project = row.isProjectGroup
     val session = row.kind == NavigationKind.Chat
     val child = row.depth > 0
+    val rowHeight = if (child) AuroraLayout.NavigationChildRow else AuroraLayout.NavigationRow
     val expanded = row.expanded
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var focused by remember { mutableStateOf(false) }
     val focusGroupModifier = if (session) Modifier.onFocusChanged { focused = it.hasFocus }.focusGroup() else Modifier
     Row(
-        modifier.fillMaxWidth().heightIn(min = AuroraLayout.NavigationRow)
+        modifier.fillMaxWidth().heightIn(min = rowHeight)
             .hoverable(interaction)
             .then(focusGroupModifier)
             .navigationBackground(row.selected, hovered)
@@ -210,13 +189,13 @@ private fun SidebarRow(
                 SidebarAction(
                     stringResource(label),
                     { projectsSessions.setSessionExpanded(row.id, !expanded) },
-                    Modifier.width(AuroraLayout.DesktopTarget),
+                    Modifier.width(AuroraLayout.NavigationSearchTarget),
                 ) { SidebarChevron(expanded) }
             }
             val indentation = when {
                 child -> AuroraLayout.NavigationChildIndent
-                expanded != null && session -> AuroraLayout.FrameStroke
-                project -> AuroraLayout.Space
+                expanded != null && session -> AuroraLayout.ControlGap
+                project -> AuroraLayout.SmallGap
                 else -> AuroraLayout.NavigationIndent
             }
             val open: () -> Unit = if (session) {
@@ -224,13 +203,16 @@ private fun SidebarRow(
             } else {
                 { projectsSessions.setProjectExpanded(row.project, expanded != true) }
             }
-            SidebarTitle(row, open, indentation, Modifier.weight(1f).then(titleFocusModifier))
+            SidebarTitle(
+                row, open, indentation, rowHeight, projectActive = row.project == activeProject,
+                modifier = Modifier.weight(1f).then(titleFocusModifier),
+            )
         }
         if (project) {
             SidebarAction(
                 stringResource(Res.string.new_project_session, row.displayTitle()),
                 { onAction(AiStudioAction.CreateSessionInProject(row.project)) },
-                Modifier.width(AuroraLayout.DesktopTarget),
+                Modifier.width(AuroraLayout.NavigationSearchTarget),
             ) {
                 Image(
                     painterResource(Res.drawable.aurora_project_new_chat_icon), null,
@@ -239,7 +221,7 @@ private fun SidebarRow(
                 )
             }
         } else {
-            AuroraSessionActions(row, archiveVisible = hovered || focused, onAction = onAction)
+            AuroraSessionActions(row, archiveVisible = hovered || (focused && HbFocusIndication.keyboardNavigation), onAction = onAction, rowHeight = rowHeight)
         }
     }
 }
@@ -249,28 +231,32 @@ private fun SidebarTitle(
     row: NavigationRow,
     onClick: () -> Unit,
     indentation: Dp,
+    rowHeight: Dp,
+    projectActive: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hasFocus by interaction.collectIsFocusedAsState()
     val showFocus = hasFocus && HbFocusIndication.keyboardNavigation
-    val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
+    val shape = RoundedCornerShape(AuroraLayout.NavigationRowRadius)
     Row(
-        modifier.heightIn(min = AuroraLayout.NavigationRow)
+        modifier.heightIn(min = rowHeight)
             .clip(shape)
             .then(if (showFocus) Modifier.border(AuroraLayout.Stroke, AuroraColors.Primary, shape) else Modifier)
             .semantics { if (row.kind == NavigationKind.Chat) selected = row.selected }
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
             .padding(
                 start = indentation,
-                top = AuroraLayout.NavigationVerticalInset, bottom = AuroraLayout.NavigationVerticalInset,
+                top = if (row.depth > 0) AuroraLayout.Stroke * 2 else AuroraLayout.NavigationVerticalInset,
+                bottom = if (row.depth > 0) AuroraLayout.Stroke * 2 else AuroraLayout.NavigationVerticalInset,
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (row.isProjectGroup) {
-            SidebarProjectTitle(row)
+            SidebarProjectTitle(row, projectActive)
         } else if (row.kind == NavigationKind.Chat) {
-            val style = HbTypography.Label.copy(color = AuroraColors.DesktopInk)
+            val ink = if (row.depth > 0) AuroraColors.NavigationMuted else AuroraColors.DesktopInk
+            val style = HbTypography.Label.copy(color = ink)
             AuroraFadingText(
                 row.displayTitle(),
                 style,
@@ -284,7 +270,7 @@ private fun SidebarTitle(
 }
 
 @Composable
-private fun RowScope.SidebarProjectTitle(row: NavigationRow) {
+private fun RowScope.SidebarProjectTitle(row: NavigationRow, selected: Boolean) {
     if (row.kind == NavigationKind.Section) {
         HbIcon(HbIconGlyph.Message, tint = AuroraColors.NavigationIcon, size = AuroraLayout.NavigationSymbol)
     } else {
@@ -295,15 +281,15 @@ private fun RowScope.SidebarProjectTitle(row: NavigationRow) {
         }
         Image(
             painterResource(folder), null, Modifier.size(AuroraLayout.NavigationSymbol),
-            colorFilter = ColorFilter.tint(AuroraColors.NavigationIcon),
+            colorFilter = ColorFilter.tint(if (selected) AuroraColors.NavigationFolderActive else AuroraColors.DesktopInk),
         )
     }
     Spacer(Modifier.width(AuroraLayout.Space))
-    BasicText(
+    AuroraFadingText(
         row.displayTitle(),
+        HbTypography.Label.copy(color = AuroraColors.DesktopInk, fontWeight = FontWeight.SemiBold),
+        AuroraLayout.NavigationTitleFade,
         Modifier.weight(1f, fill = false),
-        style = HbTypography.Label.copy(color = AuroraColors.DesktopInk),
-        maxLines = 1, overflow = TextOverflow.Ellipsis,
     )
 }
 
@@ -329,15 +315,16 @@ internal fun SidebarAction(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    rowHeight: Dp = AuroraLayout.NavigationRow,
     content: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val hovered by interaction.collectIsHoveredAsState()
     val showFocus = focused && HbFocusIndication.keyboardNavigation
-    val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
+    val shape = RoundedCornerShape(AuroraLayout.NavigationRowRadius)
     Box(
-        modifier.heightIn(min = AuroraLayout.NavigationRow).clip(shape)
+        modifier.heightIn(min = rowHeight).clip(shape)
             .then(if (hovered) Modifier.background(AuroraColors.NavigationHover) else Modifier)
             .then(if (showFocus) Modifier.border(AuroraLayout.Stroke, AuroraColors.Primary, shape) else Modifier)
             .hoverable(interaction)
@@ -403,34 +390,31 @@ internal fun SidebarStatus(status: NavigationStatus, modifier: Modifier = Modifi
     }
 }
 
-private fun Modifier.navigationBackground(selected: Boolean, hovered: Boolean): Modifier = when {
-    selected -> drawBehind {
-        val inset = AuroraLayout.FrameStroke.toPx()
-        drawRoundRect(
-            AuroraColors.NavigationSelected,
-            topLeft = Offset(0f, inset), size = Size(size.width, size.height - inset * 2),
-            cornerRadius = CornerRadius(AuroraLayout.SmallRadius.toPx()),
-        )
+private fun Modifier.navigationBackground(selected: Boolean, hovered: Boolean): Modifier {
+    val color = when {
+        selected && hovered -> AuroraColors.NavigationSelectedHover
+        selected -> AuroraColors.NavigationSelected
+        hovered -> AuroraColors.NavigationHover
+        else -> Color.Transparent
     }
-    hovered -> background(AuroraColors.NavigationHover, RoundedCornerShape(AuroraLayout.SmallRadius))
-    else -> this
+    return background(color, RoundedCornerShape(AuroraLayout.NavigationRowRadius))
 }
 
 private fun Modifier.branch(last: Boolean): Modifier = drawWithCache {
-    val x = AuroraLayout.Glyph.toPx()
+    val x = (AuroraLayout.NavigationIndent - AuroraLayout.Space - AuroraLayout.NavigationSymbol / 2).toPx()
     val y = size.height / 2
     val stroke = AuroraLayout.Stroke.toPx()
     val color = AuroraColors.NavigationBranch
-    val bend = if (last) Path().apply {
-        val width = AuroraLayout.SmallRadius.toPx()
-        val height = AuroraLayout.NavigationBranchBendHeight.toPx().coerceAtMost(y)
+    val branch = Path().apply {
+        val width = AuroraLayout.NavigationBranchBendHeight.toPx()
+        val height = width.coerceAtMost(y)
         moveTo(x, 0f)
         lineTo(x, y - height)
         quadraticTo(x, y, x + width, y)
-        lineTo(x + AuroraLayout.Glyph.toPx(), y)
-    } else null
+        lineTo(x + AuroraLayout.ContentInset.toPx(), y)
+    }
     onDrawBehind {
-        if (bend == null) drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
-        else drawPath(bend, color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+        if (!last) drawLine(color, Offset(x, 0f), Offset(x, size.height), stroke)
+        drawPath(branch, color, style = Stroke(width = stroke, cap = StrokeCap.Round))
     }
 }

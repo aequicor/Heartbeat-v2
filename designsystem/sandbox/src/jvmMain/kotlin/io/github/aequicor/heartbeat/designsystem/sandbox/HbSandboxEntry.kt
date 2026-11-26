@@ -35,7 +35,7 @@ object HbSandboxEntry {
         application {
             Window(
                 onCloseRequest = ::exitApplication,
-                title = "Heartbeat — каталог дизайн-системы",
+                title = "Heartbeat Lab — каталог дизайн-системы",
                 state = rememberWindowState(size = DpSize(1440.dp, 1000.dp)),
             ) {
                 HbTheme(appearance = HbAppearance.System) {

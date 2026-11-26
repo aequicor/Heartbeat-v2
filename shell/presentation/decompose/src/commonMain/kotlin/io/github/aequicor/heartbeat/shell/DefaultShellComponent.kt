@@ -20,19 +20,21 @@ import kotlinx.coroutines.CoroutineDispatcher
  */
 internal class DefaultShellComponent(
     componentContext: ComponentContext,
-    initialRoute: AppRoute,
+    initialRoute: AppRoute?,
     entries: Set<DecomposeFeatureEntry>,
     private val dispatcher: CoroutineDispatcher,
 ) : ShellComponent, ComponentContext by componentContext {
 
     private val registry = FeatureRegistry(entries)
 
+    override val workspaces = registry.workspaces
+
     private val navigation = StackNavigation<AppRoute>()
 
     override val childStack: Value<ChildStack<AppRoute, FeatureRoot>> = childStack(
         source = navigation,
         serializer = AppRoute.serializer,
-        initialConfiguration = initialRoute,
+        initialConfiguration = initialRoute ?: workspaces.firstOrNull()?.route ?: AppRoute(""),
         key = "shell",
         childFactory = { route, context ->
             val entry = registry.find(route.featureId)

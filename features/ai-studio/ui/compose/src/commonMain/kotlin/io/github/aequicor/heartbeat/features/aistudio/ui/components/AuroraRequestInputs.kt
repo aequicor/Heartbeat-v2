@@ -119,7 +119,10 @@ internal fun AuroraQuestionOptions(
                 choose(question.options[next])
                 true
             } else Modifier
-            AuroraQuestionOption(option, option in panel.answer.options, radio, touch, { choose(option) }, arrows)
+            AuroraQuestionOption(
+                question.optionLabels[option] ?: option, option in panel.answer.options, radio, touch,
+                { choose(option) }, arrows,
+            )
         }
     }
 }
@@ -195,6 +198,12 @@ internal fun AuroraQuestionActions(panel: Request.Questions, touch: Boolean, onA
         ) {
             if (panel.question.freeText) {
                 AuroraAnswerText(panel, touch, onAction, if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f))
+            }
+            if (panel.canDecline) {
+                AuroraRequestButton(
+                    "Отклонить", { onAction(AiStudioAction.DeclineQuestionnaire(panel.id)) }, touch,
+                    modifier = if (stacked) Modifier.fillMaxWidth() else Modifier,
+                )
             }
             AuroraRequestButton(
                 label, { onAction(next) }, touch, primary = true, centered = true, compact = !touch,

@@ -1,14 +1,18 @@
 package io.github.aequicor.heartbeat.shell.ui
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.arkivanov.decompose.extensions.compose.stack.Children
+import com.arkivanov.decompose.extensions.compose.subscribeAsState
 import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
 import io.github.aequicor.heartbeat.shell.ShellComponent
+import kotlinx.coroutines.launch
 
 /**
  * Renders the shell navigation: the active route is resolved to a feature renderer by `featureId`.
@@ -22,15 +26,31 @@ fun ShellScreen(
 ) {
     val registry = remember(renderers) { RendererRegistry(renderers) }
 
-    Children(
-        stack = component.childStack,
-        modifier = modifier,
-    ) { child ->
-        val renderer = registry.find(child.configuration.featureId)
-        if (renderer == null) {
-            MissingFeatureFallback(child.configuration.featureId)
-        } else {
-            renderer.Render(child.instance)
+    val stack = component.childStack.subscribeAsState()
+    val scope = rememberCoroutineScope()
+    Row(modifier.fillMaxSize()) {
+        WorkspaceRail(component.workspaces, stack.value.active.configuration.featureId) { route ->
+            val current = stack.value.active
+            if (current.configuration.featureId != route.featureId) {
+                val renderer = registry.find(current.configuration.featureId)
+                if (renderer == null) component.open(route)
+                else scope.launch {
+                    renderer.requestLeave(current.instance) {
+                        if (component.childStack.value.active.instance === current.instance) component.open(route)
+                    }
+                }
+            }
+        }
+        Children(
+            stack = component.childStack,
+            modifier = Modifier.weight(1f),
+        ) { child ->
+            val renderer = registry.find(child.configuration.featureId)
+            if (renderer == null) {
+                MissingFeatureFallback(child.configuration.featureId)
+            } else {
+                renderer.Render(child.instance)
+            }
         }
     }
 }
@@ -39,7 +59,7 @@ fun ShellScreen(
 @Composable
 private fun MissingFeatureFallback(featureId: String) {
     HbText(
-        text = "Раздел недоступен: $featureId",
+        text = if (featureId.isEmpty()) "Нет доступных рабочих областей" else "Раздел недоступен: $featureId",
         modifier = Modifier.fillMaxSize(),
         style = HbTypography.Detail,
     )
