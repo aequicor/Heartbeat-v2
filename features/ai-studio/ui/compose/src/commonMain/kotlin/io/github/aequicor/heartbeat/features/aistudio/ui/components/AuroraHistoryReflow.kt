@@ -13,7 +13,6 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,17 +25,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.layout.IntrinsicMeasurable
-import androidx.compose.ui.layout.IntrinsicMeasureScope
-import androidx.compose.ui.layout.LayoutModifier
-import androidx.compose.ui.layout.Measurable
-import androidx.compose.ui.layout.MeasureResult
-import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.offset
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
@@ -259,54 +250,30 @@ internal fun auroraMeasuredHeightMotion(
     val resize by rememberUpdatedState(onFrame)
     val finish by rememberUpdatedState(onResizeEnd)
     val immediate by rememberUpdatedState(streaming)
-    var target by remember(height) { mutableIntStateOf(-1) }
-    var frame by remember(height) { mutableIntStateOf(-1) }
-    if (target >= 0) {
-        val end = target
+    val measure = remember(height) {
+        AnimatedHeightElement(height, { immediate }) { shown -> resize(shown, shown) }
+    }
+    val end = measure.target
+    if (end >= 0) {
         LaunchedEffect(end, animated, duration, streaming) {
             if (streaming) {
-                frame = -1
+                measure.setFrame(-1)
                 return@LaunchedEffect
             }
             val start = height.displayed
             if (animated && start != end) {
                 Animatable(start, Int.VectorConverter).animateTo(end, tween(duration)) {
-                    frame = value
+                    measure.setFrame(value)
                     resize(value, end)
                 }
                 finish()
             } else {
-                frame = end
+                measure.setFrame(end)
                 resize(end, end)
             }
         }
     }
-    return Modifier.clipToBounds().then(remember(height) {
-        object : LayoutModifier {
-            private var measuredHeight = -1
-
-            // Width queries must not update the displayed height or start a scroll adjustment.
-            override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int =
-                measurable.maxIntrinsicWidth(height)
-
-            override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
-                val work = measurable.measure(constraints)
-                val previous = measuredHeight
-                if (previous >= 0 && work.height != previous) target = work.height
-                measuredHeight = work.height
-                val displayed = constraints.constrainHeight(
-                    when {
-                        immediate || target < 0 -> work.height
-                        frame >= 0 -> frame
-                        else -> height.displayed
-                    },
-                )
-                height.displayed = displayed
-                if (immediate && previous >= 0 && previous != displayed) resize(displayed, displayed)
-                return layout(work.width, displayed) { work.placeRelative(0, 0) }
-            }
-        }
-    })
+    return Modifier.clipToBounds().then(measure)
 }
 
 private const val FinalResizeMillis = 360

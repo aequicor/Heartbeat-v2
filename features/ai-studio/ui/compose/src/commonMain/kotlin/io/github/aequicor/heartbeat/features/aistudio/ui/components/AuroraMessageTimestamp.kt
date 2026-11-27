@@ -3,8 +3,10 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -31,6 +33,10 @@ import kotlin.math.roundToInt
 @Suppress("CompositionLocalAllowlist", "NoNonPrivateGlobalVariables")
 internal val LocalAuroraExternalTimestamp = staticCompositionLocalOf<MutableState<Boolean>?> { null }
 
+private val LocalTimestampParagraph = staticCompositionLocalOf<MessageTextGeometry?> { null }
+
+private data class FooterCorrection(val estimated: Int, val actual: Int)
+
 private val TimestampTailBaseline = HorizontalAlignmentLine(::maxOf)
 private val TimestampTailTop = HorizontalAlignmentLine(::maxOf)
 private val TimestampTailRight = VerticalAlignmentLine(::maxOf)
@@ -49,6 +55,8 @@ internal fun AuroraMessageTimestamp(
     content: @Composable ((TextLayoutResult) -> Unit) -> Unit,
 ) {
     val text = remember { MessageTextGeometry() }
+    val paragraph = remember { MessageTextGeometry() }
+    val correction = remember { mutableStateOf<FooterCorrection?>(null) }
     val externalTimestamp = LocalAuroraExternalTimestamp.current
     if (externalTimestamp != null) {
         DisposableEffect(externalTimestamp) {
@@ -57,7 +65,7 @@ internal fun AuroraMessageTimestamp(
     }
     Layout(
         contents = listOf(
-            { Box { content(text::update) } },
+            { CompositionLocalProvider(LocalTimestampParagraph provides paragraph) { Box { content(text::update) } } },
             status,
             { if (time.isNotBlank()) AuroraTimestampText(time) },
         ),
@@ -74,12 +82,10 @@ internal fun AuroraMessageTimestamp(
         } else delivery?.width ?: 0
         val width = constraints.constrainWidth(maxOf(bodyWidth, footerWidth))
         val fittingStamp = stamp?.takeIf { it.width <= width }
-        // Reading an inherited alignment line here would force Compose to place descendants
-        // while LazyColumn is still measuring this row.
         externalTimestamp?.value = stamp != null && fittingStamp == null
         placeMessageContent(
             width, body, delivery, fittingStamp, inlineAllowed, textLayout.takeIf { textSetsWidth },
-            bottomPadding?.roundToPx(),
+            bottomPadding?.roundToPx(), paragraph.layout, correction,
         )
     }
 }
@@ -92,37 +98,53 @@ private fun MeasureScope.placeMessageContent(
     inlineAllowed: Boolean,
     inlineText: TextLayoutResult?,
     bottomPadding: Int?,
+    paragraph: TextLayoutResult?,
+    correction: MutableState<FooterCorrection?>,
 ): MeasureResult {
     val gap = AuroraLayout.Space.roundToPx()
     val rowGap = AuroraLayout.SmallGap.roundToPx()
     val stampX = width - (stamp?.width ?: 0)
-    val stampInline = if (stamp != null && inlineAllowed) {
-        val tail = body.timestampTail() ?: inlineText?.timestampTail(body[LastBaseline])
-        val inlineGap = ceil(AuroraLayout.Space.toPx()).toInt()
-        if (tail != null) tail.stampTop(stamp, stampX, inlineGap, body.height)
-        else body.attachmentStampTop(stamp, stampX, inlineGap, rowGap)
-    } else {
-        null
+    // Inherited alignment lines can traverse the entire message, including nested lazy layouts.
+    // Read the body's lines after placement to avoid Compose issue 549552303.
+    // The final paragraph usually ends at the bottom of the body. Its measured text can
+    // reserve the correct height on the first frame, before inherited offsets are available.
+    val inlineGap = ceil(AuroraLayout.Space.toPx()).toInt()
+    val estimatedInline = if (inlineAllowed && paragraph != null && stamp != null && delivery == null) {
+        val baseline = body.height - paragraph.size.height + paragraph.lastBaseline.roundToInt()
+        paragraph.timestampTail(baseline)?.stampTop(stamp, stampX, inlineGap, body.height) != null
+    } else false
+    val estimated = when {
+        estimatedInline || stamp == null && delivery == null -> bottomPadding ?: gap
+        else -> (bottomPadding ?: rowGap) + rowGap + maxOf(stamp?.height ?: 0, delivery?.height ?: 0)
     }
-    val footerY = body.height + rowGap
-    val splitFooter = delivery != null && delivery.width + gap > stampX
-    val baselineShift = if (!splitFooter && stampInline == null && delivery != null && stamp != null) {
-        val statusBaseline = delivery[FirstBaseline]
-        val stampBaseline = stamp[FirstBaseline]
-        if (statusBaseline == AlignmentLine.Unspecified || stampBaseline == AlignmentLine.Unspecified) 0
-        else statusBaseline - stampBaseline
-    } else 0
-    val statusY = footerY + maxOf(0, -baselineShift)
-    val stampY = stampInline ?: if (splitFooter) {
-        statusY + delivery.height + rowGap
-    } else {
-        footerY + maxOf(0, baselineShift)
-    }
-    val footerBottom = maxOf(stamp?.let { stampY + it.height } ?: 0, delivery?.let { statusY + it.height } ?: 0)
-    val bottom = bottomPadding ?: if (stampInline != null || footerBottom == 0) gap else rowGap
-    val height = maxOf(body.height, footerBottom) + bottom
-    return layout(width, height) {
+    val footer = correction.value?.takeIf { it.estimated == estimated }?.actual ?: estimated
+    return layout(width, body.height + footer) {
         body.place(0, 0)
+        val stampInline = if (stamp != null && inlineAllowed) {
+            val tail = body.timestampTail() ?: inlineText?.timestampTail(body[LastBaseline])
+            if (tail != null) tail.stampTop(stamp, stampX, inlineGap, body.height)
+            else body.attachmentStampTop(stamp, stampX, inlineGap, rowGap)
+        } else {
+            null
+        }
+        val footerY = body.height + rowGap
+        val splitFooter = delivery != null && delivery.width + gap > stampX
+        val baselineShift = if (!splitFooter && stampInline == null && delivery != null && stamp != null) {
+            val statusBaseline = delivery[FirstBaseline]
+            val stampBaseline = stamp[FirstBaseline]
+            if (statusBaseline == AlignmentLine.Unspecified || stampBaseline == AlignmentLine.Unspecified) 0
+            else statusBaseline - stampBaseline
+        } else 0
+        val statusY = footerY + maxOf(0, -baselineShift)
+        val stampY = stampInline ?: if (splitFooter) {
+            statusY + delivery.height + rowGap
+        } else {
+            footerY + maxOf(0, baselineShift)
+        }
+        val footerBottom = maxOf(stamp?.let { stampY + it.height } ?: 0, delivery?.let { statusY + it.height } ?: 0)
+        val bottom = bottomPadding ?: if (stampInline != null || footerBottom == 0) gap else rowGap
+        val actual = maxOf(0, footerBottom - body.height) + bottom
+        correction.value = if (actual == estimated) null else FooterCorrection(estimated, actual)
         delivery?.place(0, statusY)
         stamp?.place(stampX, stampY)
     }
@@ -154,9 +176,13 @@ internal fun AuroraTimestampParagraph(
     onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
     val geometry = remember { MessageTextGeometry() }
+    val messageParagraph = LocalTimestampParagraph.current
+    DisposableEffect(messageParagraph, geometry) {
+        onDispose { messageParagraph?.clear(geometry.layout) }
+    }
     val reportTail = Modifier.layout { measurable, constraints ->
         val paragraph = measurable.measure(constraints)
-        val tail = geometry.layout?.timestampTail(paragraph[LastBaseline])
+        val tail = geometry.layout?.let { it.timestampTail(it.lastBaseline.roundToInt()) }
         // Record the text coordinates so the footer sees the paragraph's position within the document.
         val lines = if (tail == null) emptyMap() else mapOf(
             TimestampTailBaseline to tail.baseline,
@@ -168,6 +194,7 @@ internal fun AuroraTimestampParagraph(
         }
     }
     AuroraReplyText(text, modifier.then(reportTail), style, onTextLayout = { layout ->
+        messageParagraph?.update(layout)
         geometry.update(layout)
         onTextLayout(layout)
     })
@@ -193,6 +220,13 @@ private class MessageTextGeometry {
         if (layout === result) return
         layout = result
         occupied = null
+    }
+
+    fun clear(result: TextLayoutResult?) {
+        if (layout === result) {
+            layout = null
+            occupied = null
+        }
     }
 
     fun occupiedWidth(): Int = occupied ?: checkNotNull(layout).occupiedWidth().also { occupied = it }

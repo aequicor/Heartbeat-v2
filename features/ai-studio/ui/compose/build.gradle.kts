@@ -24,13 +24,6 @@ kotlin {
         implementation(project(":di:api"))
         implementation(libs.kotlinx.coroutines.core)
     }
-    sourceSets.jvmTest.dependencies {
-        implementation(project(path = ":features:ai-studio:impl", configuration = "jvmTestFixtures"))
-        implementation(project(":core:preferences:api"))
-        implementation(libs.compose.ui)
-        implementation(compose.desktop.currentOs)
-        implementation(libs.kotlinx.coroutines.test)
-    }
 }
 
 compose.resources {
