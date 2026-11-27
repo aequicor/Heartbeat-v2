@@ -159,7 +159,8 @@ private fun AuroraCurrentWorkTitle(
     step: Step, earlierPhase: Boolean, laterMarker: Boolean, axis: Dp, touch: Boolean, next: AuroraWorkEventEntrance?,
 ) {
     val title = step.activeTitle.ifBlank { "Агент работает" }
-    val ink = if (earlierPhase && (touch || step.activeTitle.isNotBlank())) AuroraColors.WorkMuted else AuroraColors.WorkInk
+    val grouped = step.events.isNotEmpty() || earlierPhase && (touch || step.activeTitle.isNotBlank())
+    val ink = if (grouped) AuroraColors.WorkMuted else AuroraColors.WorkInk
     if (touch) {
         AuroraWorkText(
             step.activeTitle.ifBlank { "Агент работает…" }, AuroraWorkRole.Detail,
@@ -223,7 +224,9 @@ private fun AuroraWorkStage(
     entrance: ShownWork?,
 ) {
     val current = step.status == StepStatus.Current
-    val standalone = !touch && !current && step.events.size == 1
+    val singleEvent = step.events.singleOrNull()
+    val standalone = !touch && !current && singleEvent != null &&
+        (singleEvent.kind != WorkEventKind.Thinking || step.result == null)
     var retainFocusedEvents by remember { mutableStateOf(false) }
     var previousStandaloneEvent by remember { mutableStateOf<String?>(null) }
     val stageFocus = remember { FocusRequester() }
@@ -372,7 +375,7 @@ private fun AuroraPastWorkHeader(
     val marker = Modifier.fillMaxWidth().timelineMarker(step.status, axis, markerY, before, after, touch, next = next)
         .padding(start = workContentInset(touch) - labelInset)
     val role = if (touch) AuroraWorkRole.Action else AuroraWorkRole.StageTitle
-    val ink = if (touch || step.result != null) AuroraColors.WorkMuted else AuroraColors.DesktopInk
+    val ink = AuroraColors.WorkMuted
     val inset = if (touch) AuroraLayout.ControlGap else AuroraLayout.SmallGap
     if (!expandable) {
         AuroraWorkText(step.title, role, marker.padding(vertical = inset), color = ink)

@@ -6,7 +6,6 @@ import kotlin.math.roundToInt
 
 internal data class AuroraScrollbarViewport(val total: Int, val start: Double, val end: Double) {
     val visibleSpan get() = end - start
-    val fraction get() = (visibleSpan / total).toFloat()
     val progress: Float get() {
         val travel = start + (total - end)
         return if (travel > 0.0) (start / travel).toFloat() else 0f

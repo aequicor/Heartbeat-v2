@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +52,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -156,8 +158,10 @@ internal fun AuroraWorkEvent(
                 alpha = motion.detailsOpacity()
                 translationY = motion.heightOffset(expanded = true)
             }
-            val panel = if (touch) fade else fade.padding(end = AuroraLayout.Space).clip(shape)
-                .background(AuroraColors.WorkAccess)
+            // Thinking prose wraps within the card, so let the open panel contribute a readable intrinsic width.
+            val panelWidth = if (thinking) Modifier.widthIn(min = ExpandedThinkingMinWidth * HbTheme.textScale) else Modifier
+            val panel = if (touch) fade.then(panelWidth) else fade.padding(end = AuroraLayout.Space)
+                .then(panelWidth).clip(shape).background(AuroraColors.WorkAccess)
             val body: @Composable () -> Unit = { AuroraWorkDetailsBody(event, touch, panel, fileContent) }
             if (reveal) {
                 AuroraWorkReveal(
@@ -587,3 +591,5 @@ private fun WorkEvent.glyph() = if (isCommand) HbIconGlyph.Terminal else when (k
     WorkEventKind.Search, WorkEventKind.Check -> HbIconGlyph.Search
     WorkEventKind.Thinking -> HbIconGlyph.Thinking
 }
+
+private val ExpandedThinkingMinWidth = 320.dp

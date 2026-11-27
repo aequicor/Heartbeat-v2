@@ -65,9 +65,11 @@ internal class AuroraScrollbar(
     private val reverse: Boolean,
     private val minimum: Float,
     private val onUserScroll: () -> Unit = {},
+    private val normalizeThumbLength: Boolean = false,
 ) {
     private var hover by mutableStateOf<Offset?>(null)
     private var wheelPosition: Offset? = null
+    private var initialVisibleSpan: Double? = null
     private var drag by mutableStateOf<Drag?>(null)
     val isDragging get() = drag != null
 
@@ -78,7 +80,12 @@ internal class AuroraScrollbar(
     } ?: list.auroraScrollbarViewport()?.thumbOnTrack(height)
 
     private fun AuroraScrollbarViewport.thumbOnTrack(height: Float): AuroraScrollbarThumb {
-        val length = (height * fraction).coerceIn(minimum.coerceAtMost(height), height)
+        // Scrolling changes which rows are measured. Keep their first span for sizing and
+        // divide by the current item count so appending a page can still shorten the thumb.
+        val span = if (normalizeThumbLength) {
+            initialVisibleSpan?.takeIf { it < total } ?: visibleSpan.also { initialVisibleSpan = it }
+        } else visibleSpan
+        val length = (height * (span / total).toFloat()).coerceIn(minimum.coerceAtMost(height), height)
         return AuroraScrollbarThumb(progress.oriented(reverse) * (height - length), length)
     }
 

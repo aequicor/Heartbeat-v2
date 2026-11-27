@@ -43,7 +43,7 @@ internal fun BoxScope.AuroraChatScrollbar(
     AuroraHistoryScrollbar(
         list, "Прокрутка истории", Modifier.align(Alignment.CenterEnd)
             .padding(padding).padding(end = AuroraLayout.TimerThickness),
-        touch = touch, onUserScroll = onUserScroll,
+        touch = touch, normalizeThumbLength = true, onUserScroll = onUserScroll,
     )
 }
 
@@ -55,6 +55,7 @@ internal fun AuroraHistoryScrollbar(
     reverse: Boolean = true,
     touch: Boolean = false,
     lineStepPx: Float? = null,
+    normalizeThumbLength: Boolean = false,
     onUserScroll: () -> Unit = {},
 ) {
     val scrollable by remember(list) { derivedStateOf { list.canScrollBackward || list.canScrollForward } }
@@ -62,7 +63,9 @@ internal fun AuroraHistoryScrollbar(
 
     val minimum = with(LocalDensity.current) { AuroraLayout.ScrollbarMinThumb.toPx() }
     val scrolling by rememberUpdatedState(onUserScroll)
-    val scrollbar = remember(list, reverse, minimum) { AuroraScrollbar(list, reverse, minimum) { scrolling() } }
+    val scrollbar = remember(list, reverse, minimum, normalizeThumbLength) {
+        AuroraScrollbar(list, reverse, minimum, onUserScroll = { scrolling() }, normalizeThumbLength = normalizeThumbLength)
+    }
     var focused by remember { mutableStateOf(false) }
     val focusVisible = focused && HbFocusIndication.keyboardNavigation
     val keyboard = if (touch) Modifier else Modifier

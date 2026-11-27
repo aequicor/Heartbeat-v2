@@ -341,13 +341,13 @@ internal fun AuroraDesktopWorkHeader(
             .padding(horizontal = AuroraLayout.Space, vertical = AuroraLayout.SmallGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AuroraWorkChevron(expanded, tint = AuroraColors.DesktopInk)
+        AuroraWorkChevron(expanded, tint = AuroraColors.WorkMuted)
         val inset = Modifier.padding(start = AuroraLayout.Space)
         if (reveal.interactive) {
             SelectionContainer(modifier = inset.onFocusChanged { onTextFocus(it.isFocused) }, state = selection) {
-                AuroraWorkText(title, AuroraWorkRole.Summary, color = AuroraColors.DesktopInk, maxLines = 1)
+                AuroraWorkText(title, AuroraWorkRole.Summary, color = AuroraColors.WorkMuted, maxLines = 1)
             }
-        } else AuroraWorkText(title, AuroraWorkRole.Summary, inset, color = AuroraColors.DesktopInk, maxLines = 1)
+        } else AuroraWorkText(title, AuroraWorkRole.Summary, inset, color = AuroraColors.WorkMuted, maxLines = 1)
     }
 }
 

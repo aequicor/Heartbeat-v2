@@ -11,17 +11,17 @@ import kotlin.coroutines.cancellation.CancellationException
 
 internal interface SessionDao {
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun <T> transaction(block: suspend () -> T): T
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun lastConfiguration(): ChatConfigRecord?
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun rememberSecurityMode(configuration: ChatConfigRecord)
 
     /** Joins an existing SQLDelight transaction on the same connection. */
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun insert(
         projectId: String,
         title: String,
@@ -30,10 +30,10 @@ internal interface SessionDao {
         conversation: ChatConfigRecord.Conversation? = null,
     ): SessionDto
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun selectById(id: String): SessionDto?
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun selectRoots(
         projectId: String,
         status: String,
@@ -41,7 +41,7 @@ internal interface SessionDao {
         after: DaoPageCursor? = null,
     ): DaoPage<SessionDto>
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun selectChildren(
         parentSessionId: String,
         status: String,
@@ -49,15 +49,15 @@ internal interface SessionDao {
         after: DaoPageCursor? = null,
     ): DaoPage<SessionDto>
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun updateTitle(id: String, title: String)
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun updateExpanded(id: String, isExpanded: Boolean)
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun updateStatus(id: String, status: String, changedAt: DatabaseTimestamp)
 
-    @Throws(DaoException::class, CancellationException::class)
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun delete(id: String)
 }

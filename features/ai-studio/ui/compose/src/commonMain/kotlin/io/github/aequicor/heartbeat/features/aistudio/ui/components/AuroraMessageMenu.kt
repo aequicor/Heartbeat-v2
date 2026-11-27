@@ -147,6 +147,7 @@ internal fun AuroraMessageMenu(
                     motion = HbMenuMotion(
                         replaceTrigger = menu.pointerAnchor == null,
                         hoverMenu = menu.openedByHover,
+                        onHover = menu.onPopupHover,
                     ).takeUnless { touch },
                 ) { trigger ->
                     val toggle = if (expanded) menu.close else menu.open
@@ -180,9 +181,14 @@ private class MessageMenuState {
         private set
     var contextActions by mutableStateOf(emptyList<HbMenuAction>())
         private set
+    private var enteredHoverMenu = false
     val open: () -> Unit = { show(null) }
     val openOnHover: () -> Unit = { show(null, byHover = true) }
     val close: () -> Unit = { expanded = false }
+    val onPopupHover: (Boolean) -> Unit = { hovered ->
+        if (hovered) enteredHoverMenu = true
+        else if (expanded && openedByHover && enteredHoverMenu) close()
+    }
 
     fun showAtPointer(anchor: IntOffset, actions: List<HbMenuAction>) = show(anchor, context = actions)
 
@@ -190,6 +196,7 @@ private class MessageMenuState {
         pointerAnchor = anchor
         openedByHover = byHover
         contextActions = context
+        enteredHoverMenu = false
         expanded = true
     }
 }
