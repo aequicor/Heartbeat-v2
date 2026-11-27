@@ -2,12 +2,16 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,13 +19,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -31,41 +33,47 @@ import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.components.HbAppName
 import io.github.aequicor.heartbeat.designsystem.components.HbBrandLogo
+import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbTabs
-import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraImageEditor as Editor
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowCaption
 import io.github.aequicor.heartbeat.designsystem.theme.HbWindowClientArea
 import io.github.aequicor.heartbeat.features.aistudio.component.ProjectsSessionsComponent
@@ -75,15 +83,21 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileGroup
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileRow
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ImageAttachment
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ImageEditor
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorFooterDescription
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorMarkForm
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageMarkBadge
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.pixelCenter
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.new_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.return_to_session
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.search_sessions
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.settings
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun AuroraChats(
@@ -162,6 +176,8 @@ internal fun AuroraFiles(
             group.copy(files = files).takeIf { files.isNotEmpty() }
         }
     }
+    val sessionId = state.chat?.id
+    val pendingEdits = state.editedImageCopyDrafts[sessionId].orEmpty()
     val canvas = if (touch) AuroraColors.DesktopCanvas else AuroraColors.ViewerSurface
     Column(modifier.fillMaxHeight().background(canvas)) {
         AuroraFilesHeader(state.fileSearchVisible, touch, onAction)
@@ -185,7 +201,7 @@ internal fun AuroraFiles(
                 indicatorColor = AuroraColors.DesktopPrimaryAction,
             )
         }
-        if (groups.isEmpty()) {
+        if (groups.isEmpty() && pendingEdits.isEmpty()) {
             val empty = state.fileSearch.isBlank() && category == FileCategory.All
             Box(Modifier.weight(1f)) {
                 AuroraText(
@@ -195,7 +211,7 @@ internal fun AuroraFiles(
                 )
             }
         } else {
-            AuroraFileList(groups, touch, state.chat?.id, state.attachmentLoadFailures, onAction, Modifier.weight(1f))
+            AuroraFileList(groups, pendingEdits, touch, sessionId, state.attachmentLoadFailures, onAction, Modifier.weight(1f))
         }
     }
 }
@@ -203,6 +219,7 @@ internal fun AuroraFiles(
 @Composable
 private fun AuroraFileList(
     groups: List<FileGroup>,
+    pendingEdits: List<AiStudioScreenState.EditedImageCopyDraft>,
     touch: Boolean,
     sessionId: String?,
     attachmentLoadFailures: Set<String>,
@@ -211,6 +228,15 @@ private fun AuroraFileList(
 ) {
     val groupStyle = HbTypography.Label.copy(color = AuroraColors.DesktopInk)
     LazyColumn(modifier.fillMaxWidth(), contentPadding = PaddingValues(AuroraLayout.Space)) {
+        if (sessionId != null) {
+            items(pendingEdits, key = { "edited-image-copy:${it.file.id}" }) { draft ->
+                AuroraEditedImageCopyDraft(
+                    draft,
+                    onDownload = { onAction(AiStudioAction.DownloadEditedImageCopy(sessionId, draft.file.id)) },
+                    onRetry = { onAction(AiStudioAction.RetryEditedImageCopy(sessionId, draft.file.id)) },
+                )
+            }
+        }
         groups.forEach { group ->
             item(key = "file-group:${group.key}") {
                 BasicText(
@@ -337,11 +363,12 @@ private fun AuroraFilesHeader(searchVisible: Boolean, touch: Boolean, onAction: 
 @Composable
 internal fun AuroraFileLabel(file: File, modifier: Modifier = Modifier, attachmentTile: Boolean = false) {
     val tileSize = if (file.image == null && !attachmentTile) AuroraLayout.FileTile else AuroraLayout.TouchTarget
-    val tileRadius = if (file.image == null) AuroraLayout.SmallRadius else AuroraLayout.SmallGap
+    val tile = if (file.image == null) Modifier.background(
+        AuroraColors.Canvas, RoundedCornerShape(AuroraLayout.SmallRadius),
+    ) else Modifier
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(tileSize)
-                .background(AuroraColors.Canvas, RoundedCornerShape(tileRadius)),
+            Modifier.size(tileSize).then(tile),
             contentAlignment = Alignment.Center,
         ) {
             AuroraAttachmentThumbnail(file.image, Modifier.fillMaxSize()) {
@@ -371,27 +398,26 @@ internal fun AuroraViewer(
     file: File,
     touch: Boolean,
     previews: AuroraDiagramPreviews? = null,
-    onSaveEditedImage: ((ByteArray) -> Unit)? = null,
+    onSaveEditedImage: ((ImageEditResult) -> Unit)? = null,
     copyError: Boolean = false,
     onClose: () -> Unit,
 ) {
     AuroraPanelDialog(onClose) {
-        key(file.id) {
-            CompositionLocalProvider(LocalDiagramPreviews provides previews) {
+        key(file.openId) {
+            if (file.image != null) {
+                AuroraAttachmentImageEditor(
+                    file = file,
+                    onClose = onClose,
+                    onApply = onSaveEditedImage,
+                    actionError = if (copyError) "Не удалось сохранить копию изображения" else null,
+                )
+            } else CompositionLocalProvider(LocalDiagramPreviews provides previews) {
                 Column(
                     Modifier.fillMaxSize().background(AuroraColors.ViewerSurface),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    val title = if (file.image == null) "${file.kind} · ${file.name}" else file.name
-                    AuroraViewerHeader(title, touch, onClose)
-                    if (file.image != null) {
-                        if (onSaveEditedImage != null) AuroraEditImageButton(file, onSaveEditedImage, "Сохранить копию")
-                        if (copyError) AuroraText("Не удалось сохранить копию изображения", color = AuroraColors.Error)
-                        AuroraImageDescription(file.description)
-                        AuroraImagePreview(file, Modifier.weight(1f).fillMaxWidth().padding(AuroraLayout.PaneGap))
-                    } else {
-                        AuroraTextPreview(file, touch, Modifier.weight(1f))
-                    }
+                    AuroraViewerHeader("${file.kind} · ${file.name}", touch, onClose)
+                    AuroraTextPreview(file, touch, Modifier.weight(1f))
                 }
             }
         }
@@ -399,14 +425,68 @@ internal fun AuroraViewer(
 }
 
 @Composable
-internal fun AuroraImageDescription(description: String?) {
-    if (description.isNullOrBlank()) return
-    BasicText(
-        description,
-        Modifier.fillMaxWidth().heightIn(max = 96.dp).verticalScroll(rememberScrollState())
-            .padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.ControlGap),
-        HbTypography.Caption.copy(color = AuroraColors.DesktopInk),
-    )
+internal fun AuroraImageDescription(file: File) {
+    val description = remember(file.description) { ImageEditor.fromDescription(file.description) }
+    if (description.text.isNotBlank()) {
+        BasicText(
+            description.text,
+            Modifier.fillMaxWidth().heightIn(max = Editor.ViewerDescriptionMaxHeight).verticalScroll(rememberScrollState())
+                .padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.ControlGap),
+            HbTypography.Caption.copy(color = AuroraColors.DesktopInk),
+        )
+    }
+    if (description.marks.isEmpty()) return
+    var open by remember(file.openId) { mutableStateOf(false) }
+    AuroraControl(
+        { open = true }, label = "Описание вложения", background = AuroraColors.ViewerSurface,
+        hoverBackground = AuroraColors.WorkHover, round = false,
+    ) {
+        AuroraText("Описание вложения", small = true)
+    }
+    if (open) {
+        Dialog(onDismissRequest = { open = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Column(
+                Modifier.padding(AuroraLayout.PaneGap).widthIn(max = Editor.MobileViewerDescriptionMaxWidth)
+                    .fillMaxWidth().background(AuroraColors.ViewerSurface, RoundedCornerShape(Editor.FormRadius))
+                    .padding(horizontal = HbSpacing.L).padding(top = HbSpacing.L, bottom = Editor.FormInset),
+            ) {
+                BasicText("Описание вложения", style = HbTypography.Label.copy(
+                    color = AuroraColors.DesktopInk, fontSize = Editor.FormTitle, fontWeight = FontWeight.SemiBold,
+                ))
+                Spacer(Modifier.height(HbSpacing.Xs))
+                BasicText(file.name, style = HbTypography.Label.copy(
+                    color = AuroraColors.DesktopInk, fontSize = Editor.ToolSettingText,
+                ), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(AuroraLayout.ContentInset))
+                Column(
+                    Modifier.fillMaxWidth().height(Editor.MobileViewerDescriptionHeight)
+                        .background(Editor.ViewerDescriptionSurface, RoundedCornerShape(AuroraLayout.SmallRadius))
+                        .verticalScroll(rememberScrollState()).padding(HbSpacing.M),
+                ) {
+                    if (description.text.isNotBlank()) AuroraText(description.text)
+                    ImageEditorFooterDescription(
+                        description.footer(), showDivider = description.text.isNotBlank(),
+                        textColor = AuroraColors.DesktopInk, textSize = Editor.ToolSettingText,
+                    )
+                }
+                Spacer(Modifier.height(HbSpacing.Xxs))
+                AuroraControl(
+                    { open = false },
+                    Modifier.align(Alignment.End).height(Editor.ToolSize).width(Editor.FormActionWidth).border(
+                        AuroraLayout.Stroke, Editor.ToolMenuOutline, RoundedCornerShape(Editor.FormFieldRadius),
+                    ),
+                    label = "Закрыть", background = AuroraColors.ViewerSurface, hoverBackground = AuroraColors.WorkHover,
+                    round = false,
+                ) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        BasicText("Закрыть", style = HbTypography.Label.copy(
+                            color = AuroraColors.DesktopInk, fontSize = Editor.FormText, fontWeight = FontWeight.SemiBold,
+                        ))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -431,15 +511,48 @@ private fun AuroraTextPreview(file: File, touch: Boolean, modifier: Modifier) {
 
 @Composable
 @Suppress("InjectDispatcher") // Image decoding belongs to the viewer's lifetime.
-internal fun AuroraImagePreview(file: File, modifier: Modifier) {
+internal fun AuroraImagePreview(file: File, modifier: Modifier, onMarkClick: (() -> Unit)? = null) {
     val result by produceState<Result<ImageBitmap>?>(null, file.content) {
         value = withContext(Dispatchers.Default) { file.decodeAttachmentImage() }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
         val image = result?.getOrNull()
         when {
-            image != null -> Image(image, file.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            image != null -> AuroraImagePreviewWithMarks(image, file, Modifier.fillMaxSize(), onMarkClick)
             result?.isFailure == true -> AuroraText("Не удалось открыть изображение")
+        }
+    }
+}
+
+@Composable
+private fun AuroraImagePreviewWithMarks(
+    image: ImageBitmap,
+    file: File,
+    modifier: Modifier,
+    onMarkClick: (() -> Unit)?,
+) {
+    var canvas by remember { mutableStateOf(IntSize.Zero) }
+    var selection by remember(file.openId) { mutableStateOf<Int?>(null) }
+    val marks = remember(file.description) { ImageEditor.fromDescription(file.description).marks }
+    val dimensions = IntSize(image.width, image.height)
+    Box(modifier.onSizeChanged { canvas = it }) {
+        Image(image, file.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        if (marks.isNotEmpty() && canvas.width > 0 && canvas.height > 0) {
+            val scale = minOf(canvas.width.toFloat() / image.width, canvas.height.toFloat() / image.height)
+            val width = image.width * scale
+            val height = image.height * scale
+            val bounds = Rect(Offset((canvas.width - width) / 2f, (canvas.height - height) / 2f), Size(width, height))
+            marks.forEachIndexed { index, mark ->
+                ImageMarkBadge(mark, index + 1, bounds.pixelCenter(mark.x, mark.y, dimensions)) {
+                    if (onMarkClick == null) selection = index else onMarkClick()
+                }
+            }
+            selection?.let(marks::getOrNull)?.let { mark ->
+                ImageEditorMarkForm(
+                    bounds.pixelCenter(mark.x, mark.y, dimensions), mark, editing = false,
+                    onSave = {}, onDelete = {}, onCancel = { selection = null }, readOnly = true,
+                )
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,29 +43,27 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbMenu
 import io.github.aequicor.heartbeat.designsystem.components.HbMenuPresentation
 import io.github.aequicor.heartbeat.designsystem.components.HbTooltip
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as Colors
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraImageEditor as Editor
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as Layout
+import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing as Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.LocalImageEditorGestureTarget
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_center
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_close
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_more
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_search
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_wrap
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_zoom_in
-import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_zoom_out
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import javax.swing.JComponent
-import kotlin.math.roundToInt
 
 @Composable
 internal fun AuroraDesktopAttachmentPreview(
@@ -73,13 +73,24 @@ internal fun AuroraDesktopAttachmentPreview(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     actionError: String? = null,
-    onSaveEditedImage: ((ByteArray) -> Unit)? = null,
+    onSaveEditedImage: ((ImageEditResult) -> Unit)? = null,
     gestureTarget: JComponent? = null,
 ) {
-    val isImage = file.image != null
-    val transform = remember(file.openId) { AttachmentImageTransform() }
-    val bitmap = key(file.openId) { rememberAttachmentPreviewBitmap(file) }
-    val image = bitmap?.getOrNull()
+    if (file.image != null) {
+        CompositionLocalProvider(LocalImageEditorGestureTarget provides gestureTarget) {
+            ContextMenuArea(items = { listOf(ContextMenuItem("Скопировать", onCopy)) }) {
+                AuroraAttachmentImageEditor(
+                    file = file,
+                    onClose = onClose,
+                    onApply = onSaveEditedImage,
+                    modifier = modifier,
+                    actionError = actionError,
+                    actions = { AttachmentPreviewActions(onCopy, onSave) },
+                )
+            }
+        }
+        return
+    }
     var searchVisible by remember(file.openId) { mutableStateOf(false) }
     var query by remember(file.openId) { mutableStateOf("") }
     var activeHit by remember(file.openId) { mutableIntStateOf(0) }
@@ -109,7 +120,7 @@ internal fun AuroraDesktopAttachmentPreview(
                     if (searchVisible) closeSearch() else onClose()
                     true
                 }
-                !isImage && file.canPreview && event.key == Key.F && (event.isCtrlPressed || event.isMetaPressed) -> {
+                file.canPreview && event.key == Key.F && (event.isCtrlPressed || event.isMetaPressed) -> {
                     searchVisible = true
                     true
                 }
@@ -119,47 +130,21 @@ internal fun AuroraDesktopAttachmentPreview(
     ) {
         Row(
             Modifier.fillMaxWidth().height(Layout.FileViewerHeader).background(Colors.ViewerToolbar)
-                .padding(start = 16.dp, end = 8.dp),
+                .padding(start = Spacing.M, end = Layout.Space),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicText(
                 file.name, Modifier.weight(1f), viewerToolbarStyle(),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
-            if (isImage) {
-                ViewerButton("Уменьшить", Res.drawable.attachment_viewer_zoom_out,
-                    { transform.changeScale(1 / ZoomStep, image) }, enabled = image != null)
-                Spacer(Modifier.width(8.dp))
-                Box(Modifier.width(39.dp), contentAlignment = Alignment.Center) {
-                    BasicText("${(transform.scale(image) * 100).roundToInt()}%", style = viewerToolbarStyle())
-                }
-                ViewerButton("Увеличить", Res.drawable.attachment_viewer_zoom_in,
-                    { transform.changeScale(ZoomStep, image) }, enabled = image != null)
-                Spacer(Modifier.width(8.dp))
-                ViewerButton("Центрировать", Res.drawable.attachment_viewer_center,
-                    transform::resetToActualSize, glyphSize = Layout.DesktopTarget, enabled = image != null)
-                Spacer(Modifier.width(8.dp))
-                if (onSaveEditedImage != null && image != null) {
-                    AuroraEditImageButton(file, onSaveEditedImage, "Сохранить копию") { onEdit ->
-                        val label = "Редактировать изображение"
-                        HbTooltip(label) {
-                            AuroraHeaderButton(label, onEdit, verticalInset = Dp.Hairline) {
-                                Box(Modifier.size(Layout.DesktopTarget), contentAlignment = Alignment.Center) {
-                                    HbIcon(HbIconGlyph.Pencil, size = Layout.Glyph)
-                                }
-                            }
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-            } else if (file.canPreview) {
+            if (file.canPreview) {
                 ViewerButton(
                     "Поиск", Res.drawable.attachment_viewer_search,
                     onClick = { if (searchVisible) closeSearch() else searchVisible = true },
                     modifier = Modifier.focusRequester(searchButtonFocus),
                     selected = searchVisible,
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(Layout.Space))
                 if (file.isMarkdown) {
                     val label = if (sourceMode) "Отформатированный текст" else "Исходный текст"
                     HbTooltip(label) {
@@ -170,11 +155,11 @@ internal fun AuroraDesktopAttachmentPreview(
                             HbIcon(if (sourceMode) HbIconGlyph.Eye else HbIconGlyph.Document, size = Layout.Glyph)
                         }
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Layout.Space))
                 }
                 if (!file.isMarkdown || sourceMode) {
                     ViewerButton("Перенос строк", Res.drawable.attachment_viewer_wrap, { wrap = !wrap }, selected = wrap)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Layout.Space))
                 }
             }
             AttachmentPreviewActions(onCopy, onSave)
@@ -183,7 +168,7 @@ internal fun AuroraDesktopAttachmentPreview(
             )
         }
         if (actionError != null) {
-            AuroraText(actionError, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = Colors.Error)
+            AuroraText(actionError, Modifier.fillMaxWidth().padding(horizontal = Spacing.M, vertical = Layout.Space), color = Colors.Error)
         }
         if (searchVisible) {
             AttachmentSearchBar(
@@ -198,15 +183,7 @@ internal fun AuroraDesktopAttachmentPreview(
                 onClose = ::closeSearch,
             )
         }
-        if (isImage) {
-            AuroraImageDescription(file.description)
-            AttachmentImageViewport(
-                file.name, bitmap, transform, Modifier.weight(1f).fillMaxWidth(),
-                onCopy = onCopy, gestureTarget = gestureTarget,
-            )
-        } else {
-            AttachmentTextViewport(document, file.canPreview, wrap, hit, query.length, Modifier.weight(1f).fillMaxWidth())
-        }
+        AttachmentTextViewport(document, file.canPreview, wrap, hit, query.length, Modifier.weight(1f).fillMaxWidth())
     }
 }
 
@@ -240,9 +217,9 @@ private fun AttachmentSearchBar(
     val focus = remember { FocusRequester() }
     LaunchedEffect(focus) { focus.requestFocus() }
     Row(
-        Modifier.fillMaxWidth().background(Colors.ViewerToolbar).padding(horizontal = 16.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().background(Colors.ViewerToolbar).padding(horizontal = Spacing.M, vertical = Layout.SmallGap),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(Layout.Space),
     ) {
         BasicTextField(
             value = query,
@@ -256,7 +233,7 @@ private fun AttachmentSearchBar(
                     true
                 },
             decorationBox = { inner ->
-                Box(Modifier.fillMaxWidth().background(Colors.ViewerSurface).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                Box(Modifier.fillMaxWidth().background(Colors.ViewerSurface).padding(horizontal = Layout.ChromeInset, vertical = Layout.ControlGap)) {
                     if (query.isEmpty()) BasicText("Найти в файле", style = HbTypography.Label.copy(color = Colors.DesktopWorkMuted))
                     inner()
                 }
@@ -303,7 +280,7 @@ private fun ViewerIcon(icon: DrawableResource, size: Dp = Layout.Glyph) {
 
 @Composable
 private fun viewerToolbarStyle() =
-    HbTypography.Metadata.copy(color = Colors.DesktopWorkMuted, fontSize = 12.sp, lineHeight = 16.sp)
+    HbTypography.Metadata.copy(color = Colors.DesktopWorkMuted, fontSize = Editor.ViewerMetadataSize, lineHeight = Editor.ViewerMetadataLine)
 
 private fun selectedBackground(selected: Boolean) =
-    if (selected) Colors.NavigationHover else androidx.compose.ui.graphics.Color.Transparent
+    if (selected) Colors.NavigationHover else Editor.NoFill

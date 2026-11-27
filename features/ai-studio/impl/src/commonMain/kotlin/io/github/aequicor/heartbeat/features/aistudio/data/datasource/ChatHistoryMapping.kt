@@ -189,7 +189,8 @@ internal fun ChatEntryRecord.Attachment.toDomain(keepReference: Boolean = false)
         ?: originalUri?.let { AttachmentLocation.Original(it) }
     ChatAttachment(
         fileId, name,
-        meta.getValue("kind").jsonPrimitive.content, content.orEmpty(), date ?: addedAt?.toAttachmentDate(),
+        meta.getValue("kind").jsonPrimitive.content, content.orEmpty(),
+        date ?: meta.string("editedAt")?.toAttachmentDate() ?: addedAt?.toAttachmentDate(),
         id.takeIf { hasReference }, size.takeIf { hasReference || image != null }, image,
         mimeType = mediaType,
         base64Encoded = base64Encoded,

@@ -1,8 +1,10 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
-import io.github.aequicor.heartbeat.features.aistudio.MaxAttachmentImagePreviewBytes
+import io.github.aequicor.heartbeat.features.aistudio.attachmentImagePreviewLimit
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ImageMark
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ImageMarkDescription
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.isMarkdownAttachment
@@ -40,6 +42,7 @@ public data class AiStudioScreenState(
     val fileSearchVisible: Boolean = false,
     val viewer: File? = null,
     val viewerCopyError: Boolean = false,
+    val editedImageCopyDrafts: Map<String, List<EditedImageCopyDraft>> = emptyMap(),
     val chatsVisible: Boolean = false,
     val filesVisible: Boolean = false,
     val expandedWork: Set<String> = setOf(),
@@ -581,10 +584,11 @@ public data class AiStudioScreenState(
 
         public fun imageBytes(): ByteArray? {
             val format = ChatImage.forMimeType(image?.mimeType) ?: return null
-            if (content.length > (MaxAttachmentImagePreviewBytes + 2) / 3 * 4) return null
+            val limit = attachmentImagePreviewLimit(kind)
+            if (content.length > (limit + 2) / 3 * 4) return null
             return try {
                 Base64.decode(content).also { bytes ->
-                    require(bytes.size <= MaxAttachmentImagePreviewBytes && ChatImage.identify(bytes) == format)
+                    require(bytes.size <= limit && ChatImage.identify(bytes) == format)
                     if (format == ChatImage.Png && bytes.size <= ChatImage.MaxBytes) ChatPng.validate(bytes)
                 }
             } catch (_: IllegalArgumentException) {
@@ -606,6 +610,33 @@ public data class AiStudioScreenState(
 
     @Serializable
     public data class FileDate(val year: Int, val month: Int, val day: Int, val time: String)
+
+    public data class ImageEditor(val text: String, val marks: List<Mark>) {
+
+        public data class Mark(val x: Int, val y: Int, val name: String, val description: String = "")
+
+        public fun crop(left: Int, top: Int, width: Int, height: Int): ImageEditor =
+            copy(marks = marks.mapNotNull { it.toDomain().crop(left, top, width, height)?.display() })
+
+        public fun rotateRight(height: Int): ImageEditor =
+            copy(marks = marks.map { it.toDomain().rotateRight(height).display() })
+
+        public fun footer(): String = toDomain().footer()
+
+        public fun description(): String? = toDomain().encode()
+
+        private fun toDomain(): ImageMarkDescription = ImageMarkDescription(text, marks.map(Mark::toDomain))
+
+        public companion object {
+
+            public fun fromDescription(description: String?): ImageEditor =
+                ImageMarkDescription.decode(description).let { state ->
+                    ImageEditor(state.text, state.marks.map(ImageMark::display))
+                }
+        }
+    }
+
+    public data class EditedImageCopyDraft(val file: File, val databaseBusy: Boolean)
 
     public data class FileGroup(val key: String, val title: String, val files: List<FileRow>)
 
@@ -673,3 +704,7 @@ public data class AiStudioScreenState(
         public val answered: Boolean get() = options.isNotEmpty() || text.isNotBlank()
     }
 }
+
+private fun AiStudioScreenState.ImageEditor.Mark.toDomain(): ImageMark = ImageMark(x, y, name, description)
+
+private fun ImageMark.display(): AiStudioScreenState.ImageEditor.Mark = AiStudioScreenState.ImageEditor.Mark(x, y, name, description)

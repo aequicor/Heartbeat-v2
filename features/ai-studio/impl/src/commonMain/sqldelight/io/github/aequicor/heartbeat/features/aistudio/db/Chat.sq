@@ -417,6 +417,22 @@ JOIN attachment a ON a.id = s.attachment_id
 WHERE e.chat_id = :chat_id
 ORDER BY e.position DESC, p.position;
 
+-- Edited copies are catalog members without a message revision. Their private URI identifies these snapshots.
+registerEditedImageCopy:
+INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id) VALUES (:chat_id, :snapshot_id);
+
+editedImageCopyDate:
+SELECT coalesce(strftime('%Y-%m-%d %H:%M', 'now', 'localtime'), '');
+
+editedImageCopyHeaders:
+SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
+       coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path
+FROM session_attachment catalog
+JOIN sent_attachment s ON s.id = catalog.snapshot_id
+JOIN attachment a ON a.id = s.attachment_id
+WHERE catalog.chat_id = :chat_id AND s.uri = 'edited-image:' || a.id
+ORDER BY catalog.rowid DESC;
+
 removeCatalogAttachment:
 DELETE FROM session_attachment
 WHERE chat_id = :chat_id AND snapshot_id IN (
@@ -478,7 +494,12 @@ DELETE FROM message_revision WHERE revision_id NOT IN (SELECT id FROM retained);
 
 deleteUnreferencedSentAttachments:
 DELETE FROM sent_attachment
-WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE sent_attachment_id = sent_attachment.id);
+WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE sent_attachment_id = sent_attachment.id)
+  AND NOT EXISTS (
+      SELECT 1 FROM session_attachment
+      WHERE snapshot_id = sent_attachment.id
+        AND sent_attachment.uri = 'edited-image:' || sent_attachment.attachment_id
+  );
 
 deleteUnreferencedAttachments:
 DELETE FROM attachment

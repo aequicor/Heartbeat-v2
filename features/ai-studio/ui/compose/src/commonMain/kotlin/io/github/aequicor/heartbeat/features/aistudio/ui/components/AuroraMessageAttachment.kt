@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,7 +67,8 @@ internal fun AuroraMessageAttachment(
         } else AuroraAttachmentFileMenu(file.openId, touch = false, onAction) { trigger, _ ->
             Row(
                 trigger.fillMaxWidth().heightIn(min = AuroraLayout.MessageAttachmentTile),
-                horizontalArrangement = Arrangement.spacedBy(AuroraLayout.ContentInset),
+                horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 val shape = RoundedCornerShape(
                     if (file.image != null) AuroraLayout.MessageAttachmentImageRadius else AuroraLayout.SmallRadius,
@@ -77,9 +77,10 @@ internal fun AuroraMessageAttachment(
                     Modifier.semantics { contentDescription = "Открыть ${file.name}" }
                         .clickable(role = Role.Button, onClick = onOpen)
                 } else Modifier.semantics { contentDescription = file.name }.focusable()
+                val tile = if (file.image == null) Modifier.background(AuroraColors.FilePaneTile) else Modifier
                 Box(
                     Modifier.size(AuroraLayout.MessageAttachmentTile).clip(shape)
-                        .background(AuroraColors.FilePaneTile).then(open),
+                        .then(tile).then(open),
                     contentAlignment = Alignment.Center,
                 ) {
                     AuroraAttachmentThumbnail(file.image, Modifier.fillMaxSize()) {
@@ -88,7 +89,7 @@ internal fun AuroraMessageAttachment(
                 }
                 val metadataTail = if (measureInfo) Modifier.attachmentTimestampTail() else Modifier
                 Column(
-                    metadataTail.weight(1f, fill = !measureInfo).padding(top = AuroraLayout.ContentInset),
+                    metadataTail.weight(1f, fill = !measureInfo),
                     verticalArrangement = Arrangement.spacedBy(AuroraLayout.FrameStroke),
                 ) {
                     BasicText(

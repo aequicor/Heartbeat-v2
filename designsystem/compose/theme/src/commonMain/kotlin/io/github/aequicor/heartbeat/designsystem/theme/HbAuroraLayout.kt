@@ -147,8 +147,8 @@ object HbAuroraLayout {
     val MessageAttachmentInset = 10.dp
     val MessageAttachmentGap = 6.dp
     val MessageAttachmentWidth = 316.dp
-    val MessageAttachmentTile = 64.dp
-    val MessageAttachmentImageRadius = 11.dp
+    val MessageAttachmentTile = 44.dp
+    val MessageAttachmentImageRadius = 8.dp
     val DesktopCompactMessageTopInset = 8.dp
     val DesktopCompactMessageBottomInset = 6.dp
     val AgentBubble = 632.dp

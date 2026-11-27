@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,8 +13,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.rememberWindowState
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
-import androidx.compose.runtime.Composable
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
 
 internal actual val attachmentViewerUsesWorkspaceOverlay: Boolean = false
 
@@ -21,7 +22,7 @@ internal actual val attachmentViewerUsesWorkspaceOverlay: Boolean = false
 internal actual fun AuroraAttachmentPreviewWindow(
     file: File,
     previews: AuroraDiagramPreviews,
-    onSaveEditedImage: ((ByteArray) -> Unit)?,
+    onSaveEditedImage: ((ImageEditResult) -> Unit)?,
     copyError: Boolean,
     onClose: () -> Unit,
 ) {

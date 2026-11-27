@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -40,7 +42,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.PopupPositionProvider
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
+import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout
+import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 
@@ -54,7 +58,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
  * must apply that modifier to the trigger. [HbMenuSeparator] is a decorative entry: it is not
  * focusable, does not take part in arrow navigation and cannot be activated.
  * [pointerAnchor] uses a point relative to the trigger's top-left corner, in pixels.
- * [popupBackground] can supply a custom background for the menu's shape.
+ * [popupBackground] can supply a custom background for the menu's shape. [title] is an
+ * optional heading above the entries. [popupWidth] sets the width of a compact Aurora popup.
  */
 @Composable
 fun HbMenu(
@@ -68,6 +73,8 @@ fun HbMenu(
     pointerAnchor: IntOffset? = null,
     motion: HbMenuMotion? = null,
     popupBackground: (@Composable (Shape) -> Modifier)? = null,
+    title: String? = null,
+    popupWidth: Dp? = null,
     trigger: @Composable (Modifier) -> Unit,
 ) {
     val triggerRequester = remember { FocusRequester() }
@@ -97,7 +104,8 @@ fun HbMenu(
                 popupPositionProvider = remember(gap, presentation, alignEnd, pointerAnchor, replacesBadge, badgeSize, visual) {
                     HbAnchoredPopupPositionProvider(
                         gap = if (pointerAnchor == null && !replacesBadge) gap else 0,
-                        preferAbove = presentation == HbMenuPresentation.AuroraAttachment,
+                        preferAbove = presentation == HbMenuPresentation.AuroraAttachment ||
+                            presentation == HbMenuPresentation.AuroraImageEditor || presentation == HbMenuPresentation.AuroraImageCrop,
                         alignEnd = alignEnd && pointerAnchor == null,
                         pointerAnchor = pointerAnchor,
                         overlapAnchor = replacesBadge,
@@ -112,6 +120,8 @@ fun HbMenu(
                 HbMenuPopupVisual(visual, motion, expanded) { rowsModifier ->
                     HbMenuSurface(
                         entries = if (expanded) actions else visual?.entries ?: actions,
+                        title = title,
+                        popupWidth = popupWidth,
                         presentation = presentation,
                         focusable = expanded && focusable,
                         modifier = rowsModifier,
@@ -134,6 +144,7 @@ fun HbMenu(
 enum class HbMenuPresentation {
 
     Standard, AuroraMessage, AuroraTouchMessage, AuroraDesktopMessageActions, AuroraSettings, AuroraAttachment, AuroraFileActions,
+    AuroraImageEditor, AuroraImageCrop,
 }
 
 /** One entry of an [HbMenu]: an action or a decorative separator. */
@@ -148,6 +159,7 @@ data class HbMenuAction(
     val selected: Boolean? = null,
     val glyph: HbIconGlyph? = null,
     val destructive: Boolean = false,
+    val labelStyle: (@Composable () -> TextStyle)? = null,
     val leadingIcon: @Composable (Color) -> Unit = {},
 ) : HbMenuEntry
 
@@ -157,6 +169,8 @@ data object HbMenuSeparator : HbMenuEntry
 @Composable
 private fun HbMenuSurface(
     entries: List<HbMenuEntry>,
+    title: String?,
+    popupWidth: Dp?,
     presentation: HbMenuPresentation,
     focusable: Boolean,
     onDismiss: () -> Unit,
@@ -188,7 +202,11 @@ private fun HbMenuSurface(
             modifier = modifier
                 .heightIn(max = maxHeight)
                 .verticalScroll(rememberScrollState())
-                .padding(if (compact) HbAuroraLayout.SmallGap else HbSpacing.Xxs)
+                .padding(when (presentation) {
+                    HbMenuPresentation.AuroraImageCrop -> HbSpacing.None
+                    HbMenuPresentation.AuroraImageEditor -> HbAuroraLayout.SmallGap
+                    else -> if (compact) HbAuroraLayout.SmallGap else HbSpacing.Xxs
+                })
                 .semantics { collectionInfo = CollectionInfo(rowCount = entries.size, columnCount = 1) }
                 .onPreviewKeyEvent { event ->
                     menuKeyEvent(
@@ -208,6 +226,15 @@ private fun HbMenuSurface(
                     Modifier.focusRequester(surfaceRequester).focusable()
                 } else Modifier),
         ) {
+            if (title != null) {
+                BasicText(
+                    title,
+                    Modifier.padding(horizontal = HbAuroraLayout.ContentInset, vertical = HbAuroraLayout.Space),
+                    HbTypography.Label.copy(
+                        color = HbAuroraColors.DesktopWorkMuted,
+                    ),
+                )
+            }
             entries.forEachIndexed { index, entry ->
                 when (entry) {
                     HbMenuSeparator -> HbDivider(
@@ -226,7 +253,7 @@ private fun HbMenuSurface(
         }
     }
     if (compact) {
-        HbAuroraMenuSurface(presentation, popupBackground = popupBackground, content = rows)
+        HbAuroraMenuSurface(presentation, popupBackground = popupBackground, popupWidth = popupWidth, content = rows)
     } else {
         HbOptionSurface(popupBackground = popupBackground, content = rows)
     }

@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aistudio.EditedImageKindPrefix
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileDate
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileGroup
@@ -41,8 +42,9 @@ private fun File.toRow(date: FileDate?): FileRow {
         null, "application/octet-stream" -> extension in MediaExtensions
         else -> mimeType.substringBefore('/') in MediaMimeTypes
     }
+    val metadata = kind.takeIf { catalogUri == "edited-image:$id" && it.startsWith(EditedImageKindPrefix) } ?: sizeLabel
     return FileRow(
-        openId, name, extension, sizeLabel, dateLabel, image, media, originalUri, managedCopyPath,
+        openId, name, extension, metadata, dateLabel, image, media, originalUri, managedCopyPath,
         canRemove = storedAttachmentId != null,
     )
 }

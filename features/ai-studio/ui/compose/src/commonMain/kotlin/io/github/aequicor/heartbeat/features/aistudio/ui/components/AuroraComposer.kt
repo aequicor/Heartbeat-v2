@@ -289,8 +289,8 @@ private fun AuroraComposer(
         key(referenceDraftId, file.id) {
             AuroraDraftAttachmentEditor(
                 file, onDismiss = { editedAttachmentId = null },
-                onSave = { name, description, deferred, edit ->
-                    onAction(AiStudioAction.UpdateDraftAttachment(referenceDraftId, file.id, name, description, deferred, edit))
+                onSave = { name, description, deferred, edit, thumbnail ->
+                    onAction(AiStudioAction.UpdateDraftAttachment(referenceDraftId, file.id, name, description, deferred, edit, thumbnail))
                     editedAttachmentId = null
                 },
             )

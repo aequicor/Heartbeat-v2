@@ -1,5 +1,11 @@
 package io.github.aequicor.heartbeat.features.aistudio.di
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.EditedImageCopyDao
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.EditedImageCopyDaoImpl
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.EditedImageCopyDataSourceImpl
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.EditedImageCopyDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCaseImpl
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
 import dev.zacsweers.metro.Named
@@ -96,6 +102,15 @@ public interface DefaultAiStudioInteractorBindings {
 
         @Provides
         internal fun provideImportChatAttachmentUseCase(impl: ImportChatAttachmentUseCaseImpl): ImportChatAttachmentUseCase = impl
+
+        @Provides
+        internal fun provideEditedImageCopyDao(impl: EditedImageCopyDaoImpl): EditedImageCopyDao = impl
+
+        @Provides
+        internal fun provideEditedImageCopyDataSource(impl: EditedImageCopyDataSourceImpl): EditedImageCopyDataSource = impl
+
+        @Provides
+        internal fun provideSaveEditedImageCopyUseCase(impl: SaveEditedImageCopyUseCaseImpl): SaveEditedImageCopyUseCase = impl
 
         @Provides
         internal fun provideFindPromptReferencesUseCase(impl: FindPromptReferencesUseCaseImpl): FindPromptReferencesUseCase = impl

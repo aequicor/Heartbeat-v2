@@ -2,6 +2,7 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.ui
 
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -193,7 +194,11 @@ internal fun AiStudioScreen(
             val editSource = attachmentImageEditSource()
             val canEdit = state.allowsFileImport && file.image != null
             val saveCopy = state.chat?.id?.takeIf { canEdit }?.let { sessionId ->
-                { bytes: ByteArray -> onAction(AiStudioAction.SaveViewedImageCopy(sessionId, file.openId, editSource(bytes))) }
+                { result: ImageEditResult ->
+                    onAction(AiStudioAction.SaveViewedImageCopy(
+                        sessionId, file.openId, editSource(result.png), result.name, result.description.description(), result.thumbnail,
+                    ))
+                }
             }
             AuroraAttachmentPreviewWindow(file, previews, saveCopy, state.viewerCopyError) { onAction(AiStudioAction.CloseViewer) }
         }

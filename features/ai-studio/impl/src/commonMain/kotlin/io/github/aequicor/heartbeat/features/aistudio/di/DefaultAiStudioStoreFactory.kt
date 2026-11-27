@@ -7,6 +7,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ObserveProjectsSessionsUseCase
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.DefaultAiStudioStore
@@ -30,6 +31,7 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
     private val findPromptReferences: FindPromptReferencesUseCase,
     private val attachmentReferences: AttachmentReferenceResolver,
     private val imageLoader: DraftAttachmentImageLoader,
+    private val saveEditedImageCopy: SaveEditedImageCopyUseCase,
 ) : AiStudioStoreFactory {
 
     override fun create(scope: CoroutineScope): AiStudioStore =
@@ -46,5 +48,6 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
             findPromptReferences,
             attachmentReferences,
             imageLoader,
+            saveEditedImageCopy,
         )
 }

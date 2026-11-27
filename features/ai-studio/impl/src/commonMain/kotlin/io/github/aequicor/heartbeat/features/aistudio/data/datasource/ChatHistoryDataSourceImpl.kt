@@ -1,7 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import dev.zacsweers.metro.Inject
-import io.github.aequicor.heartbeat.features.aistudio.MaxAttachmentImagePreviewBytes
+import io.github.aequicor.heartbeat.features.aistudio.attachmentImagePreviewLimit
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatHistoryDao
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
@@ -44,13 +44,17 @@ internal class ChatHistoryDataSourceImpl(
     override suspend fun file(id: String) = accessStudioRepository {
         val snapshot = dao.file(id)
         val file = snapshot.toDomain()
-        if (snapshot.transferMode == "resource_link") readLinkedAttachment(file, checkNotNull(snapshot.uri))
-        else file
+        if (snapshot.transferMode != "resource_link") return@accessStudioRepository file
+        val uri = checkNotNull(snapshot.uri)
+        val reference = if (uri == "edited-image:${file.id}") {
+            files.reference(checkNotNull(file.source).location)
+        } else uri
+        readLinkedAttachment(file, reference)
     }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     private suspend fun readLinkedAttachment(file: ChatAttachment, uri: String): ChatAttachment = try {
-        val limit = if (ChatImage.forMimeType(file.mimeType) != null) MaxAttachmentImagePreviewBytes else ChatImage.MaxBytes
+        val limit = if (ChatImage.forMimeType(file.mimeType) != null) attachmentImagePreviewLimit(file.kind) else ChatImage.MaxBytes
         val bytes = files.read(uri, limit).second
         check(bytes.size <= limit)
         val format = ChatImage.identify(bytes)

@@ -2,7 +2,7 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
-import io.github.aequicor.heartbeat.features.aistudio.MaxAttachmentImagePreviewBytes
+import io.github.aequicor.heartbeat.features.aistudio.attachmentImagePreviewLimit
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import io.github.aequicor.heartbeat.features.aistudio.domain.util.rethrowCancellation
@@ -27,8 +27,9 @@ internal class DraftAttachmentImageLoaderImpl(
         runCatching {
             if (file.imageBytes() != null) return@runCatching file
             val location = checkNotNull(file.attachmentLocation())
-            val bytes = attachments.read(attachments.reference(location), MaxAttachmentImagePreviewBytes).second
-            require(bytes.size <= MaxAttachmentImagePreviewBytes)
+            val limit = attachmentImagePreviewLimit(file.kind)
+            val bytes = attachments.read(attachments.reference(location), limit).second
+            require(bytes.size <= limit)
             val format = checkNotNull(ChatImage.identify(bytes))
             file.copy(
                 content = Base64.encode(bytes),

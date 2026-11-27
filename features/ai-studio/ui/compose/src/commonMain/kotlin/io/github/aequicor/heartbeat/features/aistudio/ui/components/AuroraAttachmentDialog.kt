@@ -1,5 +1,8 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorFooterDescription
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ImageEditor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,7 +35,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -75,21 +77,22 @@ internal val LocalDraftAttachmentImageLoader = staticCompositionLocalOf<DraftAtt
 @Composable
 internal fun AuroraAttachmentDialog(draftId: String, file: File, onAction: (AiStudioAction) -> Unit, error: String? = null) {
     val loaded = rememberDraftAttachmentOriginal(file, LocalDraftAttachmentImageLoader.current)
-    var edited by remember(file.id) { mutableStateOf<ByteArray?>(null) }
-    val preview = remember(edited, loaded) { edited?.let(file::editedImagePreview) ?: loaded?.getOrNull() }
+    var edited by remember(file.id) { mutableStateOf<ImageEditResult?>(null) }
+    val preview = remember(edited, loaded) { edited?.preview(file) ?: loaded?.getOrNull() }
     val editSource = attachmentImageEditSource()
     val dismiss = { onAction(AiStudioAction.CancelAttachment(draftId, file.id)) }
     AttachmentDetailsDialog(dismiss) {
         AuroraAttachmentDetails(
-            file = file,
+            file = if (edited == null) file else checkNotNull(preview),
             onDismiss = dismiss,
             editedImageRequiresLink = edited != null && preview?.exceedsInlineImageLimit == true,
             onConfirm = { name, description, deferred ->
-                onAction(AiStudioAction.ConfirmAttachment(draftId, file.id, name, description, deferred, edited?.let(editSource)))
+                onAction(AiStudioAction.ConfirmAttachment(
+                    draftId, file.id, name, description, deferred, edited?.png?.let(editSource), edited?.thumbnail,
+                ))
             },
         ) {
-            AttachmentDetailsPreview(file, preview)
-            if (preview != null) AuroraEditImageButton(preview, onApply = { edited = it })
+            AttachmentDetailsPreview(if (edited == null) file else checkNotNull(preview), preview, onImageEdited = { edited = it })
             if (error != null) AuroraText(error, small = true, color = AuroraColors.Error)
             if (loaded?.isFailure == true) {
                 BasicText("Не удалось загрузить оригинал", style = fieldLabelStyle(12))
@@ -102,49 +105,32 @@ internal fun AuroraAttachmentDialog(draftId: String, file: File, onAction: (AiSt
 internal fun AuroraDraftAttachmentEditor(
     file: File,
     onDismiss: () -> Unit,
-    onSave: (String, String?, Boolean, AttachmentImportSource?) -> Unit,
+    onSave: (String, String?, Boolean, AttachmentImportSource?, String?) -> Unit,
 ) {
     val loader = LocalDraftAttachmentImageLoader.current
     val canLoadImage = file.image != null && loader != null
     val loaded = rememberDraftAttachmentOriginal(file, loader)
     val original = loaded?.getOrNull()
-    var edited by remember(file.id) { mutableStateOf<ByteArray?>(null) }
-    val preview = remember(edited, original) { edited?.let(file::editedImagePreview) ?: original }
+    var edited by remember(file.id) { mutableStateOf<ImageEditResult?>(null) }
+    val preview = remember(edited, original) { edited?.preview(file) ?: original }
     val editSource = attachmentImageEditSource()
-    var viewingOriginal by remember(file.id) { mutableStateOf(false) }
-    val form = rememberSaveableStateHolder()
-    if (viewingOriginal && original != null) {
-        val previews = remember { AuroraDiagramPreviews() }
-        AuroraAttachmentPreviewWindow(original, previews) { viewingOriginal = false }
-    } else AttachmentDetailsDialog(onDismiss) {
-        form.SaveableStateProvider(file.id) {
-            AuroraAttachmentDetails(
-                file, onDismiss, { name, description, deferred -> onSave(name, description, deferred, edited?.let(editSource)) },
-                title = "Редактирование вложения",
-                confirmLabel = "Сохранить",
-                maxWidth = if (file.image != null) 560.dp else 400.dp,
-                editedImageRequiresLink = edited != null && preview?.exceedsInlineImageLimit == true,
-            ) {
-                if (original == null) {
-                    AttachmentDetailsPreview(file)
-                    if (canLoadImage) {
-                        val label = if (loaded == null) "Загружаем оригинал…" else "Не удалось загрузить оригинал"
-                        BasicText(label, style = fieldLabelStyle(12))
-                    }
-                } else {
-                    AuroraImagePreview(
-                        checkNotNull(preview),
-                        Modifier.fillMaxWidth().height(240.dp).background(AuroraColors.Canvas).padding(AuroraLayout.PaneGap),
-                    )
-                    AuroraEditImageButton(preview, onApply = { edited = it })
-                    AuroraControl(
-                        { viewingOriginal = true },
-                        background = AuroraColors.DesktopCanvas, hoverBackground = AuroraColors.WorkHover,
-                        round = false,
-                    ) {
-                        BasicText("Открыть оригинал", style = detailTextStyle(AuroraColors.DesktopPrimaryAction))
-                    }
-                }
+    AttachmentDetailsDialog(onDismiss) {
+        val currentFile = if (edited == null) file else checkNotNull(preview)
+        AuroraAttachmentDetails(
+            currentFile,
+            onDismiss,
+            { name, description, deferred -> onSave(name, description, deferred, edited?.png?.let(editSource), edited?.thumbnail) },
+            title = "Редактирование вложения",
+            confirmLabel = "Сохранить",
+            maxWidth = if (file.image != null) 560.dp else 400.dp,
+            editedImageRequiresLink = edited != null && preview?.exceedsInlineImageLimit == true,
+        ) {
+            AttachmentDetailsPreview(
+                currentFile, preview, height = 240.dp, onImageEdited = { edited = it },
+            )
+            if (preview == null && canLoadImage) {
+                val label = if (loaded == null) "Загружаем оригинал…" else "Не удалось загрузить оригинал"
+                BasicText(label, style = fieldLabelStyle(12))
             }
         }
     }
@@ -188,9 +174,15 @@ internal fun AuroraAttachmentDetails(
     editedImageRequiresLink: Boolean = false,
     preview: @Composable () -> Unit = { AttachmentDetailsPreview(file) },
 ) {
-    var name by rememberSaveable(file.id) { mutableStateOf(file.name) }
-    var description by rememberSaveable(file.id) { mutableStateOf(file.description.orEmpty()) }
-    var deferred by rememberSaveable(file.id) { mutableStateOf(file.deferredReading) }
+    var name by rememberSaveable(file.id, file.name) { mutableStateOf(file.name) }
+    val imageDescription = remember(file.description, file.image) {
+        if (file.image != null) ImageEditor.fromDescription(file.description)
+        else ImageEditor(file.description.orEmpty(), emptyList())
+    }
+    var description by rememberSaveable(file.id, file.description) { mutableStateOf(imageDescription.text) }
+    var deferred by key(file.id, file.deferredReading) {
+        rememberSaveable { mutableStateOf(file.deferredReading) }
+    }
     val shape = RoundedCornerShape(12.dp)
     val background = AuroraColors.DesktopCanvas
     Column(
@@ -226,6 +218,7 @@ internal fun AuroraAttachmentDetails(
         }
         Spacer(Modifier.height(12.dp))
         AttachmentDescriptionField(description, { description = it })
+        ImageEditorFooterDescription(imageDescription.footer())
         Spacer(Modifier.height(12.dp))
         AttachmentDeferCheckbox(deferred || editedImageRequiresLink, file.canDeferReading && !editedImageRequiresLink) {
             deferred = it
@@ -246,7 +239,7 @@ internal fun AuroraAttachmentDetails(
             }
             val canSubmit = name.isNotBlank() && name.none(Char::isISOControl)
             AuroraControl(
-                { onConfirm(name.trim(), description.trim().ifEmpty { null }, deferred && file.canDeferReading) },
+                { onConfirm(name.trim(), imageDescription.copy(text = description).description(), (deferred || editedImageRequiresLink) && file.canDeferReading) },
                 Modifier.width(96.dp).height(36.dp), enabled = canSubmit, round = false, horizontalPadding = 0.dp,
                 background = if (canSubmit) AuroraColors.DesktopPrimaryAction else AuroraColors.Lavender,
             ) {
@@ -261,14 +254,22 @@ internal fun AuroraAttachmentDetails(
 }
 
 @Composable
-private fun AttachmentDetailsPreview(file: File, original: File? = null) {
+private fun AttachmentDetailsPreview(
+    file: File,
+    currentImage: File? = null,
+    height: Dp = 154.dp,
+    onImageEdited: ((ImageEditResult) -> Unit)? = null,
+) {
     val detail = attachmentTypeAndSize(file)
     if (file.image != null) {
-        Box(Modifier.fillMaxWidth().height(154.dp).clip(RoundedCornerShape(8.dp)).background(AuroraColors.Canvas)) {
-            if (original != null) {
-                AuroraImagePreview(original, Modifier.fillMaxSize())
-            } else AuroraAttachmentThumbnail(file.image, Modifier.fillMaxSize()) {
-                Image(painterResource(Res.drawable.attachment_dialog_file), null, Modifier.align(Alignment.Center).size(18.dp))
+        val surface = Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(8.dp)).background(AuroraColors.Canvas)
+        if (currentImage != null && onImageEdited != null) {
+            AuroraEditableImagePreview(currentImage, onApply = onImageEdited, modifier = surface)
+        } else {
+            Box(surface) {
+                AuroraAttachmentThumbnail(file.image, Modifier.fillMaxSize()) {
+                    Image(painterResource(Res.drawable.attachment_dialog_file), null, Modifier.align(Alignment.Center).size(18.dp))
+                }
             }
         }
         Spacer(Modifier.height(8.dp))

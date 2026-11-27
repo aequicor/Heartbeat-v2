@@ -76,6 +76,7 @@ public sealed interface AiStudioAction {
         val description: String?,
         val deferredReading: Boolean,
         val editedImage: AttachmentImportSource? = null,
+        val editedThumbnail: String? = null,
     ) : AiStudioAction
 
     public data class CancelAttachment(val draftId: String, val fileId: String) : AiStudioAction
@@ -86,12 +87,19 @@ public sealed interface AiStudioAction {
         val description: String?,
         val deferredReading: Boolean,
         val editedImage: AttachmentImportSource? = null,
+        val editedThumbnail: String? = null,
     ) : AiStudioAction
     public data class SaveViewedImageCopy(
         val sessionId: String,
         val fileId: String,
         val source: AttachmentImportSource,
+        val name: String? = null,
+        val description: String? = null,
+        val thumbnail: String? = null,
     ) : AiStudioAction
+
+    public data class RetryEditedImageCopy(val sessionId: String, val id: String) : AiStudioAction
+    public data class DownloadEditedImageCopy(val sessionId: String, val id: String) : AiStudioAction
 
     public data class Detach(val fileId: String) : AiStudioAction
     public data class EditMessage(val id: String) : AiStudioAction

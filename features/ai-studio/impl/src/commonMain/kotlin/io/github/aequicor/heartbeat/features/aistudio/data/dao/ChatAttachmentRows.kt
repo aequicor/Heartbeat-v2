@@ -54,10 +54,16 @@ internal fun ChatQueries.fullAttachment(snapshotId: String): ChatEntryRecord.Att
         ChatEntryRecord.Attachment(id, size, header, content, mime, mode, uri, blob != null, original, managed)
     }.executeAsOne()
 
-internal fun ChatQueries.readFileCatalog(sessionId: String): List<ChatEntryRecord.Attachment> =
-    chatFileHeaders(chatForSession(sessionId).executeAsOne()) { id, size, header, mime, mode, uri, original, managed, addedAt ->
+internal fun ChatQueries.readFileCatalog(sessionId: String): List<ChatEntryRecord.Attachment> {
+    val chatId = chatForSession(sessionId).executeAsOne()
+    val editedCopies = editedImageCopyHeaders(chatId) { id, size, header, mime, mode, uri, original, managed ->
+        ChatEntryRecord.Attachment(id, size, header, null, mime, mode, uri, originalUri = original, managedPath = managed)
+    }.executeAsList()
+    val messageFiles = chatFileHeaders(chatId) { id, size, header, mime, mode, uri, original, managed, addedAt ->
         ChatEntryRecord.Attachment(
             id, size, header, null, mime, mode, uri,
             originalUri = original, managedPath = managed, addedAt = addedAt.takeIf(String::isNotEmpty),
         )
     }.executeAsList()
+    return editedCopies + messageFiles
+}
