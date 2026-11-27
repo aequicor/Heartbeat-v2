@@ -13,6 +13,7 @@ import kotlinx.serialization.json.put
 /** A subprocess fixture that validates ACP messages independently of the client's SDK types. */
 internal object AcpTestAgent {
     private const val Session = "test-session"
+    private const val Child = "child-session"
     private const val PermissionId = "permission"
 
     @JvmStatic
@@ -34,10 +35,14 @@ internal object AcpTestAgent {
                 "initialize" -> initialize(id, params, profile)
                 "session/new" -> reply(id, """{"sessionId":"$Session"}""")
                 "session/load" -> {
-                    check(profile == "default")
+                    check(profile == "default" || profile == "subagents")
                     check(params?.get("sessionId") == JsonPrimitive(Session))
                     chunk("user_message_chunk", "older")
                     chunk("agent_message_chunk", "reply")
+                    if (profile == "subagents") {
+                        announce("running")
+                        update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Recovered child answer"}}""", Child)
+                    }
                     reply(id, "{}")
                 }
                 "session/resume", "session/close" -> {
@@ -52,13 +57,19 @@ internal object AcpTestAgent {
                     check(params.toString().contains("hello"))
                     promptId = id
                     cancelled = false
+                    val toolSession = if (profile == "subagents") Child else Session
+                    if (profile == "subagents") {
+                        announce("running")
+                        update("""{"sessionUpdate":"session_message","messageId":"delegate","senderSessionId":"$Session","recipientSessionId":"$Child","content":[{"type":"text","text":"Child task"}]}""", Child)
+                        update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Child started"}}""", Child)
+                    }
                     chunk("agent_message_chunk", "Hel")
                     chunk("agent_message_chunk", "lo")
-                    val tool = """{"sessionUpdate":"tool_call","toolCallId":"write","title":"Write file"}"""
-                    update(tool)
+                    val tool = """{"sessionUpdate":"tool_call","toolCallId":"bash","title":"Bash"}"""
+                    update(tool, toolSession)
                     emit(
                         """{"jsonrpc":"2.0","id":"$PermissionId","method":"session/request_permission","params":""" +
-                            """{"sessionId":"$Session","toolCall":{"toolCallId":"write"},"options":[""" +
+                            """{"sessionId":"$toolSession","toolCall":{"toolCallId":"bash"},"options":[""" +
                             """{"optionId":"allow","name":"Allow once","kind":"allow_once"}]}}""",
                     )
                 }
@@ -71,7 +82,13 @@ internal object AcpTestAgent {
                         "cancelled"
                     } else {
                         check(outcome["optionId"] == JsonPrimitive("allow"))
-                        update("""{"sessionUpdate":"tool_call_update","toolCallId":"write","status":"completed"}""")
+                        if (profile == "subagents") {
+                            update("""{"sessionUpdate":"tool_call_update","toolCallId":"bash","status":"completed"}""", Child)
+                            update("""{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Child finished"}}""", Child)
+                            announce("idle")
+                        } else {
+                            update("""{"sessionUpdate":"tool_call_update","toolCallId":"bash","status":"completed"}""")
+                        }
                         "end_turn"
                     }
                     reply(promptId, """{"stopReason":"$reason"}""")
@@ -84,6 +101,7 @@ internal object AcpTestAgent {
 
     private fun initialize(id: JsonElement?, params: JsonObject?, profile: String) {
         check(params?.get("protocolVersion") == JsonPrimitive(1))
+        check(params["clientCapabilities"]?.jsonObject?.get("subagents") == buildJsonObject {})
         val capabilities = when (profile) {
             "minimal" -> "{}"
             "resume" -> """{"sessionCapabilities":{"list":{},"resume":{},"close":{}}}"""
@@ -109,8 +127,11 @@ internal object AcpTestAgent {
     private fun chunk(kind: String, text: String) =
         update("""{"sessionUpdate":"$kind","content":{"type":"text","text":"$text"}}""")
 
-    private fun update(update: String) =
-        emit("""{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"$Session","update":$update}}""")
+    private fun announce(state: String) =
+        update("""{"sessionUpdate":"subagent_update","sessionId":"$Child","title":"Child investigator","state":{"state":"$state"}}""")
+
+    private fun update(update: String, sessionId: String = Session) =
+        emit("""{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"$sessionId","update":$update}}""")
 
     private fun reply(id: JsonElement?, result: String) =
         emit("""{"jsonrpc":"2.0","id":${checkNotNull(id)},"result":$result}""")

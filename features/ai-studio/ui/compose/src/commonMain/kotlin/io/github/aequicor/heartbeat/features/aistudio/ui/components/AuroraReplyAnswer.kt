@@ -499,6 +499,13 @@ private fun AuroraReplyStatus(reply: Reply, touch: Boolean) {
         Modifier.offset(x = AuroraLayout.Space - AuroraLayout.DesktopMessageHorizontalInset)
     }
     when (reply.status) {
+        ReplyStatus.Completed -> if (reply.text.isBlank() && !reply.hasFiles) {
+            AuroraText(
+                if (reply.isBackground) "Фоновая работа" else "Агент завершил ход без итогового ответа",
+                alignWithMarker,
+                small = true, color = AuroraColors.MessageMuted,
+            )
+        }
         ReplyStatus.Failed -> {
             val label = when (reply.failure) {
                 ReplyFailure.RateLimited -> "Слишком много запросов"
@@ -510,7 +517,7 @@ private fun AuroraReplyStatus(reply: Reply, touch: Boolean) {
             if (touch) "Остановлено" else "Ответ остановлен", alignWithMarker,
             small = true, color = AuroraColors.MessageMuted,
         )
-        else -> Unit
+        ReplyStatus.Working -> Unit
     }
 }
 

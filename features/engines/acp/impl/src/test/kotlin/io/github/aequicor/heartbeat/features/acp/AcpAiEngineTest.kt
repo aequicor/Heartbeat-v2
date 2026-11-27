@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.acp
 
+import com.agentclientprotocol.model.SessionUpdate
+import com.agentclientprotocol.model.ToolCallId
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
@@ -12,8 +14,10 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionContent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionListConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSubagents
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
+import io.github.aequicor.heartbeat.features.acp.data.AcpSession
 import io.github.aequicor.heartbeat.features.acp.data.datasource.AcpAgentDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -21,6 +25,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,10 +58,25 @@ internal class AcpAiEngineTest {
         val tool = assertIs<SessionTimelineItem.ToolCall>(
             session.state.value.messages.items.first { it.id == request.toolCallEntryId },
         )
-        assertEquals("Write file", tool.title)
+        assertEquals("Bash", tool.title)
+        assertEquals(null, request.tool?.command)
         engine.sessions.first { it[session.key] == pending }
         session.dispatch(SessionEvent.AnswerPermission(request.requestId, "unknown"))
         assertEquals(pending, session.state.value.status)
+        val command = "printf '%s\\n' hello\nprintf '%s\\n' world"
+        assertIs<AcpSession>(session).update(
+            SessionUpdate.ToolCallUpdate(
+                toolCallId = ToolCallId("bash"),
+                rawInput = buildJsonObject {
+                    put("command", command)
+                    put("workdir", directory.toString())
+                },
+            ),
+        )
+        val updated = assertIs<SessionStatus.AwaitingPermission>(session.state.value.status).requests.single()
+        assertEquals(request.requestId, updated.requestId)
+        assertEquals(command, updated.tool?.command)
+        assertEquals(directory.toString(), updated.tool?.workingDirectory)
         session.dispatch(SessionEvent.AnswerPermission(request.requestId, "allow"))
         val state = session.state.first { it.status == SessionStatus.Idle }
         val messages = state.messages.items
@@ -105,6 +126,35 @@ internal class AcpAiEngineTest {
     }
 
     @Test
+    fun routesChildHistoryAndRequestsBySessionIdAndReplaysThroughTheParent() = withAgent("subagents") { engine ->
+        val config = SessionConfig(directory.toString())
+        val parent = engine.getOrCreateSession(config)
+        val children = assertIs<SessionSubagents>(parent).subagents
+        parent.dispatch(SessionEvent.SendPrompt("hello"))
+        val state = parent.state.first { it.status is SessionStatus.AwaitingPermission }
+        val request = assertIs<SessionStatus.AwaitingPermission>(state.status).requests.single()
+        val child = children.value.single()
+        assertEquals("Child investigator", child.title)
+        assertEquals(parent.key.id, child.parentId)
+        assertEquals(SessionSubagents.Activity.Running, child.activity)
+        assertEquals(listOf(SessionContent.Text("Child task")), assertIs<SessionTimelineItem.UserMessage>(child.items.first()).content)
+        assertEquals("Child investigator: Bash", request.tool?.title)
+        assertTrue(state.messages.items.none { it is SessionTimelineItem.ToolCall })
+
+        parent.dispatch(SessionEvent.AnswerPermission(request.requestId, "allow"))
+        val completed = children.first { it.singleOrNull()?.activity == SessionSubagents.Activity.Idle }.single()
+        assertEquals(listOf(SessionContent.Text("Child finished")), assertIs<SessionTimelineItem.AgentMessage>(completed.items.last()).content)
+        parent.state.first { it.status == SessionStatus.Idle }
+
+        engine.closeSession(parent.key)
+        val reopened = engine.getOrCreateSession(config, parent.key)
+        val replay = assertIs<SessionSubagents>(reopened).subagents.value.single()
+        assertEquals(child.id, replay.id)
+        assertEquals(SessionSubagents.Activity.Unknown, replay.activity)
+        assertEquals(listOf(SessionContent.Text("Recovered child answer")), assertIs<SessionTimelineItem.AgentMessage>(replay.items.single()).content)
+    }
+
+    @Test
     fun resumesExistingSessionWithoutTranscriptReplay() = withAgent("resume") { engine ->
         val config = SessionConfig(directory.toString())
         val first = engine.getOrCreateSession(config)
@@ -151,7 +201,7 @@ internal class AcpAiEngineTest {
         assertFailsWith<IllegalStateException> { engine.getListSessions(SessionListConfig.ByProject("project")) }
 
         val command = listOf(directory.resolve("missing-acp-test-agent").toString())
-        val missing = AcpAgentDataSource(AppCoroutineScope(this)).provider(Key, command) { null }.create()
+        val missing = AcpAgentDataSource(AppCoroutineScope(this), directory.toString()).provider(Key, command) { null }.create()
         try {
             missing.dispatch(AiEngineEvent.Connect)
             assertIs<AiEngineState.Failed>(missing.state.first { it is AiEngineState.Failed })
@@ -167,7 +217,7 @@ internal class AcpAiEngineTest {
         val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
         val classpath = checkNotNull(System.getProperty("heartbeat.acp.test.classpath"))
         val command = listOf(java, "-cp", classpath, AcpTestAgent::class.java.name, profile)
-        val dataSource = AcpAgentDataSource(AppCoroutineScope(this))
+        val dataSource = AcpAgentDataSource(AppCoroutineScope(this), directory.toString())
         val engine = dataSource.provider(Key, command) { id -> directory.takeIf { id == "project" } }.create()
         try {
             withTimeout(20.seconds) {

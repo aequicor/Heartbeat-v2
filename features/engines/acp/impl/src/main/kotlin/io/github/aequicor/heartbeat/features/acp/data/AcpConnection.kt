@@ -3,15 +3,11 @@ package io.github.aequicor.heartbeat.features.acp.data
 import com.agentclientprotocol.annotations.UnstableApi
 import com.agentclientprotocol.model.AcpMethod.AgentMethods.V1
 import com.agentclientprotocol.model.AcpMethod.ClientMethods.V1 as ClientMethods
-import com.agentclientprotocol.model.ClientCapabilities
 import com.agentclientprotocol.model.CloseSessionRequest
 import com.agentclientprotocol.model.CreateElicitationResponse
 import com.agentclientprotocol.model.ElicitationAction
-import com.agentclientprotocol.model.ElicitationCapabilities
-import com.agentclientprotocol.model.ElicitationFormCapabilities
 import com.agentclientprotocol.model.ElicitationMode
 import com.agentclientprotocol.model.ElicitationScope
-import com.agentclientprotocol.model.InitializeRequest
 import com.agentclientprotocol.model.InitializeResponse
 import com.agentclientprotocol.model.LoadSessionRequest
 import com.agentclientprotocol.model.NewSessionRequest
@@ -24,14 +20,20 @@ import com.agentclientprotocol.model.SessionUpdate
 import com.agentclientprotocol.protocol.Protocol
 import com.agentclientprotocol.protocol.invoke
 import com.agentclientprotocol.protocol.jsonRpcInvalidParams
-import com.agentclientprotocol.protocol.setNotificationHandler
 import com.agentclientprotocol.protocol.setRequestHandler
+import com.agentclientprotocol.rpc.ACPJson
 import com.agentclientprotocol.transport.StdioTransport
 import com.agentclientprotocol.transport.Transport
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 @OptIn(UnstableApi::class)
 internal class AcpConnection(
@@ -63,23 +65,23 @@ internal class AcpConnection(
 
     private val routingLock = Any()
     private val sessions = mutableMapOf<SessionId, AcpSession>()
+    private val childOwners = mutableMapOf<SessionId, AcpSession>()
     private var creating = false
-    private val earlyUpdates = mutableMapOf<SessionId, MutableList<SessionUpdate>>()
+    private val earlyUpdates = mutableListOf<Pair<SessionId, SessionUpdate>>()
 
     init {
-        protocol.setNotificationHandler(ClientMethods.SessionUpdate) { notification ->
+        protocol.setNotificationHandlerRaw(ClientMethods.SessionUpdate) { notification ->
+            val params = notification.params as? JsonObject ?: return@setNotificationHandlerRaw
+            val id = params.string("sessionId")?.let(::SessionId) ?: return@setNotificationHandlerRaw
+            val payload = params["update"] as? JsonObject ?: return@setNotificationHandlerRaw
+            val update = ACPJson.decodeFromJsonElement(SessionUpdate.serializer(), payload.withSdkToolContent())
             synchronized(routingLock) {
-                val session = sessions[notification.sessionId]
-                if (session != null) {
-                    session.update(notification.update)
-                } else if (creating) {
-                    earlyUpdates.getOrPut(notification.sessionId, ::mutableListOf).add(notification.update)
-                }
+                if (!route(id, update) && creating) earlyUpdates.add(id to update)
             }
         }
         protocol.setRequestHandler(ClientMethods.SessionRequestPermission) { request ->
-            val session = synchronized(routingLock) { sessions[request.sessionId] }
-            session?.requestPermission(request) ?: RequestPermissionResponse(RequestPermissionOutcome.Cancelled)
+            val (session, childId) = requestOwner(request.sessionId)
+            session?.requestPermission(request, childId) ?: RequestPermissionResponse(RequestPermissionOutcome.Cancelled)
         }
         protocol.setRequestHandler(ClientMethods.ElicitationCreate) { request ->
             val form = request.mode as? ElicitationMode.Form
@@ -88,22 +90,23 @@ internal class AcpConnection(
                 is ElicitationScope.Session -> scope.sessionId
                 is ElicitationScope.Request -> protocol.getOutgoingRequestSessionId(scope.requestId)
             }
-            val session = synchronized(routingLock) { sessions[sessionId] }
-            session?.requestQuestionnaire(request.message, form.requestedSchema)
+            val (session, childId) = requestOwner(sessionId)
+            session?.requestQuestionnaire(request.message, form.requestedSchema, childId)
                 ?: CreateElicitationResponse(ElicitationAction.Cancel)
         }
     }
 
     suspend fun initialize() {
         protocol.start()
-        agent = V1.Initialize(
-            protocol,
-            InitializeRequest(
-                PROTOCOL_VERSION_V1,
-                clientCapabilities = ClientCapabilities(
-                    elicitation = ElicitationCapabilities(form = ElicitationFormCapabilities()),
-                ),
-            ),
+        val params = buildJsonObject {
+            put("protocolVersion", ACPJson.encodeToJsonElement(PROTOCOL_VERSION_V1))
+            putJsonObject("clientCapabilities") {
+                putJsonObject("elicitation") { putJsonObject("form") {} }
+                putJsonObject("subagents") {}
+            }
+        }
+        agent = ACPJson.decodeFromJsonElement(
+            InitializeResponse.serializer(), protocol.sendRequestRaw(V1.Initialize.methodName, params),
         )
         check(agent.protocolVersion == PROTOCOL_VERSION_V1) {
             "Unsupported ACP protocol version ${agent.protocolVersion}"
@@ -123,7 +126,7 @@ internal class AcpConnection(
                 createSession(response.sessionId).also { session ->
                     session.configuration.initialize(response)
                     sessions[response.sessionId] = session
-                    earlyUpdates[response.sessionId]?.forEach(session::update)
+                    earlyUpdates.forEach { (id, update) -> route(id, update) }
                 }
             }
         } finally {
@@ -150,7 +153,32 @@ internal class AcpConnection(
     }
 
     fun forget(session: AcpSession) {
-        synchronized(routingLock) { sessions.remove(SessionId(session.key.id), session) }
+        synchronized(routingLock) {
+            sessions.remove(SessionId(session.key.id), session)
+            childOwners.values.removeAll { it === session }
+        }
+    }
+
+    /** Both roots and their descendants use the same ordered notification handler. */
+    private fun route(id: SessionId, update: SessionUpdate): Boolean {
+        val root = sessions[id] ?: childOwners[id] ?: return false
+        if (update is SessionUpdate.UnknownSessionUpdate && update.sessionUpdateType == "subagent_update") {
+            val childId = update.rawJson.string("sessionId")?.let(::SessionId) ?: return true
+            if (childId != id && childId !in sessions) {
+                val owner = childOwners.getOrPut(childId) { root }
+                if (owner === root) root.announceSubagent(id, childId, update.rawJson)
+            }
+        } else if (id in sessions) {
+            root.update(update)
+        } else {
+            root.updateSubagent(id, update)
+        }
+        return true
+    }
+
+    private fun requestOwner(id: SessionId?): Pair<AcpSession?, SessionId?> = synchronized(routingLock) {
+        val child = childOwners[id]
+        if (child == null) sessions[id] to null else child to id
     }
 
     suspend fun closeSession(id: String) {
@@ -166,6 +194,25 @@ internal class AcpConnection(
             protocol.close()
         }
     }
+}
+
+// Represent standard session references in the SDK's existing display-content model.
+private fun JsonObject.withSdkToolContent(): JsonObject {
+    if (string("sessionUpdate") !in listOf("tool_call", "tool_call_update")) return this
+    val content = this["content"] as? JsonArray ?: return this
+    val mapped = content.map { element ->
+        val item = element as? JsonObject ?: return@map element
+        if (item.string("type") != "session") return@map item
+        val label = item.string("title") ?: item.string("sessionId").orEmpty()
+        buildJsonObject {
+            put("type", "content")
+            putJsonObject("content") {
+                put("type", "text")
+                put("text", label)
+            }
+        }
+    }
+    return JsonObject(this + ("content" to JsonArray(mapped)))
 }
 
 internal fun Process.terminateTree() {

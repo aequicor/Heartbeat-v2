@@ -1,5 +1,11 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
+import io.github.aequicor.heartbeat.features.aistudio.isSubagentToolName
+import io.github.aequicor.heartbeat.features.aistudio.subagentNameFromOutput
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
@@ -36,8 +42,7 @@ internal class ChatHistoryDaoImpl(
         transactionWithResult {
             selectHistoryPage(chatId, before, limit.toLong()).executeAsList().map { row ->
                 val deferred = historyUsesPreview(row.status)
-                val query = selectHistoryParts(row.revision_id, deferred)
-                val parts = query.executeAsList().map { part ->
+                val parts = historyParts(row.revision_id, deferred).map { part ->
                     val attachment = part.sent_attachment_id?.let { id ->
                         if (deferred) fileHeader(id) else fullAttachment(id)
                     }
@@ -159,12 +164,21 @@ internal class ChatHistoryDaoImpl(
 
 internal fun historyUsesPreview(status: String): Boolean = status != "draft"
 
-internal fun ChatQueries.selectHistoryParts(revision: Long, deferred: Boolean) =
+internal fun ChatQueries.historyParts(revision: Long, deferred: Boolean): List<Message_part> =
     if (deferred) {
         selectPreviewParts((ReasoningPreviewLength + 1).toString(), revision, ::Message_part)
+            .executeAsList().map { part -> withLegacySubagentName(part) }
     } else {
-        selectParts(revision)
+        selectParts(revision).executeAsList()
     }
+
+private fun ChatQueries.withLegacySubagentName(part: Message_part): Message_part {
+    if (part.kind != "tool_call" || part.title?.isSubagentToolName() != true) return part
+    val header = part.presentation?.let { Json.parseToJsonElement(it).jsonObject } ?: return part
+    if (header["detailLabel"] is JsonPrimitive) return part
+    val name = selectPartBody(part.id).executeAsOneOrNull()?.body?.subagentNameFromOutput() ?: return part
+    return part.copy(presentation = JsonObject(header + ("detailLabel" to JsonPrimitive(name))).toString())
+}
 
 internal fun String.reasoningPreview(): String =
     if (length <= ReasoningPreviewLength) this else take(ReasoningPreviewLength - 1).trimEnd { it.isHighSurrogate() } + "…"

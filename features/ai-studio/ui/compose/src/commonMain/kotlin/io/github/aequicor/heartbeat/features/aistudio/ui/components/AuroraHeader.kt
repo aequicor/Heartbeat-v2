@@ -76,7 +76,7 @@ private fun AuroraTouchHeader(
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.HeaderRowGap),
     ) {
         val inset = Modifier.padding(horizontal = AuroraLayout.ContentInset)
-        AuroraTouchChatTitle(chat, state.sessionBootstrap, showNavigation, state.subagents, onAction, inset)
+        AuroraTouchChatTitle(chat, state.sessionBootstrap, showNavigation, state.visibleSubagents, onAction, inset)
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
@@ -156,7 +156,7 @@ private fun AuroraTouchChatTitle(
 
 @Composable
 private fun AuroraTouchSubagents(agents: List<Subagent>, onAction: (AiStudioAction) -> Unit) {
-    val actions = agents.map { HbMenuAction(it.title, { onAction(AiStudioAction.OpenChat(it.chatId)) }) }
+    val actions = agents.map { HbMenuAction(it.title, { onAction(it.open) }) }
     AuroraHeaderMenu(actions, alignEnd = true, touch = true) { trigger, open ->
         AuroraTouchHeaderIcon("Субагенты · ${agents.size}", open, trigger) {
             HbIcon(HbIconGlyph.Branch, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)

@@ -17,8 +17,10 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRep
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ReadSubagentHistoryUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
@@ -63,11 +65,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
@@ -91,6 +96,7 @@ internal class DefaultAiStudioStore(
     private val attachmentReferences: AttachmentReferenceResolver? = null,
     private val imageLoader: DraftAttachmentImageLoader? = null,
     private val saveEditedImageCopy: SaveEditedImageCopyUseCase? = null,
+    private val readSubagentHistory: ReadSubagentHistoryUseCase? = null,
 ) : AiStudioStore {
 
     override val projectsSessionsStore: ProjectsSessionsStore? = catalog?.let {
@@ -114,6 +120,8 @@ internal class DefaultAiStudioStore(
     private val editor = MutableStateFlow(Draft())
     private val stream = MutableStateFlow(LiveText())
     private var renderOwner: AuroraTurn? = null
+    private var subagentHistoryJob: Job? = null
+    private var subagentHistoryChatId: String? = null
     private val renderer = ReplyRenderStream(
         schedule = { milliseconds, action -> scope.launch { delay(milliseconds); enqueue { action() } } },
         publish = { stream.value = it },
@@ -224,6 +232,15 @@ internal class DefaultAiStudioStore(
     }
 
     override fun dispatch(action: AiStudioAction) {
+        val state = screen.value
+        if ((state.subagentConversation != null || state.chat?.mockSubagent == true) && state.sessionBootstrap == null) {
+            when (action) {
+                is AiStudioAction.EditDraft, AiStudioAction.Send, is AiStudioAction.SendChatDraft,
+                is AiStudioAction.MessageReference.EditText, is AiStudioAction.MessageReference.EditContent,
+                is AiStudioAction.MessageReference.DeleteQuote -> return
+                else -> Unit
+            }
+        }
         when (action) {
             is AiStudioAction.EditDraft -> {
                 // Keep text feedback immediate. Only a small editor snapshot is touched on this path.
@@ -354,7 +371,7 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.SkipQuestion, is AiStudioAction.SubmitAnswers, is AiStudioAction.DeclineQuestionnaire -> {
                 val id = workspace.selectedId
                 val remote = remoteTurns
-                if (remote?.isRunning(id) == true) {
+                if (remote != null && (remote.isRunning(id) || remote.request(id) != null)) {
                     remote.answerQuestionnaire(id, action)
                     screen.update { if (it.chat?.id == id) it.copy(request = remote.request(id)) else it }
                 } else turns[id]?.answer(action)
@@ -397,6 +414,14 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.ToggleWorkEvent -> if (screen.value.chat != null) {
                 screen.toggleStoredEvent(selected, action, persistence, expandedReplies)
             }
+            is AiStudioAction.OpenProtocolSubagent -> screen.update {
+                if (it.sessionBootstrap != null || action.sessionId !in it.protocolSubagents) it
+                else it.copy(openProtocolSubagentId = action.sessionId, referenceJump = null)
+            }
+            is AiStudioAction.OpenSubagentWork -> openSubagentWork(action.target)
+            AiStudioAction.CloseSubagentConversation -> screen.update {
+                it.copy(referenceJump = null, openProtocolSubagentId = null)
+            }
             is AiStudioAction.SetWorkExpanded -> if (screen.value.chat != null) {
                 screen.setWorkExpanded(selected, action, persistence, expandedReplies)
             }
@@ -406,7 +431,10 @@ internal class DefaultAiStudioStore(
     private fun requestTurnCancellation(id: String) {
         val remote = remoteTurns
         if (remote?.requestCancellation(id) != true) {
-            enqueue { turns[id]?.stop() }
+            enqueue {
+                if (remote?.request(id) != null) remote.cancelBackground(id)
+                else turns[id]?.stop()
+            }
             return
         }
         screen.update {
@@ -415,8 +443,10 @@ internal class DefaultAiStudioStore(
     }
 
     private suspend fun answerPermission(id: String, action: AiStudioAction.AnswerPermission) {
-        if (remoteTurns?.isRunning(id) == true) remoteTurns.answer(id, action.requestId, action.allow)
-        else turns[id]?.answer(action)
+        val remote = remoteTurns
+        if (remote != null && (remote.isRunning(id) || remote.request(id) != null)) {
+            remote.answer(id, action.requestId, action.allow)
+        } else turns[id]?.answer(action)
     }
 
     private suspend fun restoreInitialSession() {
@@ -440,12 +470,14 @@ internal class DefaultAiStudioStore(
         projectsSessionsStore?.dispatch(SessionAction.Select(id))?.getOrThrow()
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         workspace = workspace.copy(selectedId = id)
+        observeBackground(id)
         if (screen.value.chat?.id == id && target.messages === entry.messages) {
-            screen.update { withProjectsSessions(withoutSessionBootstrap(it).copy(chat = target.summary)) }
+            screen.update { withProjectsSessions(withoutSessionBootstrap(it).copy(chat = target.summary, referenceJump = null, openProtocolSubagentId = null)) }
             if (target !== loaded) save()
         } else {
             showChat(target)
         }
+        observeSubagentHistory(id)
     }
 
     private suspend fun loadOlderMessages() {
@@ -502,6 +534,8 @@ internal class DefaultAiStudioStore(
                 attachments = target.attachments,
                 viewer = null,
                 subagents = workspace.subagents(id),
+                protocolSubagents = if (differentChat) emptyMap() else it.protocolSubagents,
+                openProtocolSubagentId = null,
             )
             withProjectsSessions(next)
         }
@@ -550,6 +584,7 @@ internal class DefaultAiStudioStore(
     }
 
     private fun publishBootstrap(bootstrap: SessionBootstrapState) {
+        subagentHistoryJob?.cancel()
         screen.update { current ->
             val existing = current.sessionBootstrap
             val next = if (existing?.id == bootstrap.id) current else withoutSessionBootstrap(current)
@@ -557,7 +592,8 @@ internal class DefaultAiStudioStore(
                 bootstrap.copy(attachments = existing.attachments)
             } else bootstrap
             withProjectsSessions(next.copy(
-                loading = false, sessionBootstrap = updatedBootstrap, filesVisible = false, viewer = null,
+                loading = false, sessionBootstrap = updatedBootstrap, filesVisible = false, viewer = null, referenceJump = null,
+                openProtocolSubagentId = null,
             ))
         }
     }
@@ -703,7 +739,10 @@ internal class DefaultAiStudioStore(
         val removed = workspace.deletedChatIds(matches)
         if (removed.isEmpty()) return
         val clearedChat = screen.value.chat?.id in removed
-        if (clearedChat) editor.value = Draft()
+        if (clearedChat) {
+            subagentHistoryJob?.cancel()
+            editor.value = Draft()
+        }
         for (id in removed) {
             remoteTurns?.discard(id)
             turns.remove(id)?.stop()
@@ -1157,6 +1196,59 @@ internal class DefaultAiStudioStore(
                 screen.update { state -> state.copy(messages = state.messages.map { if (it === current) historical else it }) }
             }
         }
+        revealWorkTarget(target)
+    }
+
+    private suspend fun openSubagentWork(target: AuroraReferenceSelection) {
+        val state = screen.value
+        if (state.sessionBootstrap != null || state.chat == null) return
+        if (state.visibleSubagents.none { it.work == target }) return
+        screen.setWorkExpanded(
+            selected, AiStudioAction.SetWorkExpanded(
+                target.messageId, expanded = true, stepId = target.stepId, eventId = target.eventId,
+            ),
+            persistence, expandedReplies,
+        )
+        screen.update {
+            it.copy(
+                referenceJump = AuroraReferenceJump((it.referenceJump?.sequence ?: 0) + 1, target, opensSubagentChat = true),
+                openProtocolSubagentId = null,
+            )
+        }
+    }
+
+    private fun observeSubagentHistory(chatId: String) {
+        val reader = readSubagentHistory ?: return
+        if (subagentHistoryChatId == chatId && subagentHistoryJob?.isActive == true) return
+        subagentHistoryJob?.cancel()
+        subagentHistoryChatId = chatId
+        val observation = scope.launch(start = CoroutineStart.LAZY) {
+            val owner = coroutineContext.job
+            val history = withContext(defaultDispatcher) { reader(chatId) }
+            history.map { result ->
+                result.getOrNull()?.associate { child ->
+                    child.sessionId to AiStudioScreenState.SubagentConversation(
+                        child.title ?: "Субагент", child.description.orEmpty(), child.status?.let { AiStudioScreenState.StepStatus.valueOf(it.name) },
+                        child.messages.map(ChatHistoryEntry.Message::display), loading = false,
+                    )
+                }
+            }.distinctUntilChanged().flowOn(defaultDispatcher).collect { children ->
+                if (children != null) enqueue {
+                    if (subagentHistoryJob !== owner) return@enqueue
+                    screen.update {
+                        if (it.chat?.id == chatId && it.sessionBootstrap == null) it.copy(protocolSubagents = children)
+                        else it
+                    }
+                }
+            }
+        }
+        subagentHistoryJob = observation
+        observation.start()
+    }
+
+    private suspend fun revealWorkTarget(target: AuroraReferenceSelection) {
+        val source = target.messageId
+        val storage = persistence
         if (target.stepId != null) {
             screen.update { it.copy(expandedWork = it.expandedWork + source, expandedSteps = it.expandedSteps + "$source/${target.stepId}") }
             if (target.eventId != null) {
@@ -1184,13 +1276,13 @@ internal class DefaultAiStudioStore(
         val chat = selected
         val chatId = chat.summary.id
         val text = draft.text.trim()
-        val activeTurn = chatId in turns || remoteTurns?.isRunning(chatId) == true
+        val activeTurn = chatId in turns || remoteTurns?.isRunning(chatId) == true || remoteTurns?.request(chatId) != null
         if (hasPendingAttachmentWork(chatId)) return
         if (chat.attachments.any { it.hasInvalidImageExtension() }) return
         if (screen.value.isPromptBlockedBySecurityMode(chat.summary)) return
         if (draft.chatId != chatId || !draft.body().canSend(chat.attachments.isNotEmpty(), activeTurn)) return
         val remote = remoteTurns
-        if (remote != null) {
+        if (remote != null && chat.summary.scenario != AiStudioScreenState.Scenario.Subagents) {
             sendToEngine(remote, draft, text, chat)
             return
         }
@@ -1281,6 +1373,8 @@ internal class DefaultAiStudioStore(
     }
 
     private fun startEngineTurn(remote: RemoteChatTurns, id: String, submission: RemoteChatTurns.Submission) {
+        observeBackground(id)
+        if (screen.value.chat?.id == id) observeSubagentHistory(id)
         if (remote.isRunning(id)) return
         remote.start(
             id, submission,
@@ -1343,6 +1437,49 @@ internal class DefaultAiStudioStore(
                 submittingDrafts = state.submittingDrafts - id,
                 attachments = workspace.chats.firstOrNull { it.summary.id == id && state.chat?.id == id }
                     ?.attachments ?: state.attachments,
+            )
+        }
+    }
+
+    private fun observeBackground(id: String) {
+        remoteTurns?.observeBackground(
+            id,
+            render = { renderBackgroundTurn(id, it) },
+            onFailure = { if (it is StudioRepositoryException) reportStorageError() },
+        )
+    }
+
+    private fun renderBackgroundTurn(id: String, turn: BackgroundChatTurn?) {
+        if (workspace.chats.none { it.summary.id == id }) return
+        val reply = turn?.reply?.display() as? Reply
+        if (reply != null) {
+            updateChat(id) { it.copy(persistedThroughDomain = true) }
+            putMessage(id, reply)
+        }
+        val remote = checkNotNull(remoteTurns)
+        if (workspace.selectedId != id || screen.value.chat?.id != id) {
+            if (!remote.isRunning(id) && id !in turns) {
+                val status = when {
+                    remote.request(id) != null -> NavigationStatus.Attention
+                    reply != null -> NavigationStatus.Unread
+                    chat(id).summary.navigationStatus == NavigationStatus.Attention -> null
+                    else -> return
+                }
+                if (changeNavigationStatus(id, status)) {
+                    screen.update(::withProjectsSessions)
+                    save()
+                }
+            }
+            return
+        }
+        val messages = history(selected)
+        if (reply != null) workspaceFiles.refresh(listOfNotNull(screen.value.live) + messages)
+        screen.update {
+            it.copy(
+                messages = withPendingSubmission(id, messages),
+                request = remote.request(id) ?: turns[id]?.request,
+                activity = remote.activity(id) ?: turns[id]?.activity ?: Activity.Idle,
+                fileGroups = workspaceFiles.groups(it.fileSearch),
             )
         }
     }
@@ -1567,8 +1704,8 @@ internal class DefaultAiStudioStore(
         screen.update {
             val next = if (messages == null) it else {
                 it.copy(
-                    chat = selected.summary, messages = messages, live = null, request = null, activity = Activity.Idle,
-                    fileGroups = workspaceFiles.groups(it.fileSearch),
+                    chat = selected.summary, messages = messages, live = null, request = remoteTurns?.request(chatId),
+                    activity = remoteTurns?.activity(chatId) ?: Activity.Idle, fileGroups = workspaceFiles.groups(it.fileSearch),
                 )
             }
             val updated = withProjectsSessions(next)

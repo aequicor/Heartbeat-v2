@@ -3,7 +3,9 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -71,6 +73,10 @@ internal fun AuroraLowerControls(
     onTail: () -> Unit = { list.requestScrollToItem(0) },
 ) {
     val chat = state.chat ?: return
+    if (chat.mockSubagent) {
+        AuroraReadOnlyComposer(touch, modifier)
+        return
+    }
     val chatId = chat.id
     val snapshot by draft.collectAsState()
     val references = snapshot.takeIf { it.chatId == chatId }?.references
@@ -150,6 +156,26 @@ internal fun AuroraLowerControls(
             )
         }
     }
+}
+
+@Composable
+internal fun AuroraReadOnlyComposer(touch: Boolean, modifier: Modifier = Modifier) {
+    val surface = if (touch) {
+        Modifier.background(AuroraColors.Pearl, RoundedCornerShape(AuroraLayout.ComposerRadius))
+    } else Modifier.auroraComposerSurface(keyboardFocus = false)
+    BasicTextField(
+        value = "",
+        onValueChange = {},
+        enabled = false,
+        modifier = modifier.fillMaxWidth().then(surface)
+            .padding(horizontal = AuroraLayout.ContentInset, vertical = AuroraLayout.Space),
+        decorationBox = { innerTextField ->
+            Box {
+                AuroraText("Сообщение · только чтение", color = AuroraColors.Muted)
+                innerTextField()
+            }
+        },
+    )
 }
 
 @Composable

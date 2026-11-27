@@ -6,6 +6,8 @@ import io.github.aequicor.heartbeat.features.aistudio.data.datasource.EditedImag
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.EditedImageCopyDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCaseImpl
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ReadSubagentHistoryUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ReadSubagentHistoryUseCaseImpl
 import dev.zacsweers.metro.BindingContainer
 import dev.zacsweers.metro.ContributesTo
 import dev.zacsweers.metro.Named
@@ -127,6 +129,15 @@ public interface DefaultAiStudioInteractorBindings {
         @Provides
         internal fun provideApplyChatConfigurationUseCase(impl: ApplyChatConfigurationUseCaseImpl): ApplyChatConfigurationUseCase =
             impl
+
+        @Provides
+        internal fun provideReadSubagentHistoryUseCase(
+            conversations: ChatConversationDataSource,
+            sessions: SessionsDataSource,
+            projects: ProjectDataSource,
+            engines: ChatEngineDataSourceImpl,
+        ): ReadSubagentHistoryUseCase =
+            ReadSubagentHistoryUseCaseImpl(conversations, sessions, projects, engines::observeSubagents)
 
         @Provides
         internal fun provideSendChatMessageUseCase(impl: SendChatMessageUseCaseImpl): SendChatMessageUseCase = impl

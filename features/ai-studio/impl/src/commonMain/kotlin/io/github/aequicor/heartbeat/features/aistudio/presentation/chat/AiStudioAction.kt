@@ -145,6 +145,9 @@ public sealed interface AiStudioAction {
     public data class SaveArtifact(val replyId: String, val fileId: String) : AiStudioAction
     public data class FileCopyFinished(val failed: Boolean) : AiStudioAction
     public data class ArtifactSaveFinished(val failed: Boolean) : AiStudioAction
+    public data class OpenProtocolSubagent(val sessionId: String) : AiStudioAction
+    public data class OpenSubagentWork(val target: AuroraReferenceSelection) : AiStudioAction
+    public data object CloseSubagentConversation : AiStudioAction
     public data class ToggleWork(val id: String) : AiStudioAction
     public data class ToggleStep(val replyId: String, val stepId: String) : AiStudioAction
     public data class ToggleWorkEvent(val replyId: String, val stepId: String, val eventId: String) : AiStudioAction

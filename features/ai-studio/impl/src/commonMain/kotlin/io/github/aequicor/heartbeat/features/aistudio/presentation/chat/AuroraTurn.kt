@@ -149,7 +149,7 @@ internal class AuroraTurn(
         )
         reply = current.copy(interim = result, steps = current.steps.dropLast(1) + listOf(finished, pending))
         when (prompt.scenario) {
-            Scenario.Stream -> startExecution(fail = false)
+            Scenario.Stream, Scenario.Subagents -> startExecution(fail = false)
             Scenario.Optional -> askQuestions(timed = true)
             else -> askQuestions(timed = false)
         }
@@ -344,10 +344,15 @@ internal class AuroraTurn(
     private fun startExecution(fail: Boolean) {
         val previous = checkNotNull(reply)
         val step = previous.steps.lastOrNull() ?: Step("report", "Подготовка отчёта", "", StepStatus.Current)
-        val report = WorkEvent(
-            "report", "Проверяю переходы состояния", "Выполняется", "Собираю результаты проверки.",
-            WorkEventKind.Check, StepStatus.Current,
-        )
+        val report = if (prompt.scenario == Scenario.Subagents) {
+            WorkEvent(
+                "review-subagent", "Subagent", "Выполняется", "Проверены переходы состояния диалога.",
+                WorkEventKind.Check, StepStatus.Current, detailLabel = "Проверка переходов",
+            )
+        } else {
+            WorkEvent("report", "Проверяю переходы состояния", "Выполняется", "Собираю результаты проверки.",
+                WorkEventKind.Check, StepStatus.Current)
+        }
         val running = step.copy(
             activeTitle = "Подготавливаю отчёт", status = StepStatus.Current,
             events = step.events.filterNot { it.id == report.id } + report,

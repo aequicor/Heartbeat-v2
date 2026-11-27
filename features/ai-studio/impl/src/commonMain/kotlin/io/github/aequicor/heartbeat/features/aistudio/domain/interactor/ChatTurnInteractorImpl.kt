@@ -5,9 +5,11 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ProjectD
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.SessionsDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.chatDirectory
 import dev.zacsweers.metro.Inject
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
@@ -33,10 +35,12 @@ internal class ChatTurnInteractorImpl(
     private val engines: ChatEngineDataSource,
     private val sendMessage: SendChatMessageUseCase,
     private val applyConfiguration: ApplyChatConfigurationUseCase,
+    private val conversations: ChatConversationDataSource,
 ) : ChatTurnInteractor {
 
     private val lock = Mutex()
     private val active = mutableMapOf<String, ActiveTurn>()
+    private val background = mutableMapOf<String, ChatEngineConversationDataSource>()
 
     @Throwable(CancellationException::class)
     override suspend fun send(
@@ -129,13 +133,37 @@ internal class ChatTurnInteractorImpl(
     }
 
     @Throwable(CancellationException::class)
+    override suspend fun observeBackground(
+        sessionId: String,
+        update: suspend (BackgroundChatTurn) -> Unit,
+    ): Result<Unit> = runCatching {
+        val chat = conversations.find(sessionId) ?: return@runCatching
+        val engineId = chat.configuration?.engineId ?: return@runCatching
+        val engineSessionId = chat.engineSessionId ?: return@runCatching
+        val engine = engines.resume(sessionId, engineId, engineSessionId, chatDirectory(sessionId, sessions, projects))
+        lock.withLock { background[sessionId] = engine }
+        try {
+            engine.observeBackground { turn ->
+                turn.reply?.let { conversations.save(sessionId, listOf(it)) }
+                update(turn)
+            }
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (background[sessionId] === engine) background.remove(sessionId)
+                }
+            }
+        }
+    }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
     override suspend fun cancel(sessionId: String): Result<Unit> = runCatching {
         val (preparation, engine) = lock.withLock {
             active[sessionId]?.let {
                 it.cancelled = true
                 it.preparation to it.engine
-            }
-        } ?: return@runCatching
+            } ?: (null to background[sessionId])
+        }
         preparation?.cancel()
         engine?.cancel()
         Unit
@@ -143,7 +171,8 @@ internal class ChatTurnInteractorImpl(
 
     @Throwable(CancellationException::class)
     override suspend fun answerPermission(sessionId: String, requestId: String, optionId: String): Result<Unit> = runCatching {
-        lock.withLock { active[sessionId]?.engine }?.answerPermission(requestId, optionId)
+        val engines = lock.withLock { listOfNotNull(active[sessionId]?.engine, background[sessionId]).distinct() }
+        engines.forEach { it.answerPermission(requestId, optionId) }
         Unit
     }.rethrowCancellation()
 
@@ -153,7 +182,8 @@ internal class ChatTurnInteractorImpl(
         requestId: String,
         answer: QuestionnaireAnswer,
     ): Result<Unit> = runCatching {
-        lock.withLock { active[sessionId]?.engine }?.answerQuestionnaire(requestId, answer)
+        val engines = lock.withLock { listOfNotNull(active[sessionId]?.engine, background[sessionId]).distinct() }
+        engines.forEach { it.answerQuestionnaire(requestId, answer) }
         Unit
     }.rethrowCancellation()
 

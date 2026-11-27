@@ -27,11 +27,14 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.MessageWindowC
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PermissionOption
 import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionBackgroundTurn
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionQuestionnaire
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSubagents
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTimelineItem
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTurn
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSettings
 import kotlinx.coroutines.CancellationException
@@ -42,6 +45,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.util.UUID
 
 @OptIn(UnstableApi::class)
@@ -55,7 +59,7 @@ internal class AcpSession(
     private val imagePrompts: Boolean,
     private val embeddedContext: Boolean,
     private val onStatus: (SessionStatus) -> Unit,
-) : Session {
+) : Session, SessionSubagents {
 
     override val supportsEmbeddedResources: Boolean get() = embeddedContext
 
@@ -63,17 +67,22 @@ internal class AcpSession(
 
     private data class Permission(
         val request: PendingPermission,
+        val childId: SessionId?,
         val answer: CompletableDeferred<RequestPermissionOutcome> = CompletableDeferred(),
     )
 
     private data class Questionnaire(
         val request: SessionQuestionnaire,
+        val childId: SessionId?,
         val answer: CompletableDeferred<ElicitationAction> = CompletableDeferred(),
     )
 
     private val lock = Any()
     private val id = SessionId(initialKey.id)
     private val timeline = AcpTimeline(dshAgent)
+    private val children = AcpSubagents(dshAgent)
+    override val subagents = children.state
+
     private val permissions = linkedMapOf<String, Permission>()
     private val questionnaires = linkedMapOf<String, Questionnaire>()
     private var status: SessionStatus = SessionStatus.Unavailable
@@ -85,6 +94,12 @@ internal class AcpSession(
     private var turn: SessionTurn? = null
     private var contextWindowUsage: ContextWindowUsage? = null
     private var terminated = false
+    private val backgroundTurns = linkedMapOf<String, SessionBackgroundTurn>()
+    private var backgroundId: String? = null
+    private val backgroundToolTurns = mutableMapOf<String, String>()
+
+    private val isBetweenPrompts: Boolean
+        get() = status == SessionStatus.Idle || status is SessionStatus.Failed
     val configuration = AcpSessionSettings(id, protocol, lock, ::publish)
 
     @Volatile
@@ -115,7 +130,7 @@ internal class AcpSession(
 
     override suspend fun selectSetting(id: String, value: String): SessionSettings =
         configuration.select(id, value) {
-            check(!terminated && (status == SessionStatus.Idle || status is SessionStatus.Failed))
+            check(!terminated && isBetweenPrompts && permissions.isEmpty() && questionnaires.isEmpty())
         }
 
     fun opened() = synchronized(lock) {
@@ -123,6 +138,15 @@ internal class AcpSession(
         timeline.breakMessage()
         status = SessionStatus.Idle
         publish()
+    }
+
+    fun announceSubagent(parentId: SessionId, childId: SessionId, update: kotlinx.serialization.json.JsonObject) =
+        synchronized(lock) {
+            if (!terminated) children.announce(parentId.value, childId.value, update, history == HistorySyncStatus.LOADING)
+        }
+
+    fun updateSubagent(id: SessionId, update: SessionUpdate) = synchronized(lock) {
+        if (!terminated) children.update(id.value, update)
     }
 
     fun update(update: SessionUpdate) = synchronized(lock) {
@@ -140,12 +164,14 @@ internal class AcpSession(
                     if (status != SessionStatus.Running) timeline.userChunk(update)
                 }
                 is SessionUpdate.ConfigOptionUpdate -> return@synchronized configuration.update(update.configOptions)
-                is SessionUpdate.AgentMessageChunk -> timeline.agentChunk(update.content, update.messageId?.value)
-                is SessionUpdate.AgentThoughtChunk -> timeline.agentChunk(
-                    update.content, update.messageId?.value, reasoning = true,
+                is SessionUpdate.AgentMessageChunk -> recordBackgroundItem(
+                    timeline.agentChunk(update.content, update.messageId?.value),
                 )
-                is SessionUpdate.ToolCall -> timeline.toolCall(update)
-                is SessionUpdate.ToolCallUpdate -> timeline.toolCallUpdate(update)
+                is SessionUpdate.AgentThoughtChunk -> recordBackgroundItem(
+                    timeline.agentChunk(update.content, update.messageId?.value, reasoning = true),
+                )
+                is SessionUpdate.ToolCall -> updateTool(timeline.toolCall(update))
+                is SessionUpdate.ToolCallUpdate -> updateTool(timeline.toolCallUpdate(update))
                 is SessionUpdate.SessionInfoUpdate -> {
                     val current = key
                     sessionKey = SessionKey(
@@ -162,13 +188,26 @@ internal class AcpSession(
         }
     }
 
-    suspend fun requestPermission(request: RequestPermissionRequest): RequestPermissionResponse {
+    suspend fun requestPermission(request: RequestPermissionRequest, childId: SessionId? = null): RequestPermissionResponse {
         val permission = synchronized(lock) {
-            if (status != SessionStatus.Running || cancelling || request.options.isEmpty()) {
+            if (!acceptsRequests || request.options.isEmpty()) {
                 return RequestPermissionResponse(RequestPermissionOutcome.Cancelled)
             }
-            promptAccepted = true
-            val tool = timeline.toolCallUpdate(request.toolCall)
+            val tool = if (childId == null) {
+                if (status == SessionStatus.Running) promptAccepted = true
+                timeline.toolCallUpdate(request.toolCall).also {
+                    if (isBetweenPrompts) backgroundTurn()
+                    recordBackgroundItem(it)
+                }
+            } else {
+                children.update(childId.value, request.toolCall)
+                val item = children.state.value.first { it.id == childId.value }.items
+                    .filterIsInstance<SessionTimelineItem.ToolCall>().first { it.id == "tool-${request.toolCall.toolCallId.value}" }
+                item.copy(
+                    id = "${childId.value}/${item.id}",
+                    title = "${children.title(childId.value)}: ${item.title}",
+                )
+            }
             val requestId = UUID.randomUUID().toString()
             Permission(
                 PendingPermission(
@@ -178,6 +217,7 @@ internal class AcpSession(
                     request.options.map { PermissionOption(it.optionId.value, it.name, it.kind.name.lowercase()) },
                     tool,
                 ),
+                childId,
             ).also {
                 permissions[requestId] = it
                 publish()
@@ -193,14 +233,17 @@ internal class AcpSession(
         }
     }
 
-    suspend fun requestQuestionnaire(message: String, schema: ElicitationSchema): CreateElicitationResponse {
+    suspend fun requestQuestionnaire(message: String, schema: ElicitationSchema, childId: SessionId? = null): CreateElicitationResponse {
         val questionnaire = synchronized(lock) {
-            if (status != SessionStatus.Running || cancelling) {
+            if (!acceptsRequests) {
                 return CreateElicitationResponse(ElicitationAction.Cancel)
             }
-            promptAccepted = true
+            if (childId == null) {
+                if (status == SessionStatus.Running) promptAccepted = true else backgroundTurn()
+            }
+            val title = if (childId == null) message else "${children.title(childId.value)}: $message"
             val requestId = UUID.randomUUID().toString()
-            Questionnaire(schema.toQuestionnaire(requestId, message)).also {
+            Questionnaire(schema.toQuestionnaire(requestId, title), childId).also {
                 questionnaires[requestId] = it
                 publish()
             }
@@ -222,7 +265,8 @@ internal class AcpSession(
             turn = currentTurn.copy(status = promptFailureStatus())
         }
         status = finalStatus
-        clearRequests()
+        children.disconnect()
+        clearRequests(includeChildren = true)
         prompt?.cancel()
         publish()
     }
@@ -236,7 +280,7 @@ internal class AcpSession(
 
     @Suppress("TooGenericExceptionCaught") // The session reports RPC and transport failures through its state.
     private fun sendPrompt(event: SessionEvent.SendPrompt) {
-        if (status != SessionStatus.Idle && status !is SessionStatus.Failed) return
+        if (!isBetweenPrompts || permissions.isNotEmpty() || questionnaires.isNotEmpty()) return
         val validated = event.validatedSettings
         val actual = configuration.current.securityMode
         val expected = validated?.securityMode
@@ -265,6 +309,7 @@ internal class AcpSession(
             }
         }
         if (content.isEmpty()) return
+        backgroundId = null
         val generation = ++promptGeneration
         status = SessionStatus.Running
         promptAccepted = false
@@ -311,6 +356,17 @@ internal class AcpSession(
 
     @Suppress("TooGenericExceptionCaught") // Dispatch is a non-throwing boundary for transport failures.
     private fun cancel() {
+        if (isBetweenPrompts && (permissions.isNotEmpty() || questionnaires.isNotEmpty())) {
+            try {
+                V1.SessionCancel(protocol, CancelNotification(id))
+            } catch (error: Exception) {
+                status = SessionStatus.Failed(error.failureReason())
+            } finally {
+                clearRequests()
+                publish()
+            }
+            return
+        }
         if (status == SessionStatus.Running && !cancelling) {
             cancelling = true
             try {
@@ -322,6 +378,52 @@ internal class AcpSession(
             } finally {
                 clearRequests()
                 publish()
+            }
+        }
+    }
+
+    private val acceptsRequests: Boolean
+        get() = !terminated && (isBetweenPrompts || status == SessionStatus.Running && !cancelling)
+
+    private fun backgroundTurn(): SessionBackgroundTurn {
+        val id = backgroundId ?: UUID.randomUUID().toString().also { backgroundId = it }
+        return backgroundTurns.getOrPut(id) { SessionBackgroundTurn(id, Instant.now().toString()) }
+    }
+
+    private fun recordBackgroundItem(item: SessionTimelineItem) {
+        val known = backgroundToolTurns[item.id]?.let(backgroundTurns::get)
+        if (known == null && !isBetweenPrompts) return
+        val background = known ?: backgroundTurn()
+        if (item is SessionTimelineItem.ToolCall) backgroundToolTurns[item.id] = background.id
+        val index = background.items.indexOfFirst { it.id == item.id }
+        val items = if (index == -1) background.items + item else background.items.toMutableList().apply {
+            set(index, item)
+        }
+        backgroundTurns[background.id] = background.copy(items = items)
+    }
+
+    private fun updateTool(tool: SessionTimelineItem.ToolCall) {
+        recordBackgroundItem(tool)
+        fillPermissionCommand(tool)
+    }
+
+    private fun fillPermissionCommand(tool: SessionTimelineItem.ToolCall) {
+        val command = tool.command ?: return
+        // An approval request can arrive before the update that supplies the command.
+        permissions.replaceAll { _, permission ->
+            val request = permission.request
+            val pendingTool = request.tool
+            if (pendingTool != null && pendingTool.id == tool.id && pendingTool.command == null) {
+                permission.copy(
+                    request = request.copy(
+                        tool = pendingTool.copy(
+                            command = command,
+                            workingDirectory = pendingTool.workingDirectory ?: tool.workingDirectory,
+                        ),
+                    ),
+                )
+            } else {
+                permission
             }
         }
     }
@@ -362,13 +464,15 @@ internal class AcpSession(
         }
     }
 
-    private fun clearRequests() {
-        val pending = permissions.values.toList()
-        permissions.clear()
-        pending.forEach { it.answer.complete(RequestPermissionOutcome.Cancelled) }
-        val pendingQuestionnaires = questionnaires.values.toList()
-        questionnaires.clear()
-        pendingQuestionnaires.forEach { it.answer.complete(ElicitationAction.Cancel) }
+    private fun clearRequests(includeChildren: Boolean = false) {
+        permissions.values.filter { includeChildren || it.childId == null }.forEach {
+            permissions.remove(it.request.requestId)
+            it.answer.complete(RequestPermissionOutcome.Cancelled)
+        }
+        questionnaires.values.filter { includeChildren || it.childId == null }.forEach {
+            questionnaires.remove(it.request.id)
+            it.answer.complete(ElicitationAction.Cancel)
+        }
     }
 
     private val snapshot: SessionState
@@ -382,6 +486,7 @@ internal class AcpSession(
                 turn = turn?.copy(accepted = promptAccepted),
                 contextWindowUsage = contextWindowUsage,
                 questionnaires = questionnaires.values.map(Questionnaire::request),
+                backgroundTurns = backgroundTurns.values.toList(),
             )
         }
 

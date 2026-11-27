@@ -243,6 +243,9 @@ private fun ChatQueries.writeTurnMessage(chatId: String, message: ChatTurnMessag
     }
     val revision = if (previous == null) {
         lastInsertedId().executeAsOne().also { appendEntry(chatId, it) }
+    } else if (message.replacesBackgroundReply && previous.status != "draft") {
+        insertEditedRevision(message.status, Clock.System.now().toEpochMilliseconds(), header, previous.revision_id)
+        lastInsertedId().executeAsOne().also { selectRevision(it, chatId, previous.position) }
     } else {
         check(previous.status == "draft") { "The message revision has already been finalized" }
         updateDraft(header, message.status, previous.revision_id)

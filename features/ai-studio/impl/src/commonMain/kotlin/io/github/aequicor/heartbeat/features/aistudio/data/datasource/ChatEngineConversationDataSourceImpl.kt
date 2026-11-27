@@ -13,13 +13,17 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionTurn
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallKind
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolCallStatus
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ToolOutput
+import io.github.aequicor.heartbeat.features.aistudio.isSubagentToolName
+import io.github.aequicor.heartbeat.features.aistudio.subagentNameFromOutput
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundReplyIdPrefix
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineTurn
@@ -95,13 +99,18 @@ internal class ChatEngineConversationDataSourceImpl(
         val start = mutex.withLock {
             if (cancelled) return@withLock null
             val state = session.state.value
+            if (state.status is SessionStatus.AwaitingPermission || state.questionnaires.isNotEmpty()) {
+                throw ChatTurnException("Ответьте на запрос агента перед отправкой", notDispatched = true)
+            }
             if (state.status != SessionStatus.Idle && state.status !is SessionStatus.Failed) {
                 throw ChatTurnException("Сессия движка недоступна", notDispatched = true)
             }
             val offset = state.messages.items.size
             val promptFiles = snapshots.map(::promptResource)
             session.dispatch(SessionEvent.SendPrompt(text, turnId, promptFiles = promptFiles, validatedSettings = validated))
-            check(session.state.value.turn?.id == turnId) { "The engine did not accept this turn" }
+            if (session.state.value.turn?.id != turnId) {
+                throw ChatTurnException("Агент не принял сообщение", notDispatched = true)
+            }
             runningId = turnId
             offset
         }
@@ -110,50 +119,25 @@ internal class ChatEngineConversationDataSourceImpl(
             return
         }
         try {
+            // A fast engine can replace Running in its StateFlow before the collector starts.
+            update(ChatEngineTurn(status = ChatEngineTurn.Status.Running))
             var accepted = false
-            val decoded = mutableMapOf<Pair<SessionContent, String?>, ChatAttachment?>()
-            val attachedReferences = mutableSetOf<SessionContent.Resource>()
-            val replyFiles = linkedMapOf<String, ChatAttachment>()
-            val toolFiles = mutableMapOf<String, MutableMap<String, ChatAttachment>>()
-            suspend fun receive(content: SessionContent, directory: String?): ChatAttachment? {
-                if (content is SessionContent.Text) return null
-                val key = content to directory
-                if (key !in decoded) decoded[key] = attachments.receiveAgentAttachment(content, directory)
-                return decoded[key]?.also { if (content is SessionContent.Resource) attachedReferences.add(content) }
-            }
+            val output = TurnOutput()
             session.state.first { state ->
                 val turn = state.turn?.takeIf { it.id == turnId }
                 accepted = accepted || turn?.accepted == true
                 val missingTurnStatus = if (accepted) ChatEngineTurn.Status.Failed else ChatEngineTurn.Status.SendFailed
                 val status = turn?.status?.toDomain() ?: missingTurnStatus
+                val running = status == ChatEngineTurn.Status.Running
                 val permission = (state.status as? SessionStatus.AwaitingPermission)?.requests?.firstOrNull()
-                    ?.toChatPermission()
-                val items = state.messages.items.drop(start)
-                for (item in items) {
-                    when (item) {
-                        is SessionTimelineItem.AgentMessage -> if (!item.reasoning) {
-                            for (content in item.content) {
-                                val file = receive(content, session.key.workingDirectory) ?: continue
-                                replyFiles.recordAttachment(file)
-                            }
-                        }
-                        is SessionTimelineItem.ToolCall -> for (output in item.output) {
-                            val content = item.attachmentContent(output) ?: continue
-                            val file = receive(content, item.workingDirectory ?: session.key.workingDirectory) ?: continue
-                            if (item.isGeneratedImage(file)) {
-                                replyFiles.recordAttachment(file)
-                            } else {
-                                toolFiles.getOrPut(item.id) { linkedMapOf() }.getOrPut(file.id) { file }
-                            }
-                        }
-                        is SessionTimelineItem.UserMessage, is SessionTimelineItem.ContextCompaction -> Unit
-                    }
+                    ?.takeIf { running }?.toChatPermission()
+                val backgroundIds = state.backgroundTurns.flatMapTo(mutableSetOf()) { background ->
+                    background.items.map(SessionTimelineItem::id)
                 }
-                val progress = items.toChatTurn(
-                    status, permission, toolFiles.mapValues { it.value.values.toList() }, attachedReferences,
-                ).copy(
-                    questionnaire = state.questionnaires.firstOrNull(),
-                    accepted = accepted, artifacts = replyFiles.values.toList(),
+                val items = state.messages.items.drop(start).filterNot { it.id in backgroundIds }
+                val progress = output.read(items, status, permission).copy(
+                    questionnaire = state.questionnaires.firstOrNull().takeIf { running },
+                    accepted = accepted,
                 )
                 val updateWithFailure = when (turn?.failure) {
                     SessionTurn.Failure.RateLimited -> progress.copy(failure = ChatHistoryEntry.ReplyFailure.RateLimited)
@@ -174,6 +158,87 @@ internal class ChatEngineConversationDataSourceImpl(
                     runningId = null
                 }
             }
+        }
+    }
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun observeBackground(update: suspend (BackgroundChatTurn) -> Unit) {
+        val observed = mutableMapOf<String, List<SessionTimelineItem>>()
+        val outputs = mutableMapOf<String, TurnOutput>()
+        var pending: BackgroundChatTurn? = null
+        session.state.first { state ->
+            val background = state.backgroundTurns.lastOrNull()
+            val request = if (background != null && state.turn?.status != SessionTurn.Status.Running) {
+                val permission = (state.status as? SessionStatus.AwaitingPermission)?.requests?.firstOrNull()
+                val questionnaire = state.questionnaires.firstOrNull()
+                if (permission != null || questionnaire != null) {
+                    BackgroundChatTurn(background.id, permission = permission?.toChatPermission(), questionnaire = questionnaire)
+                } else null
+            } else null
+            if (request != pending) {
+                update(request ?: BackgroundChatTurn(checkNotNull(pending).id))
+                pending = request
+            }
+            for (turn in state.backgroundTurns) {
+                if (observed[turn.id] == turn.items) continue
+                val progress = outputs.getOrPut(turn.id) { TurnOutput() }.read(turn.items, ChatEngineTurn.Status.Completed)
+                val visible = progress.text.isNotBlank() || !progress.interim.isNullOrBlank() ||
+                    progress.artifacts.isNotEmpty() || progress.steps.any { step ->
+                        step.events.any { it.kind != ChatHistoryEntry.EventKind.Thinking }
+                    }
+                if (visible) {
+                    val time = turn.startedAt.substringAfter('T').take(5)
+                    update(BackgroundChatTurn(turn.id, reply = ChatHistoryEntry.Reply(
+                        id = BackgroundReplyIdPrefix + turn.id, time = time, text = progress.text, promptId = null,
+                        interim = progress.interim, status = ChatHistoryEntry.ReplyStatus.Completed,
+                        steps = progress.steps, result = null, retryAllowed = false, artifacts = progress.artifacts,
+                    )))
+                }
+                observed[turn.id] = turn.items
+            }
+            state.status == SessionStatus.Closed || state.status == SessionStatus.Unavailable
+        }
+    }
+
+    private inner class TurnOutput {
+
+        private val decoded = mutableMapOf<Pair<SessionContent, String?>, ChatAttachment?>()
+        private val attachedReferences = mutableSetOf<SessionContent.Resource>()
+        private val replyFiles = linkedMapOf<String, ChatAttachment>()
+        private val toolFiles = mutableMapOf<String, MutableMap<String, ChatAttachment>>()
+
+        private suspend fun receive(content: SessionContent, directory: String?): ChatAttachment? {
+            if (content is SessionContent.Text) return null
+            val key = content to directory
+            if (key !in decoded) decoded[key] = attachments.receiveAgentAttachment(content, directory)
+            return decoded[key]?.also { if (content is SessionContent.Resource) attachedReferences.add(content) }
+        }
+
+        suspend fun read(
+            items: List<SessionTimelineItem>,
+            status: ChatEngineTurn.Status,
+            permission: ChatTurn.Permission? = null,
+        ): ChatEngineTurn {
+            for (item in items) {
+                when (item) {
+                    is SessionTimelineItem.AgentMessage -> if (!item.reasoning) {
+                        for (content in item.content) {
+                            val file = receive(content, session.key.workingDirectory) ?: continue
+                            replyFiles.recordAttachment(file)
+                        }
+                    }
+                    is SessionTimelineItem.ToolCall -> for (result in item.output) {
+                        val content = item.attachmentContent(result) ?: continue
+                        val file = receive(content, item.workingDirectory ?: session.key.workingDirectory) ?: continue
+                        if (item.isGeneratedImage(file)) replyFiles.recordAttachment(file)
+                        else toolFiles.getOrPut(item.id) { linkedMapOf() }.recordAttachment(file)
+                    }
+                    is SessionTimelineItem.UserMessage, is SessionTimelineItem.ContextCompaction -> Unit
+                }
+            }
+            return items.toChatTurn(
+                status, permission, toolFiles.mapValues { it.value.values.toList() }, attachedReferences,
+            ).copy(artifacts = replyFiles.values.toList())
         }
     }
 
@@ -250,7 +315,7 @@ private fun promptResource(snapshot: SentMessageAttachment): SessionEvent.Prompt
     )
 }
 
-private fun SessionContent.display(): String = when (this) {
+internal fun SessionContent.display(): String = when (this) {
     is SessionContent.Text -> text
     is SessionContent.Resource -> title ?: uri
     is SessionContent.Artifact -> ""
@@ -385,6 +450,7 @@ private fun SessionTimelineItem.ToolCall.toToolEvent(
         ChatHistoryEntry.EventKind.Thinking, ChatHistoryEntry.EventKind.Check -> null
     } ?: title
     val detailLabel = when {
+        title.isSubagentToolName() -> details.subagentNameFromOutput()
         operation == ChatHistoryEntry.ToolOperation.EXECUTE -> workingDirectory
         eventKind == ChatHistoryEntry.EventKind.File || eventKind == ChatHistoryEntry.EventKind.Search -> target
         else -> null

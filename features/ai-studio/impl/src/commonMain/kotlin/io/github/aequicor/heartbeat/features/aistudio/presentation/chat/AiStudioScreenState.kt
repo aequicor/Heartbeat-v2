@@ -1,6 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
 import io.github.aequicor.heartbeat.features.aistudio.attachmentImagePreviewLimit
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundReplyIdPrefix
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ImageMark
@@ -68,7 +69,43 @@ public data class AiStudioScreenState(
     val submittingDrafts: Set<String> = emptySet(),
     val referenceJump: AuroraReferenceJump? = null,
     val referenceUnavailable: Boolean = false,
+    val protocolSubagents: Map<String, SubagentConversation> = emptyMap(),
+    val openProtocolSubagentId: String? = null,
 ) {
+
+    public val subagentConversation: SubagentConversation?
+        get() {
+            openProtocolSubagentId?.let { return protocolSubagents[it] }
+            val jump = referenceJump?.takeIf { it.opensSubagentChat } ?: return null
+            val target = jump.target
+            val reply = live?.takeIf { it.id == target.messageId }
+                ?: messages.filterIsInstance<Reply>().firstOrNull { it.id == target.messageId } ?: return null
+            val event = reply.steps.firstOrNull { it.id == target.stepId }
+                ?.events?.firstOrNull { it.id == target.eventId } ?: return null
+            return SubagentConversation(
+                event.subagentTitle(), event.details.ifBlank { event.summary }, event.status,
+                jump.subagentMessages, jump.subagentHistoryLoading,
+            )
+        }
+
+    public val visibleSubagents: List<Subagent>
+        get() {
+            if (sessionBootstrap != null) return emptyList()
+            val protocol = protocolSubagents.map { (id, child) -> Subagent(id, child.title, protocol = true) }
+            if (chat?.configuration != null) return subagents + protocol
+            return subagents + protocol + (sequenceOf(live) + messages.asSequence().filterIsInstance<Reply>())
+                .filterNotNull().distinctBy(Reply::id)
+                .flatMap { reply ->
+                    reply.steps.asSequence().flatMap { step ->
+                        step.events.asSequence().filter { it.isSubagentLaunch() }.map { event ->
+                            val target = AuroraReferenceSelection(
+                                reply.id, AuroraReferenceSelection.Kind.ToolCall, step.id, event.id,
+                            )
+                            Subagent("${reply.id}/${event.id}", event.subagentTitle(), target)
+                        }
+                    }
+                }.toList()
+        }
 
     public fun isPromptBlockedBySecurityMode(chat: Chat): Boolean =
         chat.securityMode?.requiresUserChoice == true || chat.id in applyingSecurityModeFor || chat.id in securityModeErrors
@@ -327,7 +364,30 @@ public data class AiStudioScreenState(
         val remaining: Long get() = (size - used).coerceAtLeast(0)
     }
 
-    public data class Subagent(val chatId: String, val title: String)
+    public data class SubagentConversation(
+        val title: String,
+        val output: String,
+        val status: StepStatus?,
+        val messages: List<Message>?,
+        val loading: Boolean,
+    )
+
+    public data class Subagent(
+        val chatId: String,
+        val title: String,
+        val work: AuroraReferenceSelection? = null,
+        val protocol: Boolean = false,
+    ) {
+
+        public constructor(chatId: String, title: String) : this(chatId, title, null)
+
+        public val open: AiStudioAction
+            get() = when {
+                protocol -> AiStudioAction.OpenProtocolSubagent(chatId)
+                work != null -> AiStudioAction.OpenSubagentWork(work)
+                else -> AiStudioAction.OpenChat(chatId)
+            }
+    }
 
     public data class NavigationRow(
         val id: String,
@@ -361,6 +421,7 @@ public data class AiStudioScreenState(
         RunFailure("Ошибка выполнения"),
         Optional("Уточнение с таймером"),
         Stream("Длинный поток"),
+        Subagents("Запуск субагента"),
     }
 
     @Serializable
@@ -421,6 +482,8 @@ public data class AiStudioScreenState(
         val artifacts: List<File> = listOf(),
         @Transient val revisionId: Long? = null,
     ) : Message {
+        public val isBackground: Boolean get() = id.startsWith(BackgroundReplyIdPrefix)
+
         @Transient
         public val interimContent: ReplyHistoryContent? = interim?.let { ReplyHistoryContent(it) }
 

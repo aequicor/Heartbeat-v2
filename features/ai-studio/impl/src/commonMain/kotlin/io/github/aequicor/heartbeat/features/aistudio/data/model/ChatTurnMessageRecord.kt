@@ -7,6 +7,7 @@ internal data class ChatTurnMessageRecord(
     val header: String,
     val parts: List<Part>,
     val expectedRevisionId: Long? = null,
+    val replacesBackgroundReply: Boolean = false,
 ) {
 
     data class Part(

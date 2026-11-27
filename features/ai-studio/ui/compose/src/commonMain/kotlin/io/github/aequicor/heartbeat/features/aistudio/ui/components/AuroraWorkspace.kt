@@ -123,6 +123,7 @@ internal fun AuroraWorkspace(
             if (floatingBackdrop != null) {
                 Box(Modifier.matchParentSize().then(floatingBackdrop.recordWallpaper()).auroraBackdrop(backdrop))
             }
+            val subagent = state.subagentConversation
             val bootstrap = state.sessionBootstrap
             if (bootstrap != null) {
                 key(bootstrap.id) {
@@ -130,6 +131,8 @@ internal fun AuroraWorkspace(
                         state, bootstrap, touch, showNavigation, Dp(preferredWidth), clearance, caption, onAction,
                     )
                 }
+            } else if (subagent != null) {
+                AuroraSubagentConversation(subagent, touch, Dp(preferredWidth), clearance, onAction)
             } else if (chatId != null) {
                 AuroraChatHost(chatId) {
                     val chatAction: (AiStudioAction) -> Unit = { action ->

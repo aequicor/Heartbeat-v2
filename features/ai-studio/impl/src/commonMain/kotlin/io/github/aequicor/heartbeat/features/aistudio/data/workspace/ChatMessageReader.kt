@@ -3,7 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.fileHeader
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.fullAttachment
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
-import io.github.aequicor.heartbeat.features.aistudio.data.dao.selectHistoryParts
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.historyParts
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.AgentArtifactPart
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
@@ -16,8 +16,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import kotlinx.serialization.json.Json
 
 internal fun ChatQueries.readMessage(revision: Long, header: String, headersOnly: Boolean = false): Message {
-    val query = selectHistoryParts(revision, headersOnly)
-    val parts = query.executeAsList().groupBy { it.parent_part_id }
+    val parts = historyParts(revision, headersOnly).groupBy { it.parent_part_id }
     val roots = parts[null].orEmpty()
     fun text(title: String? = null) = roots.firstOrNull { it.kind == "text" && it.title == title }?.body
     val files = roots.filter { it.kind == "attachment" }.map { part ->

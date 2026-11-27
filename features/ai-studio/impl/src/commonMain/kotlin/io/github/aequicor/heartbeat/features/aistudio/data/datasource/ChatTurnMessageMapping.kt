@@ -5,6 +5,7 @@ import io.github.aequicor.heartbeat.features.aistudio.data.dto.encodeChatMessage
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord.Part
 import io.github.aequicor.heartbeat.features.aistudio.data.model.toRecord
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.BackgroundReplyIdPrefix
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
@@ -42,6 +43,7 @@ internal fun ChatHistoryEntry.Message.toTurnRecord(): ChatTurnMessageRecord {
     return ChatTurnMessageRecord(
         id, role, storedStatus(), header.toString(), if (revisionId == null) parts() else emptyList(),
         expectedRevisionId = revisionId,
+        replacesBackgroundReply = this is ChatHistoryEntry.Reply && promptId == null && id.startsWith(BackgroundReplyIdPrefix),
     )
 }
 

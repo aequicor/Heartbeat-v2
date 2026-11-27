@@ -47,24 +47,52 @@ internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
         }
     }
 
-    fun agentChunk(content: ContentBlock, remoteId: String?, reasoning: Boolean = false) {
+    fun agentChunk(content: ContentBlock, remoteId: String?, reasoning: Boolean = false): SessionTimelineItem.AgentMessage {
         val last = items.lastOrNull() as? SessionTimelineItem.AgentMessage
         val value = content.toSessionContent()
         if (last != null && last.reasoning == reasoning && continueMessage(last.id, remoteId)) {
-            items = items.dropLast(1) + last.copy(content = last.content.append(value))
-        } else {
-            val id = nextId()
-            items = items + SessionTimelineItem.AgentMessage(id, listOf(value), reasoning)
-            rememberMessage(id, remoteId)
+            val merged = last.copy(content = last.content.append(value))
+            items = items.dropLast(1) + merged
+            return merged
         }
+        val id = nextId()
+        val message = SessionTimelineItem.AgentMessage(id, listOf(value), reasoning)
+        items = items + message
+        rememberMessage(id, remoteId)
+        return message
     }
 
-    fun toolCall(update: SessionUpdate.ToolCall) {
+    fun directedMessage(messageId: String, content: List<ContentBlock>, fromChild: Boolean, append: Boolean) {
+        val id = "session-message-$messageId"
+        val index = items.indexOfFirst { it.id == id }
+        val current = items.getOrNull(index)
+        val values = content.map(ContentBlock::toSessionContent)
+        val message = when {
+            current is SessionTimelineItem.AgentMessage -> current.copy(
+                content = if (append) values.fold(current.content) { parts, value -> parts.append(value) } else values,
+            )
+            current is SessionTimelineItem.UserMessage -> current.copy(
+                content = if (append) values.fold(current.content) { parts, value -> parts.append(value) } else values,
+            )
+            fromChild -> SessionTimelineItem.AgentMessage(id, values)
+            else -> SessionTimelineItem.UserMessage(id, values)
+        }
+        if (index < 0) items = items + message else items = items.toMutableList().apply { set(index, message) }
+        breakMessage()
+    }
+
+    fun plan(entries: List<String>) {
+        val text = entries.joinToString("\n") { "- $it" }
+        val item = SessionTimelineItem.AgentMessage(nextId(), listOf(SessionContent.Text("План\n$text")), reasoning = true)
+        items = items + item
+        breakMessage()
+    }
+
+    fun toolCall(update: SessionUpdate.ToolCall): SessionTimelineItem.ToolCall =
         updateTool(
             update.toolCallId.value, update.title, update.status?.name, update.content, update.kind,
             update.rawInput, update.locations.takeIf { it.isNotEmpty() }, update.rawOutput,
         )
-    }
 
     fun toolCallUpdate(update: SessionUpdate.ToolCallUpdate): SessionTimelineItem.ToolCall =
         updateTool(

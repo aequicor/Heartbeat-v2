@@ -5,6 +5,7 @@ import dev.zacsweers.metro.SingleIn
 import io.github.aequicor.heartbeat.di.AppCoroutineScope
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngine
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineEvent
 import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineState
 import io.github.aequicor.heartbeat.features.aiengine.api.session.ContextWindowUsage
@@ -13,6 +14,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionConfig
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionKey
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSettings
 import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionStatus
+import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionSubagents
 import io.github.aequicor.heartbeat.features.aienginefacade.api.AiEngineFacade
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatConversationDao
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
@@ -30,13 +32,18 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ReadSubagentHistoryUseCase.Subagent
 import kotlin.time.Duration.Companion.seconds
 
 @Inject
@@ -86,6 +93,19 @@ internal class ChatEngineDataSourceImpl(
         return ChatEngineConversationDataSourceImpl(
             session, attachments, validateSecurityMode = { validateSecurityMode(chatSessionId, session) },
         ) { engine.closeSession(session.key) }
+    }
+
+    @Throwable(Exception::class, CancellationException::class)
+    internal suspend fun observeSubagents(engineId: String, parentId: String, directory: String?): Flow<List<Subagent>> {
+        val key = facade.availableEngines.value.firstOrNull { it.id == engineId } ?: return emptyFlow()
+        if (key.connection != AiEngineConnection.ACP) return emptyFlow()
+        val engine = connect(engineId)
+        val parent = engine.getOrCreateSession(SessionConfig(directory), SessionKey(key, parentId, workingDirectory = directory))
+        val source = parent as? SessionSubagents ?: return emptyFlow()
+        return source.subagents.combine(parent.state) { children, state -> children to state.status }
+            .takeWhile { (_, status) -> status != SessionStatus.Closed && status != SessionStatus.Unavailable }
+            .map { (children, _) -> children.map(SessionSubagents.Subagent::toChatSubagent) }
+            .distinctUntilChanged()
     }
 
     @Throwable(Exception::class, CancellationException::class)

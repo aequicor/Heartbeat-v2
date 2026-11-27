@@ -68,7 +68,8 @@ internal fun AuroraDesktopHeader(
 ) {
     val titleFocus = remember { FocusRequester() }
     var subagentsFocused by remember { mutableStateOf(false) }
-    val hasSubagents = state.subagents.isNotEmpty()
+    val subagents = state.visibleSubagents
+    val hasSubagents = subagents.isNotEmpty()
     val restoreTitleFocus = !hasSubagents && subagentsFocused
     SideEffect(hasSubagents) {
         if (restoreTitleFocus) titleFocus.requestFocus()
@@ -109,7 +110,7 @@ internal fun AuroraDesktopHeader(
                 ) {
                     if (hasSubagents) {
                         AuroraSubagents(
-                            state.subagents, onAction, onFocusChange = { subagentsFocused = it }, compact = compact,
+                            subagents, onAction, onFocusChange = { subagentsFocused = it }, compact = compact,
                         )
                     }
                     if (!compact) HeaderAccessControl(state, chat, onAction)
@@ -240,7 +241,7 @@ private fun AuroraSubagents(
     compact: Boolean,
 ) {
     val label = "Субагенты · ${agents.size}"
-    val actions = agents.map { HbMenuAction(it.title, { onAction(AiStudioAction.OpenChat(it.chatId)) }) }
+    val actions = agents.map { HbMenuAction(it.title, { onAction(it.open) }) }
     HbWindowClientArea { clientArea ->
         AuroraHeaderMenu(actions, clientArea, alignEnd = true) { trigger, open ->
             AuroraHeaderButton(
