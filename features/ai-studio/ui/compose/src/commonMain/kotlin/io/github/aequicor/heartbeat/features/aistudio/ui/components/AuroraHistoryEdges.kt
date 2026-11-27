@@ -45,7 +45,7 @@ internal fun Modifier.auroraHistoryEdges(
     return drawWithCache {
         val radius = AuroraLayout.HeaderBlur.toPx()
         val transition = AuroraLayout.HeaderBlurTransition.toPx()
-        val historyWidth = readingWidth.coerceAtMost(AuroraLayout.Transcript + AuroraLayout.DesktopTarget * 2).toPx()
+        val historyWidth = readingWidth.toPx()
         val recordingWidth = ceil((historyWidth + radius * 6).coerceAtMost(size.width)).toInt()
         val left = ((size.width - recordingWidth) / 2f).toInt()
         val right = (left + recordingWidth).toFloat()

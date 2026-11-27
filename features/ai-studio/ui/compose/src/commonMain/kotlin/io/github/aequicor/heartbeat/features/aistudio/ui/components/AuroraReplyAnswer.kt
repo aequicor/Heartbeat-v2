@@ -99,6 +99,7 @@ internal fun AuroraReplyAnswer(
     anchoredHeight: AuroraMeasuredHeight? = null,
     anchoringWork: Boolean = false,
     onAnchoredHeight: (Int, Int) -> Unit = { _, _ -> },
+    extraWidth: Dp = Dp.Hairline,
 ) {
     val hasAnswer = reply.text.isNotEmpty() || reply.hasFiles
     val showAnswer = reply.status != ReplyStatus.Working || liveText != null || hasAnswer
@@ -119,7 +120,7 @@ internal fun AuroraReplyAnswer(
     AuroraReplyReveal(liveText != null, revealFinalAdditions = true) {
         Box(size, propagateMinConstraints = true) {
             if (showAnswer) {
-                AuroraReplyContent(reply, touch, onAction, liveText, selection, viewportHeight, opening)
+                AuroraReplyContent(reply, touch, onAction, liveText, selection, viewportHeight, opening, extraWidth)
             }
         }
     }
@@ -134,6 +135,7 @@ private fun AuroraReplyContent(
     selection: SelectionState,
     viewportHeight: Dp,
     archiveReveal: ArchiveReveal?,
+    extraWidth: Dp,
 ) {
     val current = liveText?.collectAsState()?.value?.takeIf { it.replyId == reply.id }
     val text = if (liveText == null) reply.text else current?.text ?: reply.text
@@ -173,7 +175,7 @@ private fun AuroraReplyContent(
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             AuroraReplyBlocks(
                 reply, touch, onAction, current, liveText != null, selection,
-                viewportHeight, archiveReveal, onTextLayout,
+                viewportHeight, archiveReveal, extraWidth, onTextLayout,
             )
         }
     }
@@ -257,10 +259,11 @@ private fun AuroraReplyBlocks(
     selection: SelectionState,
     viewportHeight: Dp,
     archiveReveal: ArchiveReveal?,
+    extraWidth: Dp,
     onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
     val textWidth = if (touch) AuroraLayout.AgentText else AuroraLayout.DesktopAgentText
-    val width = Modifier.widthIn(max = textWidth)
+    val width = Modifier.widthIn(max = textWidth + extraWidth)
     val text = if (streaming) current?.text ?: reply.text else reply.text
     val history = reply.historyContent?.takeUnless { it.plain || streaming }
     val latest = if (history == null) {

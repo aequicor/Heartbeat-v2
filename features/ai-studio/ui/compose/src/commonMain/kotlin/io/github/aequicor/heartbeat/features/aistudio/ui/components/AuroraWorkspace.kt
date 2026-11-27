@@ -2,24 +2,16 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,18 +35,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.shadow.Shadow
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
@@ -86,9 +70,12 @@ internal fun AuroraWorkspace(
     captionOverlap: Dp = Dp.Hairline,
     caption: HbWindowCaption = HbWindowCaption.current,
     castsSidebarShadow: Boolean = false,
+    startPaneSplitterOverlap: Dp = Dp.Hairline,
 ) {
     val chatId = state.chat?.id
     var preferredWidth by rememberSaveable { mutableStateOf(AuroraLayout.Header.value) }
+    var readingResizePointerHeld by remember { mutableStateOf(false) }
+    val onReadingResizePointerHeldChange = remember { { held: Boolean -> readingResizePointerHeld = held } }
     // The chat key recreates the header, so the requested focus target lives in the workspace.
     var subagentFocusTarget by remember { mutableStateOf<String?>(null) }
     val clearance = auroraCaptionClearance(captionOverlap)
@@ -117,12 +104,15 @@ internal fun AuroraWorkspace(
                 ),
             )
         } else Modifier
-        shadow.clip(shape)
+        shadow.clip(shape).auroraHeldResizeCursor(readingResizePointerHeld)
     }
     val floatingBackdrop = if (touch) null else rememberAuroraFloatingBackdrop()
     val surface = modifier.then(frame)
     Box(if (touch) surface.auroraBackdrop(backdrop) else surface) {
-        CompositionLocalProvider(LocalAuroraFloatingBackdrop provides floatingBackdrop) {
+        CompositionLocalProvider(
+            LocalAuroraFloatingBackdrop provides floatingBackdrop,
+            LocalAuroraReadingResizePointerHeldChange provides onReadingResizePointerHeldChange,
+        ) {
             if (floatingBackdrop != null) {
                 Box(Modifier.matchParentSize().then(floatingBackdrop.recordWallpaper()).auroraBackdrop(backdrop))
             }
@@ -148,6 +138,7 @@ internal fun AuroraWorkspace(
                     AuroraChatViewport(
                         state, draft, liveText, touch, chatAction, showNavigation, Dp(preferredWidth),
                         onWidthChange = { preferredWidth = it.value },
+                        startPaneSplitterOverlap = startPaneSplitterOverlap,
                         captionClearance = clearance,
                         caption = caption,
                         onHeaderAction = { action ->
@@ -190,6 +181,7 @@ private fun AuroraChatViewport(
     showNavigation: Boolean,
     preferredWidth: Dp,
     onWidthChange: (Dp) -> Unit,
+    startPaneSplitterOverlap: Dp,
     onHeaderAction: (AiStudioAction) -> Unit,
     onDesktopTitleReady: (FocusRequester) -> Unit,
     captionClearance: Dp,
@@ -259,7 +251,7 @@ private fun AuroraChatViewport(
                 },
             )
         }
-        AuroraResizeHandles(touch, maxWidth, corridor, gutter, onWidthChange)
+        AuroraResizeHandles(touch, maxWidth, corridor, gutter, historyPadding, startPaneSplitterOverlap, onWidthChange)
     }
 }
 
@@ -322,7 +314,7 @@ private fun BoxScope.AuroraPlaceLowerControls(
     content: @Composable (inlineTail: Boolean, inlineStop: Boolean) -> Unit,
 ) {
     val inset = AuroraLayout.ContentInset + AuroraLayout.Space
-    val sideSpace = (viewportWidth - minOf(corridor, AuroraLayout.Composer)) / 2f
+    val sideSpace = (viewportWidth - corridor) / 2f
     val fitsSide = !touch && sideSpace >= AuroraLayout.DesktopTarget + inset * 2f
     content(showTail && !fitsSide, !fitsSide)
     val bottom = AuroraLayout.DesktopComposerBottom + AuroraLayout.SmallGap
@@ -350,16 +342,30 @@ private fun BoxScope.AuroraResizeHandles(
     viewportWidth: Dp,
     corridor: Dp,
     gutter: Dp,
+    historyPadding: PaddingValues,
+    startPaneSplitterOverlap: Dp,
     onWidthChange: (Dp) -> Unit,
 ) {
-    if (touch || viewportWidth < AuroraLayout.ReadingMinWidth + AuroraLayout.ResizeHandleHeight) return
-    val resize: (Dp) -> Unit = { delta ->
-        onWidthChange((corridor + delta).coerceIn(AuroraLayout.ReadingMinWidth, AuroraLayout.Header))
+    if (touch || viewportWidth <= AuroraLayout.ReadingMinWidth) return
+    val resize: (Dp) -> Unit = { requested ->
+        onWidthChange(requested.coerceIn(AuroraLayout.ReadingMinWidth, viewportWidth))
     }
     val reset = { onWidthChange(AuroraLayout.Header) }
-    val fromEdge = (gutter - AuroraLayout.DesktopTarget).coerceAtLeast(Dp.Hairline)
-    AuroraResizeHandle(-1, resize, reset, Modifier.align(Alignment.CenterStart).offset(x = fromEdge))
-    AuroraResizeHandle(1, resize, reset, Modifier.align(Alignment.CenterEnd).offset(x = -fromEdge))
+    val towardsEnd = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
+    val offset = gutter - AuroraLayout.Space
+    val maxOffset = viewportWidth - AuroraLayout.Space
+    val fromStart = offset.coerceIn(startPaneSplitterOverlap, maxOffset)
+    val fromEnd = offset.coerceIn(AuroraReadingScrollbarGutter, maxOffset)
+    AuroraResizeHandle(
+        corridor, -towardsEnd, resize, reset,
+        hitAreaPadding = historyPadding,
+        modifier = Modifier.align(Alignment.CenterStart).offset(x = fromStart),
+    )
+    AuroraResizeHandle(
+        corridor, towardsEnd, resize, reset,
+        hitAreaPadding = historyPadding,
+        modifier = Modifier.align(Alignment.CenterEnd).offset(x = -fromEnd),
+    )
 }
 
 internal fun Modifier.auroraLowerLayout(touch: Boolean, corridor: Dp): Modifier =
@@ -381,53 +387,6 @@ internal fun headerCaptionClearance(caption: Dp, sides: Dp): Dp =
     if (caption > Dp.Hairline) {
         (caption + AuroraLayout.HeaderCaptionGap - sides - AuroraLayout.FrameStroke).coerceAtLeast(Dp.Hairline)
     } else Dp.Hairline
-
-@Composable
-private fun AuroraResizeHandle(
-    direction: Int,
-    onDrag: (Dp) -> Unit,
-    onReset: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val density = LocalDensity.current
-    val interaction = remember { MutableInteractionSource() }
-    val hovering by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
-    var dragging by remember { mutableStateOf(false) }
-    val resize by rememberUpdatedState(onDrag)
-    val mark = if (hovering || focused || dragging) AuroraColors.Primary else AuroraColors.Primary.copy(alpha = 0f)
-    Box(
-        modifier.size(AuroraLayout.DesktopTarget, AuroraLayout.ResizeHandleHeight)
-            .semantics { contentDescription = "Изменить ширину диалога" }
-            .hoverable(interaction)
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key) {
-                    Key.DirectionLeft -> onDrag(AuroraLayout.ReadingWidthStep * -direction.toFloat())
-                    Key.DirectionRight -> onDrag(AuroraLayout.ReadingWidthStep * direction.toFloat())
-                    Key.MoveHome -> onReset()
-                    else -> return@onPreviewKeyEvent false
-                }
-                true
-            }
-            .pointerInput(direction, density) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragging = true },
-                    onDragEnd = { dragging = false },
-                    onDragCancel = { dragging = false },
-                ) { change, amount ->
-                    change.consume()
-                    resize(with(density) { (amount * 2 * direction).toDp() })
-                }
-            }
-            .combinedClickable(
-                interactionSource = interaction, indication = null, onDoubleClick = onReset, onClick = {},
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(AuroraLayout.FrameStroke, AuroraLayout.ResizeMarkHeight).background(mark))
-    }
-}
 
 @Composable
 private fun TrackAuroraReading(

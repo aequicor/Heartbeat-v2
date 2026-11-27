@@ -5,5 +5,13 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import java.awt.Cursor
 
+private val HorizontalResizePointerIcon = PointerIcon(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR))
+
 internal actual fun Modifier.auroraHorizontalResizeCursor(): Modifier =
-    pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR)))
+    pointerHoverIcon(HorizontalResizePointerIcon)
+
+internal actual fun Modifier.auroraHeldResizeCursor(active: Boolean): Modifier =
+    pointerHoverIcon(
+        if (active) HorizontalResizePointerIcon else PointerIcon.Default,
+        overrideDescendants = active,
+    )

@@ -78,8 +78,9 @@ internal fun AuroraLowerControls(
     val submitting = chatId in state.submittingDrafts
     val editing by rememberUpdatedState(state.request == null)
     val measuredPanel = Modifier.onSizeChanged { onPanelHeight(it.height) }
+    val layout = if (touch) modifier.widthIn(max = AuroraLayout.Composer) else modifier
     Column(
-        modifier.widthIn(max = AuroraLayout.Composer).fillMaxWidth(),
+        layout.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.ControlGap),
     ) {

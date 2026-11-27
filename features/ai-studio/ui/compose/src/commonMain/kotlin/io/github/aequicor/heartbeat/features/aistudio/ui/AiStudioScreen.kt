@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
@@ -15,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -25,6 +27,7 @@ import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.foundation.HbPaneGeometry
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -52,6 +55,7 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentVi
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentImageEditSource
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraSidebarSurface
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraHeldResizeCursor
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraTouchFilesFrame
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberArtifactSaveLauncher
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberAttachmentCopyLauncher
@@ -85,7 +89,10 @@ internal fun AiStudioScreen(
     }
     val previews = remember(state.chat?.id) { AuroraDiagramPreviews() }
     val touch = HbSizes.minimumTarget >= AuroraLayout.TouchTarget
+    var paneResizePointerHeld by remember { mutableStateOf(false) }
+    val onPaneResizePointerHeldChange = remember { { held: Boolean -> paneResizePointerHeld = held } }
     val splitterWidth = AuroraLayout.Space
+    val splitterOverlap = splitterWidth / 2
     val towardsEnd = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
     var preferredSidebarWidth by rememberSaveable { mutableFloatStateOf(AuroraLayout.SidebarWithGap.value) }
     var preferredFilesWidth by rememberSaveable { mutableFloatStateOf(AuroraLayout.FilesPane.value) }
@@ -97,7 +104,8 @@ internal fun AiStudioScreen(
     }
     val backgroundSemantics = if (viewer != null && attachmentViewerUsesWorkspaceOverlay) hiddenSemantics else Modifier
     val workspaceSemantics = if (touch && state.filesVisible) hiddenSemantics else backgroundSemantics
-    BoxWithConstraints(modifier.fillMaxSize().background(canvas).imePadding()) {
+    val resizeCursor = if (touch) Modifier else Modifier.auroraHeldResizeCursor(paneResizePointerHeld)
+    BoxWithConstraints(modifier.fillMaxSize().then(resizeCursor).background(canvas).imePadding()) {
         val panes = auroraPaneLayout(
             maxWidth, touch, state.filesVisible, caption, splitterWidth,
             preferredSidebarWidth.dp, preferredFilesWidth.dp,
@@ -130,7 +138,8 @@ internal fun AiStudioScreen(
                         )
                     },
                     onReset = { preferredSidebarWidth = AuroraLayout.SidebarWithGap.value },
-                    modifier = Modifier.width(splitterWidth),
+                    onPointerHeldChange = onPaneResizePointerHeldChange,
+                    modifier = Modifier.width(splitterWidth).offset(x = splitterOverlap).zIndex(1f),
                 )
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
@@ -145,6 +154,7 @@ internal fun AiStudioScreen(
                         captionOverlap = panes.captionOverlap,
                         caption = caption,
                         castsSidebarShadow = panes.sidebar,
+                        startPaneSplitterOverlap = if (panes.sidebar) splitterOverlap else Dp.Hairline,
                     )
                 }
                 if (state.chatsVisible && !panes.sidebar) {
@@ -172,7 +182,9 @@ internal fun AiStudioScreen(
                         )
                     },
                     onReset = { preferredFilesWidth = AuroraLayout.FilesPane.value },
-                    modifier = Modifier.padding(top = panes.filesTop).width(splitterWidth),
+                    onPointerHeldChange = onPaneResizePointerHeldChange,
+                    modifier = Modifier.padding(top = panes.filesTop).width(splitterWidth)
+                        .offset(x = -splitterOverlap).zIndex(1f),
                 )
                 AuroraFiles(state, touch, onAction, Modifier.padding(top = panes.filesTop).width(panes.filesWidth))
             }

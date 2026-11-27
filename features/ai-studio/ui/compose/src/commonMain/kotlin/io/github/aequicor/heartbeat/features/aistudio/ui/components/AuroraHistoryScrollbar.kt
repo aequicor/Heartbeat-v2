@@ -40,9 +40,10 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 internal fun BoxScope.AuroraChatScrollbar(
     list: LazyListState, touch: Boolean, padding: PaddingValues, onUserScroll: () -> Unit,
 ) {
+    val endInset = if (touch) AuroraLayout.TimerThickness else AuroraReadingScrollbarEndInset
     AuroraHistoryScrollbar(
         list, "Прокрутка истории", Modifier.align(Alignment.CenterEnd)
-            .padding(padding).padding(end = AuroraLayout.TimerThickness),
+            .padding(padding).padding(end = endInset),
         touch = touch, normalizeThumbLength = true, onUserScroll = onUserScroll,
     )
 }

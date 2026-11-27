@@ -281,14 +281,18 @@ private fun AuroraMessageRow(
     val workAction = (message as? Reply)?.fullDisclosureAction(
         message.id in expandedWork, expandedSteps, expandedEvents, onMenuAction,
     )
+    val extraWidth = if (!touch && readingWidth.value.isFinite()) {
+        (readingWidth - AuroraLayout.Header).coerceAtLeast(Dp.Hairline)
+    } else Dp.Hairline
     AuroraMessageMenu(
-        message, touch, onMenuAction, readingWidth, selection, modifier.zIndex(if (workAccessVisible) 1f else 0f), liveText,
+        message, touch, onMenuAction, readingWidth, AuroraLayout.Transcript + extraWidth,
+        selection, modifier.zIndex(if (workAccessVisible) 1f else 0f), liveText,
         workMenu = workMenu, workAction = workAction,
     ) { hoverOverMenu ->
         when (message) {
-            is User -> AuroraUserBubble(message, touch, onAction, selection)
+            is User -> AuroraUserBubble(message, touch, onAction, selection, extraWidth)
             is Reply -> if (message.showArchivedAnswer(liveText)) {
-                AuroraArchivedAnswer(message, touch, onAction, selection, reflow)
+                AuroraArchivedAnswer(message, touch, onAction, selection, reflow, extraWidth)
                 if (workAccessVisible) SideEffect { workAccessVisible = false }
             } else AuroraAgentMessage(
                 message, message.id in expandedWork, expandedSteps, expandedEvents, touch, onAction,
@@ -296,6 +300,7 @@ private fun AuroraMessageRow(
                 reflow = reflow,
                 onWorkAccessVisibility = { workAccessVisible = it },
                 workMenu = workMenu,
+                extraWidth = extraWidth,
             )
         }
     }
@@ -311,22 +316,26 @@ private fun Reply.showArchivedAnswer(liveText: StateFlow<LiveText>?): Boolean {
 @Composable
 private fun AuroraArchivedAnswer(
     reply: Reply, touch: Boolean, onAction: (AiStudioAction) -> Unit, selection: SelectionState,
-    reflow: AuroraHistoryReflow,
+    reflow: AuroraHistoryReflow, extraWidth: Dp,
 ) {
     val outline = HbAuroraOutline(AuroraColors.AgentMessage, AuroraColors.MessageOutline, AuroraLayout.MessageRadius)
     val reveal = rememberArchiveReveal(reply, reflow, archive = true)
-    Box(Modifier.widthIn(max = AuroraLayout.AgentBubble).focusGroup().auroraReplySurfaceArrival(touch).then(outline)
-        .trackReplyHeight(reply, reflow, selection, reply.historyContent?.plain == false, reveal)) {
+    Box(
+        Modifier.widthIn(max = AuroraLayout.AgentBubble + extraWidth)
+            .focusGroup().auroraReplySurfaceArrival(touch).then(outline)
+            .trackReplyHeight(reply, reflow, selection, reply.historyContent?.plain == false, reveal),
+    ) {
         AuroraReplyAnswer(
             reply, touch, onAction, null, selection, false, {}, reflow.viewportHeight, reveal,
             keepStartDuringResize = reflow.tail.keepsReplyStart(reply.id),
+            extraWidth = extraWidth,
         )
     }
 }
 
 @Composable
 internal fun AuroraUserBubble(
-    user: User, touch: Boolean, onAction: (AiStudioAction) -> Unit, selection: SelectionState,
+    user: User, touch: Boolean, onAction: (AiStudioAction) -> Unit, selection: SelectionState, extraWidth: Dp = Dp.Hairline,
 ) {
     val surface = if (user.delivery == Delivery.Failed) {
         HbAuroraOutline(AuroraColors.User, AuroraColors.Error, AuroraLayout.MessageRadius)
@@ -359,7 +368,7 @@ internal fun AuroraUserBubble(
         user.time,
         inlineAllowed = inlineTime,
         textSetsWidth = user.files.isEmpty() && textPresent,
-        modifier = Modifier.widthIn(max = width).then(surface).padding(
+        modifier = Modifier.widthIn(max = width + extraWidth).then(surface).padding(
             start = horizontalInset, end = horizontalInset, top = top,
         ),
         bottomPadding = bottom,
@@ -454,6 +463,7 @@ internal fun AuroraAgentMessage(
     reflow: AuroraHistoryReflow? = null,
     onWorkAccessVisibility: (Boolean) -> Unit = {},
     workMenu: AuroraWorkMenu? = null,
+    extraWidth: Dp = Dp.Hairline,
 ) {
     val finished = reply.status != ReplyStatus.Working
     val hasWork = reply.steps.isNotEmpty()
@@ -506,7 +516,7 @@ internal fun AuroraAgentMessage(
         onWorkAccessVisibility(accessVisible)
         focus.restoreEventAnchor(expandedEvents, reply.id, reflow, scope)
     }
-    Box(focus.group(modifier.widthIn(max = AuroraLayout.AgentBubble).then(roomAbove)).then(hoverTarget)) {
+    Box(focus.group(modifier.widthIn(max = AuroraLayout.AgentBubble + extraWidth).then(roomAbove)).then(hoverTarget)) {
         if (workTitle != null) {
             Box(Modifier.matchParentSize()) {
                 AuroraWorkKeyboardAccess(
@@ -516,7 +526,7 @@ internal fun AuroraAgentMessage(
         }
         AuroraAgentMessageBody(
             reply, expanded, touch, onAction, onToggle, liveText,
-            selection, focus, reflow, expandedEvents,
+            selection, focus, reflow, expandedEvents, extraWidth,
             modifier = surface.widthIn(min = headerMinWidth),
         ) {
             AuroraWorkTimeline(
@@ -558,6 +568,7 @@ private fun AuroraAgentMessageBody(
     focus: AuroraWorkAccess,
     reflow: AuroraHistoryReflow?,
     expandedEvents: Set<String>,
+    extraWidth: Dp,
     modifier: Modifier = Modifier,
     work: @Composable () -> Unit,
 ) {
@@ -587,6 +598,7 @@ private fun AuroraAgentMessageBody(
                 anchoredHeight = focus.answerHeight.takeIf { reply.steps.isNotEmpty() && reflow != null },
                 anchoringWork = applyingDisclosure || reflow?.ownsWorkResize(reply.id) == true,
                 onAnchoredHeight = { height, target -> reflow?.answerResized(reply.id, height, target, scope) },
+                extraWidth = extraWidth,
             )
         },
         modifier = surface,

@@ -87,6 +87,7 @@ internal fun AuroraMessageMenu(
     touch: Boolean,
     onAction: (AiStudioAction) -> Unit,
     readingWidth: Dp,
+    maxColumnWidth: Dp,
     selection: SelectionState,
     modifier: Modifier = Modifier,
     liveText: StateFlow<LiveText>? = null,
@@ -118,7 +119,7 @@ internal fun AuroraMessageMenu(
         if (expanded && touchAtEdge) selection.clear()
     }
     AuroraMessageMenuLayout(
-        user, touch, readingWidth, hitArea,
+        user, touch, readingWidth, maxColumnWidth, hitArea,
         bubble = {
             val atEdge = if (touchAtEdge && actions.isNotEmpty()) Modifier.openMenuOnHold(menu.open)
             else Modifier
@@ -206,6 +207,7 @@ private fun AuroraMessageMenuLayout(
     user: Boolean,
     touch: Boolean,
     readingWidth: Dp,
+    maxColumnWidth: Dp,
     hitArea: MessageMenuHitArea,
     bubble: @Composable () -> Unit,
     menu: @Composable () -> Unit,
@@ -224,7 +226,10 @@ private fun AuroraMessageMenuLayout(
         val wideEdge = AuroraLayout.FrameRadius.roundToPx() + gap
         val edge = if (reading >= AuroraLayout.Transcript.roundToPx() + wideEdge * 2) wideEdge
         else AuroraLayout.PaneGap.roundToPx()
-        val column = (reading - edge * 2).coerceIn(0, AuroraLayout.Transcript.roundToPx())
+        val resizeInset = if (touch || width <= AuroraLayout.ReadingMinWidth.roundToPx()) 0 else {
+            (AuroraReadingScrollbarGutter + AuroraLayout.Space).roundToPx() - (width - reading) / 2
+        }
+        val column = (reading - maxOf(edge, resizeInset) * 2).coerceIn(0, maxColumnWidth.roundToPx())
         val left = (width - column) / 2
         val right = left + column
         val body = bodySlot.single().measure(constraints.copy(minWidth = 0, maxWidth = column))

@@ -205,5 +205,6 @@ object HbAuroraLayout {
     val ReadingMinWidth = 480.dp
     val ReadingWidthStep = 16.dp
     val ResizeHandleHeight = 64.dp
-    val ResizeMarkHeight = 28.dp
+    val ResizeMarkWidth = 4.dp
+    val ResizeMarkHeight = 48.dp
 }
