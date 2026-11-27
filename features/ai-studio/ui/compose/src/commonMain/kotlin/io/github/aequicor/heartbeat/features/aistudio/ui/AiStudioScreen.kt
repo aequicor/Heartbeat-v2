@@ -84,8 +84,8 @@ internal fun AiStudioScreen(
         state.fileToCopy?.let(copyFile)
     }
     val previews = remember(state.chat?.id) { AuroraDiagramPreviews() }
-    val splitterWidth = HbSizes.minimumTarget
-    val touch = splitterWidth >= AuroraLayout.TouchTarget
+    val touch = HbSizes.minimumTarget >= AuroraLayout.TouchTarget
+    val splitterWidth = AuroraLayout.Space
     val towardsEnd = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
     var preferredSidebarWidth by rememberSaveable { mutableFloatStateOf(AuroraLayout.SidebarWithGap.value) }
     var preferredFilesWidth by rememberSaveable { mutableFloatStateOf(AuroraLayout.FilesPane.value) }
@@ -122,12 +122,15 @@ internal fun AiStudioScreen(
                 )
                 AuroraPaneSplitter(
                     label = stringResource(Res.string.resize_projects_sessions_pane),
-                    onResize = { delta ->
+                    paneWidth = panes.sidebarWidth,
+                    onResize = { delta, dragStartWidth ->
                         preferredSidebarWidth = resizePane(
                             preferredSidebarWidth, delta * towardsEnd, SidebarMinWidth, panes.sidebarResizeMax,
+                            dragStartWidth,
                         )
                     },
                     onReset = { preferredSidebarWidth = AuroraLayout.SidebarWithGap.value },
+                    modifier = Modifier.width(splitterWidth),
                 )
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
@@ -161,13 +164,15 @@ internal fun AiStudioScreen(
             if (panes.filesAside) {
                 AuroraPaneSplitter(
                     label = stringResource(Res.string.resize_files_pane),
-                    onResize = { delta ->
+                    paneWidth = panes.filesWidth,
+                    onResize = { delta, dragStartWidth ->
                         preferredFilesWidth = resizePane(
-                            preferredFilesWidth, -delta * towardsEnd, FilesMinWidth, panes.filesResizeMax,
+                            preferredFilesWidth, delta * -towardsEnd, FilesMinWidth, panes.filesResizeMax,
+                            dragStartWidth,
                         )
                     },
                     onReset = { preferredFilesWidth = AuroraLayout.FilesPane.value },
-                    modifier = Modifier.padding(top = panes.filesTop),
+                    modifier = Modifier.padding(top = panes.filesTop).width(splitterWidth),
                 )
                 AuroraFiles(state, touch, onAction, Modifier.padding(top = panes.filesTop).width(panes.filesWidth))
             }
@@ -247,9 +252,9 @@ private fun auroraPaneLayout(
     )
 }
 
-private fun resizePane(preferred: Float, delta: Int, minimum: Dp, maximum: Dp): Float {
+private fun resizePane(preferred: Float, delta: Dp, minimum: Dp, maximum: Dp, dragStartWidth: Dp?): Float {
     val current = preferred.dp.coerceIn(minimum, maximum)
-    val resized = (current + delta.dp).coerceIn(minimum, maximum)
+    val resized = ((dragStartWidth ?: current) + delta).coerceIn(minimum, maximum)
     return if (resized == current) preferred else resized.value
 }
 

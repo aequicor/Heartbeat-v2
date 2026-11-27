@@ -37,11 +37,11 @@ import kotlin.math.roundToInt
 /**
  * Resizable separator between panes (HB-DS-035).
  *
- * Dragging reports the delta in logical units through [onResize]; the same operation is available
- * from accessibility actions and from the arrow keys, and Home resets the arrangement when
- * [onReset] exists. The separator occupies its density minimum target in the layout and paints a
- * one-unit line inside it: the hit area is a real layout region, so it never overlaps the panes
- * whose minimum widths the fit policy counts.
+ * Dragging, accessibility actions, and arrow keys report deltas in logical units through
+ * [onResize]. A caller can supply [onDragStart] to capture the initial pane size and handle the
+ * total displacement in logical units for that gesture. Home resets the arrangement when
+ * [onReset] exists. By default the separator occupies its density minimum target and [showLine]
+ * paints a one-unit line inside it.
  */
 @Composable
 fun HbSplitter(
@@ -51,10 +51,13 @@ fun HbSplitter(
     labels: HbSplitterLabels,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    showLine: Boolean = true,
+    onDragStart: (() -> (Float) -> Unit)? = null,
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
     val currentOnResize by rememberUpdatedState(onResize)
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
     val step = STEP.value.roundToInt()
     val vertical = orientation == HbOrientation.Vertical
 
@@ -69,17 +72,30 @@ fun HbSplitter(
             )
             .pointerInput(enabled, orientation) {
                 if (!enabled) return@pointerInput
-                // A pointer delta is fractional on a high-density host: accumulate it and report
-                // only whole logical units, so the pane does not lose sub-unit movement.
                 var remainder = 0f
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    val deltaPx = if (vertical) dragAmount.x else dragAmount.y
-                    val delta = remainder + deltaPx / density
-                    val whole = delta.roundToInt()
-                    remainder = delta - whole
-                    if (whole != 0) currentOnResize(whole)
-                }
+                var displacement = 0f
+                var onDrag: ((Float) -> Unit)? = null
+                detectDragGestures(
+                    onDragStart = {
+                        displacement = 0f
+                        onDrag = currentOnDragStart?.invoke()
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val deltaPx = if (vertical) dragAmount.x else dragAmount.y
+                        val delta = deltaPx / density
+                        val drag = onDrag
+                        if (drag != null) {
+                            displacement += delta
+                            drag(displacement)
+                        } else {
+                            val accumulated = remainder + delta
+                            val whole = accumulated.roundToInt()
+                            remainder = accumulated - whole
+                            if (whole != 0) currentOnResize(whole)
+                        }
+                    },
+                )
             }
             .onFocusChanged { focused = it.isFocused }
             .focusable(enabled)
@@ -100,17 +116,19 @@ fun HbSplitter(
             .hbFocusRing(focused = focused, shape = HbShapes.Small, color = colors.focus),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .then(
-                    if (vertical) {
-                        Modifier.fillMaxHeight().width(LINE_THICKNESS)
-                    } else {
-                        Modifier.fillMaxWidth().height(LINE_THICKNESS)
-                    },
-                )
-                .background(colors.border.subtle),
-        )
+        if (showLine) {
+            Box(
+                modifier = Modifier
+                    .then(
+                        if (vertical) {
+                            Modifier.fillMaxHeight().width(LINE_THICKNESS)
+                        } else {
+                            Modifier.fillMaxWidth().height(LINE_THICKNESS)
+                        },
+                    )
+                    .background(colors.border.subtle),
+            )
+        }
     }
 }
 
