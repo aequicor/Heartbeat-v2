@@ -2,7 +2,10 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord.Part
+import io.github.aequicor.heartbeat.features.aistudio.data.model.toRecord
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.isMarkdownAttachment
 import kotlinx.serialization.json.buildJsonObject
@@ -33,13 +36,24 @@ internal fun ChatHistoryEntry.Message.toTurnRecord(): ChatTurnMessageRecord {
             }
         }
     }
-    return ChatTurnMessageRecord(id, role, storedStatus(), header.toString(), parts())
+    val revisionId = (this as? ChatHistoryEntry.User)?.revisionId
+    return ChatTurnMessageRecord(
+        id, role, storedStatus(), header.toString(), if (revisionId == null) parts() else emptyList(),
+        expectedRevisionId = revisionId,
+    )
 }
 
 private fun ChatHistoryEntry.Message.parts(): List<Part> = buildList {
     if (text.isNotEmpty()) add(Part("text", body = text))
     when (this@parts) {
-        is ChatHistoryEntry.User -> files.forEach { add(it.toPart()) }
+        is ChatHistoryEntry.User -> {
+            check(sentAttachments.isEmpty() || sentAttachments.size == files.size)
+            files.forEachIndexed { index, file ->
+                val snapshot = sentAttachments.getOrNull(index)
+                check(snapshot == null || snapshot.metadata.fileId == file.id)
+                add(file.toPart().copy(snapshot = snapshot?.toRecord()))
+            }
+        }
         is ChatHistoryEntry.Reply -> {
             interim?.let { add(Part("text", body = it, title = "interim")) }
             for (step in steps) {
@@ -106,6 +120,10 @@ private fun ChatAttachment.toPart(partHeader: String? = null, parent: Int? = nul
         put("name", name)
         put("kind", kind)
         put("content", "")
+        source?.let {
+            it.description?.let { description -> put("description", description) }
+            it.sizeBytes?.let { size -> put("sourceSizeBytes", size) }
+        }
         mimeType?.let { put("mimeType", it) }
         if (base64Encoded) put("base64Encoded", true)
         date?.let { put("date", it.header()) }
@@ -121,7 +139,15 @@ private fun ChatAttachment.toPart(partHeader: String? = null, parent: Int? = nul
     else content.encodeToByteArray().size.toLong()
     return Part(
         "attachment", title = name, header = partHeader, parent = parent,
-        attachment = ChatTurnMessageRecord.Attachment(storageId, name, mimeType, content, header.toString(), size),
+        attachment = ChatTurnMessageRecord.Attachment(
+            storageId, name, mimeType, content, header.toString(), size,
+            originalUri = source?.location?.originalUri,
+            managedPath = (source?.location as? AttachmentLocation.ManagedCopy)?.relativePath,
+            base64Encoded = base64Encoded || image != null,
+            description = source?.description,
+            linkUri = (source?.location as? AttachmentLocation.Original)?.reference
+                ?.takeIf { transferMode == AttachmentTransferMode.ResourceLink },
+        ),
     )
 }
 

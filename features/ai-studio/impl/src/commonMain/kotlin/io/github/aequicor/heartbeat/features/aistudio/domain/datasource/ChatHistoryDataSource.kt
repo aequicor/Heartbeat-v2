@@ -21,6 +21,9 @@ internal interface ChatHistoryDataSource {
     suspend fun file(id: String): ChatAttachment
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String)
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun partBody(id: Long): String
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)

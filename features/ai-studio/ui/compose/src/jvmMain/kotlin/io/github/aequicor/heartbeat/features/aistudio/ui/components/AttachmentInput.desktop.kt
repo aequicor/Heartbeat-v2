@@ -58,7 +58,7 @@ internal actual fun rememberAttachmentInput(
                     return false
                 }
                 if (references.isEmpty()) return false
-                currentOnAction.value(AiStudioAction.ImportAttachments(draftId) { it(references) })
+                currentOnAction.value(AiStudioAction.ImportAttachments(draftId, { it(references) }))
                 // A successful MOVE authorizes the source to remove the files.
                 return event.action != DragAndDropTransferAction.Move
             }
@@ -72,12 +72,14 @@ internal actual fun rememberAttachmentInput(
         pasteModifier = Modifier.onPreviewKeyEvent { event ->
             if (!event.isPasteShortcut()) return@onPreviewKeyEvent false
             val source = try {
-                Toolkit.getDefaultToolkit().systemClipboard.getContents(null)?.attachmentSource()
+                Toolkit.getDefaultToolkit().systemClipboard.getContents(null)?.clipboardAttachment(draftId)
             } catch (_: Exception) {
                 currentOnAction.value(AiStudioAction.AttachmentPickerFailed(draftId))
                 return@onPreviewKeyEvent false
             } ?: return@onPreviewKeyEvent false
-            if (!isImporting.value) currentOnAction.value(AiStudioAction.ImportAttachments(draftId, source))
+            if (!isImporting.value) {
+                currentOnAction.value(source)
+            }
             true
         },
     )
@@ -118,11 +120,13 @@ private fun Transferable.fileReferences(): List<String> {
     }
 }
 
-private fun Transferable.attachmentSource(): AttachmentImportSource? {
+private fun Transferable.clipboardAttachment(draftId: String): AiStudioAction.ImportAttachments? {
     val references = fileReferences()
-    if (references.isNotEmpty()) return AttachmentImportSource { it(references) }
+    if (references.isNotEmpty()) {
+        return AiStudioAction.ImportAttachments(draftId, { it(references) }, AiStudioAction.ImportAttachments.Origin.ClipboardFile)
+    }
     if (!isDataFlavorSupported(DataFlavor.imageFlavor)) return null
-    return AttachmentImportSource { importFiles ->
+    val source = AttachmentImportSource { importFiles ->
         withContext(Dispatchers.IO) {
             val image = getTransferData(DataFlavor.imageFlavor) as Image
             val directory = Files.createTempDirectory("heartbeat-clipboard-")
@@ -139,6 +143,7 @@ private fun Transferable.attachmentSource(): AttachmentImportSource? {
             }
         }
     }
+    return AiStudioAction.ImportAttachments(draftId, source, AiStudioAction.ImportAttachments.Origin.ClipboardImage)
 }
 
 private fun Image.toBufferedImage(): BufferedImage {

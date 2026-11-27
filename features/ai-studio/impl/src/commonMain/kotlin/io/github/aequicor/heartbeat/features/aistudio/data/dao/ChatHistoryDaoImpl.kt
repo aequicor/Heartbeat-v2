@@ -1,7 +1,5 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
-
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
@@ -39,10 +37,8 @@ internal class ChatHistoryDaoImpl(
                 val deferred = historyUsesPreview(row.status)
                 val query = selectHistoryParts(row.revision_id, deferred)
                 val parts = query.executeAsList().map { part ->
-                    val attachment = part.attachment_id?.let { id ->
-                        if (deferred) attachmentHeader(id) { key, size, json ->
-                            ChatEntryRecord.Attachment(key, size, json, null)
-                        }.executeAsOne() else fullAttachment(id)
+                    val attachment = part.sent_attachment_id?.let { id ->
+                        if (deferred) fileHeader(id) else fullAttachment(id)
                     }
                     ChatEntryRecord.Part(part.id, part.parent_part_id, part.kind, part.title, part.body,
                         part.presentation, attachment, deferred && part.kind in setOf("reasoning", "tool_call"))
@@ -59,14 +55,21 @@ internal class ChatHistoryDaoImpl(
     }
 
     @Throwable(DaoException::class, CancellationException::class)
-    override suspend fun files(sessionId: String): List<ChatEntryRecord.Attachment> = read {
-        chatFileHeaders(chatForSession(sessionId).executeAsOne()) { id, size, header ->
-            ChatEntryRecord.Attachment(id, size, header, null)
-        }.executeAsList()
-    }
+    override suspend fun files(sessionId: String): List<ChatEntryRecord.Attachment> = read { readFileCatalog(sessionId) }
 
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun file(id: String): ChatEntryRecord.Attachment = read { fullAttachment(id) }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String): Unit = withContext(ioDispatcher) {
+        writeLock.withLock {
+            accessStudioDatabase("Remove attachment from session catalog") {
+                val history = ChatQueries(connection.driver)
+                val chatId = history.chatForSession(sessionId).executeAsOne()
+                history.removeCatalogAttachment(chatId, snapshotId)
+            }
+        }
+    }
 
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun partBody(id: Long): String = read { selectPartBody(id).executeAsOne().body.orEmpty() }
@@ -117,7 +120,7 @@ internal class ChatHistoryDaoImpl(
                         history.insertPart(
                             revision_id = revision, parent_part_id = null, position = 0, kind = "text",
                             body = text, title = null, status = null, tool_call_id = null,
-                            attachment_id = null, presentation = null,
+                            presentation = null, sent_attachment_id = null,
                         )
                     }
                     history.copyUserAttachments(revision, revisionId, if (text.isBlank()) 0L else 1L)
@@ -130,13 +133,6 @@ internal class ChatHistoryDaoImpl(
 }
 
 internal fun historyUsesPreview(status: String): Boolean = status != "draft"
-
-internal fun ChatQueries.fullAttachment(id: String, forRetry: Boolean = false): ChatEntryRecord.Attachment =
-    selectAttachment(id).executeAsOne().let {
-        val content = checkNotNull(it.inline_text)
-        if (forRetry) ChatImage.forMimeType(it.mime_type)?.decode(content)
-        ChatEntryRecord.Attachment(it.id, checkNotNull(it.size_bytes), it.presentation, content, it.mime_type)
-    }
 
 internal fun ChatQueries.selectHistoryParts(revision: Long, deferred: Boolean) =
     if (deferred) {
@@ -158,5 +154,6 @@ internal fun ChatQueries.applyEdit(chatId: String, position: Long, revision: Lon
 
 internal fun ChatQueries.clearUnreferencedHistory() {
     deleteUnreferencedRevisions()
+    deleteUnreferencedSentAttachments()
     deleteUnreferencedAttachments()
 }

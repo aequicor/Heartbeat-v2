@@ -2,15 +2,9 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -65,40 +59,6 @@ internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
         )
     } else {
         shell
-    }
-}
-
-@Composable
-internal fun AuroraDraftAttachments(files: List<File>, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
-    if (touch) {
-        Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
-            files.forEach { file -> AuroraDraftAttachment(file, touch, onAction) }
-        }
-    } else {
-        Row(Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space)) {
-            files.forEach { file -> AuroraDraftAttachment(file, touch, onAction) }
-        }
-    }
-}
-
-@Composable
-private fun AuroraDraftAttachment(file: File, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
-    AuroraControl(
-        { onAction(AiStudioAction.Detach(file.id)) },
-        if (touch) Modifier.padding(horizontal = AuroraLayout.Space) else Modifier,
-        label = "Убрать ${file.name}", touch = touch, background = AuroraColors.Canvas, round = false,
-    ) {
-        AuroraAttachmentThumbnail(file.image, Modifier.size(AuroraLayout.MessageMenuBadge)) {
-            if (!touch) HbIcon(HbIconGlyph.Document, tint = AuroraColors.Muted, size = AuroraLayout.Glyph)
-        }
-        AuroraText(
-            file.name,
-            (if (touch) Modifier.weight(1f, fill = false) else Modifier).padding(horizontal = AuroraLayout.Space)
-                .widthIn(max = AuroraLayout.ParameterMaxWidth),
-            small = true, lines = 1,
-        )
-        HbIcon(HbIconGlyph.Close, tint = AuroraColors.Muted, size = AuroraLayout.SmallGlyph)
     }
 }
 

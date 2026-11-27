@@ -2,15 +2,20 @@
 
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
+
 import io.github.aequicor.heartbeat.core.preferences.api.PreferencesStore
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentCopyTarget
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectsSessionsChange
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Session
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionBootstrapResult
@@ -73,6 +78,9 @@ internal class DefaultAiStudioStore(
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val turnInteractor: ChatTurnInteractor? = null,
     private val importAttachment: ImportChatAttachmentUseCase? = null,
+    private val findPromptReferences: FindPromptReferencesUseCase? = null,
+    private val attachmentReferences: AttachmentReferenceResolver? = null,
+    private val imageLoader: DraftAttachmentImageLoader? = null,
 ) : AiStudioStore {
 
     override val projectsSessionsStore: ProjectsSessionsStore? = catalog?.let {
@@ -90,6 +98,9 @@ internal class DefaultAiStudioStore(
         BootstrapEnginePicker(it, scope, defaultDispatcher, screen, ::enqueue, ::configurationApplied, ::configurationLabels)
     }
     private val remoteTurns = turnInteractor?.let { RemoteChatTurns(it, scope, defaultDispatcher, ::enqueue) }
+    private val promptReferenceSearch = findPromptReferences?.let {
+        PromptReferenceSearch(it, attachmentReferences, screen, scope, defaultDispatcher)
+    }
     private val editor = MutableStateFlow(Draft())
     private val stream = MutableStateFlow(LiveText())
     private var renderOwner: AuroraTurn? = null
@@ -209,6 +220,7 @@ internal class DefaultAiStudioStore(
                 saveRequests.trySend(Unit)
             }
             AiStudioAction.Send -> screen.value.chat?.id?.let(::submitChatDraft)
+            is AiStudioAction.SearchPromptReferences -> promptReferenceSearch?.request(action)
             is AiStudioAction.SendChatDraft -> submitChatDraft(action.chatId)
             AiStudioAction.CancelTurn -> screen.value.chat?.id?.let(::requestTurnCancellation)
             is AiStudioAction.CancelChatTurn -> requestTurnCancellation(action.chatId)
@@ -227,6 +239,7 @@ internal class DefaultAiStudioStore(
     private suspend fun handle(action: AiStudioAction) {
         when (action) {
             is AiStudioAction.EditDraft, AiStudioAction.Send, is AiStudioAction.SendChatDraft,
+            is AiStudioAction.SearchPromptReferences,
             AiStudioAction.CancelTurn, is AiStudioAction.CancelChatTurn, is AiStudioAction.AnswerPermission,
             -> Unit
             is AiStudioAction.ReadAt -> readAt(action)
@@ -249,8 +262,12 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.CreateSessionInProject -> showSessionBootstrapForProject(action.id)
             AiStudioAction.LoadBootstrapProjects -> loadBootstrapProjects(screen, catalog, defaultDispatcher)
             AiStudioAction.DismissSessionBootstrap -> {
+                val state = screen.value
+                state.sessionBootstrap?.let { draft ->
+                    (draft.attachments + state.pendingAttachments[draft.id].orEmpty()).forEach(::discardAttachmentCopy)
+                }
                 enginePicker?.close()
-                screen.update { it.copy(sessionBootstrap = null) }
+                screen.update(::withoutSessionBootstrap)
             }
             is AiStudioAction.EnginePicker -> handleEnginePicker(action)
             is AiStudioAction.BootstrapProject -> {
@@ -268,8 +285,12 @@ internal class DefaultAiStudioStore(
                     }
                 }
             }
-            is AiStudioAction.SubmitSessionBootstrap ->
-                submitSessionBootstrap(screen, enginePicker, action, ::openBootstrappedSession)
+            is AiStudioAction.SubmitSessionBootstrap -> {
+                val draftId = screen.value.sessionBootstrap?.id ?: return
+                if (!hasPendingAttachmentWork(draftId)) {
+                    submitSessionBootstrap(screen, enginePicker, action, ::openBootstrappedSession)
+                }
+            }
             is AiStudioAction.RenameProject -> updateProjectsSessions(ProjectAction.Rename(action.id, action.title))
             is AiStudioAction.DeleteProject -> updateProjectsSessions(ProjectAction.Delete(action.id))
             is AiStudioAction.NewProjectChat -> newChat(action.project)
@@ -278,13 +299,18 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.SetAccess -> updateSummary { it.copy(access = action.access) }
             is AiStudioAction.SetEffort -> updateSummary { it.copy(effort = action.effort) }
             is AiStudioAction.Attach -> if (importAttachment == null) attach(action.fileId) else Unit
-            is AiStudioAction.ImportAttachment -> importAttachments(action.draftId) { importFiles ->
+            is AiStudioAction.ImportAttachment -> importAttachments(action.draftId, AiStudioAction.ImportAttachments.Origin.File) { importFiles ->
                 importFiles(listOf(action.reference))
             }
-            is AiStudioAction.ImportAttachments -> importAttachments(action.draftId, action.source)
+            is AiStudioAction.ImportAttachments -> importAttachments(action.draftId, action.origin, action.source)
             is AiStudioAction.AttachmentPickerFailed -> reportAttachmentError(action.draftId)
+            is AiStudioAction.ConfirmAttachment -> confirmAttachment(action)
+            is AiStudioAction.CancelAttachment ->
+                consumePendingAttachment(action.draftId, action.fileId)?.let(::discardAttachmentCopy)
+            is AiStudioAction.UpdateDraftAttachment -> updateDraftAttachment(action)
+            is AiStudioAction.SaveViewedImageCopy -> saveViewedImageCopy(action)
             is AiStudioAction.Detach -> detach(action.fileId)
-            is AiStudioAction.Retry -> retry(action.id)
+            is AiStudioAction.Retry -> retry(action.id, action.expectedFailedRevisionId)
             is AiStudioAction.EditMessage -> editMessage(action.id)
             is AiStudioAction.InteractWithRequest, is AiStudioAction.Choose,
             is AiStudioAction.EditAnswer, is AiStudioAction.MoveQuestion,
@@ -300,13 +326,23 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.ShowFileSearch -> screen.update { workspaceFiles.setSearchVisible(it, action.visible) }
             is AiStudioAction.SearchFiles -> screen.update { workspaceFiles.search(it, action.text) }
             is AiStudioAction.OpenFile -> openViewer(workspaceFiles.find(action.id))
+            is AiStudioAction.RemoveUnavailableFile -> persistence?.let {
+                workspaceFiles.removeUnavailable(screen, it, action.sessionId, action.id)
+            }
             is AiStudioAction.OpenResult -> openViewer(findMessage(action.id).let { (it as? Reply)?.result })
             is AiStudioAction.OpenArtifact -> findArtifact(action.replyId, action.fileId)?.let { openViewer(it) }
-            is AiStudioAction.SaveArtifact -> if (screen.value.artifactToSave == null) {
-                val file = findArtifact(action.replyId, action.fileId) ?: return
-                val opened = screen.readStored { file.withContent(persistence) } ?: return
-                screen.update { it.copy(artifactToSave = opened) }
+            is AiStudioAction.CopyFile -> if (screen.value.fileToCopy == null) {
+                val opened = loadAttachment(workspaceFiles.find(action.id)) ?: return
+                screen.update { it.copy(fileToCopy = opened) }
             }
+            is AiStudioAction.FileCopyFinished -> screen.update {
+                it.copy(
+                    fileToCopy = null,
+                    storageError = if (action.failed) "Не удалось скопировать вложение" else it.storageError,
+                )
+            }
+            is AiStudioAction.SaveFile -> saveAttachment(workspaceFiles.find(action.id))
+            is AiStudioAction.SaveArtifact -> saveAttachment(findArtifact(action.replyId, action.fileId))
             is AiStudioAction.ArtifactSaveFinished -> screen.update {
                 it.copy(
                     artifactToSave = null,
@@ -365,7 +401,7 @@ internal class DefaultAiStudioStore(
         projectsSessionsStore?.dispatch(PanelAction.CollapsePanel)?.getOrThrow()
         workspace = workspace.copy(selectedId = id)
         if (screen.value.chat?.id == id && target.messages === entry.messages) {
-            screen.update { withProjectsSessions(it.copy(chat = target.summary, sessionBootstrap = null)) }
+            screen.update { withProjectsSessions(withoutSessionBootstrap(it).copy(chat = target.summary)) }
             if (target !== loaded) save()
         } else {
             showChat(target)
@@ -384,6 +420,7 @@ internal class DefaultAiStudioStore(
                 fileGroups = workspaceFiles.groups(it.fileSearch),
             )
         }
+        workspaceFiles.refreshCatalog(screen, persistence)
     }
 
     private suspend fun showChat(target: AuroraChat) {
@@ -401,10 +438,11 @@ internal class DefaultAiStudioStore(
             anchorIndex < 0 -> 0
             else -> anchorIndex + if (live == null) 0 else 1
         }
-        workspaceFiles.setStored(listOf())
+        val differentChat = screen.value.chat?.id != id
+        if (differentChat) workspaceFiles.selectSession()
         workspaceFiles.refresh(messages)
         screen.update {
-            val next = it.copy(
+            val next = withoutSessionBootstrap(it).copy(
                 loading = false,
                 chat = target.summary,
                 messages = messages,
@@ -416,14 +454,15 @@ internal class DefaultAiStudioStore(
                 restoreIndex = restoredIndex,
                 openedHistory = AiStudioScreenState.OpenedHistory(live?.id ?: messages.firstOrNull()?.id),
                 fileGroups = workspaceFiles.groups(it.fileSearch),
+                attachmentLoadFailures = if (differentChat) emptySet() else it.attachmentLoadFailures,
+                removedAttachmentLinks = if (differentChat) emptySet() else it.removedAttachmentLinks,
                 attachments = target.attachments,
                 viewer = null,
                 subagents = workspace.subagents(id),
-                sessionBootstrap = null,
             )
             withProjectsSessions(next)
         }
-        if (screen.value.filesVisible) workspaceFiles.toggleFiles(screen, true, persistence)
+        workspaceFiles.refreshCatalog(screen, persistence)
         save()
     }
 
@@ -467,8 +506,15 @@ internal class DefaultAiStudioStore(
     }
 
     private fun publishBootstrap(bootstrap: SessionBootstrapState) {
-        screen.update {
-            withProjectsSessions(it.copy(loading = false, sessionBootstrap = bootstrap, filesVisible = false, viewer = null))
+        screen.update { current ->
+            val existing = current.sessionBootstrap
+            val next = if (existing?.id == bootstrap.id) current else withoutSessionBootstrap(current)
+            val updatedBootstrap = if (existing?.id == bootstrap.id) {
+                bootstrap.copy(attachments = existing.attachments)
+            } else bootstrap
+            withProjectsSessions(next.copy(
+                loading = false, sessionBootstrap = updatedBootstrap, filesVisible = false, viewer = null,
+            ))
         }
     }
 
@@ -501,10 +547,15 @@ internal class DefaultAiStudioStore(
         files: List<File>,
     ) {
         val id = addStoredSession(result.session, result.project)
+        val projectId = result.project.id.value.toString()
+        val placed = files.map { file -> placeAttachmentInSession(file, projectId, id) }
+        val moved = files.zip(placed).filter { (before, after) -> before.managedCopyPath != after.managedCopyPath }
+        val prompt = if (moved.isEmpty() || attachmentReferences == null) action.prompt else {
+            withContext(defaultDispatcher) { attachmentReferences.rebindLinks(action.prompt, moved) }
+        }
         updateChat(id) { chat ->
-            chat.copy(
-                draft = action.prompt,
-                attachments = files,
+            chat.editDraft(prompt, placed).copy(
+                payloadLoaded = true,
                 summary = chat.summary.copy(
                     configuration = configuration,
                     scenario = action.scenario,
@@ -512,6 +563,9 @@ internal class DefaultAiStudioStore(
                     effort = action.effort ?: chat.summary.effort,
                 ),
             )
+        }
+        if (moved.isNotEmpty() && snapshots.saveNow(workspace).isSuccess) {
+            moved.forEach { (before, _) -> discardAttachmentCopy(before) }
         }
         val remote = remoteTurns
         if (remote == null) {
@@ -527,6 +581,14 @@ internal class DefaultAiStudioStore(
             }
         }
         save()
+    }
+
+    private suspend fun placeAttachmentInSession(file: File, projectId: String, sessionId: String): File {
+        val useCase = importAttachment ?: return file
+        val location = file.attachmentLocation() as? AttachmentLocation.ManagedCopy ?: return file
+        val target = AttachmentCopyTarget(projectId, sessionId, isDraft = false, generatedImage = location.originalUri == null)
+        val placed = withContext(defaultDispatcher) { useCase.copyToSession(location, target) }.getOrNull() ?: return file
+        return file.copy(managedCopyPath = placed.relativePath)
     }
 
     private fun readAt(action: AiStudioAction.ReadAt) {
@@ -562,6 +624,7 @@ internal class DefaultAiStudioStore(
     private fun updateWorkspaceAfterNavigation(action: ProjectsSessionsAction) {
         if (action is SessionAction.Archive) {
             workspace = workspace.copy(archivedChats = workspace.archivedChats + action.id)
+            screen.update { it.copy(pendingAttachments = it.pendingAttachments - action.id) }
         }
         val navigation = projectsSessionsStore?.state?.value ?: return
         when (action) {
@@ -602,6 +665,7 @@ internal class DefaultAiStudioStore(
             turns.remove(id)?.stop()
         }
         workspace = workspace.withoutChats(removed)
+        screen.update { it.copy(pendingAttachments = it.pendingAttachments - removed) }
         if (clearedChat) {
             requestRender(null)
             screen.update { current ->
@@ -671,23 +735,27 @@ internal class DefaultAiStudioStore(
         if (selected.attachments.none { it.id == id }) attachments(selected.attachments + file)
     }
 
-    private fun importAttachments(id: String, source: AttachmentImportSource) {
+    private fun importAttachments(id: String, origin: AiStudioAction.ImportAttachments.Origin, source: AttachmentImportSource) {
         val useCase = importAttachment ?: return
-        if (!hasAttachmentDraft(id) || id in screen.value.importingAttachmentsFor) return
+        if (!hasAttachmentDraft(id) || hasPendingAttachmentWork(id)) return
+        val copyTarget = if (origin == AiStudioAction.ImportAttachments.Origin.File) null else clipboardTarget(
+            id, generatedImage = origin == AiStudioAction.ImportAttachments.Origin.ClipboardImage,
+        )
         screen.update {
             it.copy(
                 importingAttachmentsFor = it.importingAttachmentsFor + id,
                 attachmentErrorFor = it.attachmentErrorFor.takeUnless { failedId -> failedId == id },
+                attachmentErrorMessage = it.attachmentErrorMessage.takeUnless { _ -> it.attachmentErrorFor == id },
             )
         }
         scope.launch {
             try {
                 source.withReferences { references ->
                     for (reference in references) {
-                        val result = withContext(defaultDispatcher) { useCase(reference) }
+                        val result = withContext(defaultDispatcher) { useCase(reference, copyTarget) }
                         enqueue {
                             result.fold(
-                                onSuccess = { addAttachment(id, it.display()) },
+                                onSuccess = { enqueueAttachmentConfirmation(id, it.display()) },
                                 onFailure = { reportAttachmentError(id) },
                             )
                         }
@@ -703,6 +771,144 @@ internal class DefaultAiStudioStore(
         }
     }
 
+    private fun clipboardTarget(draftId: String, generatedImage: Boolean): AttachmentCopyTarget {
+        val bootstrap = screen.value.sessionBootstrap?.takeIf { it.id == draftId }
+        val projectId = if (bootstrap != null) {
+            (bootstrap.project as? SessionBootstrapState.Project.Existing)?.id
+        } else chat(draftId).summary.projectId
+        return AttachmentCopyTarget(
+            projectId = projectId ?: ProjectId.Ungrouped.value.toString(),
+            scopeId = draftId, isDraft = bootstrap != null, generatedImage = generatedImage,
+        )
+    }
+
+    private fun hasPendingAttachmentWork(draftId: String): Boolean =
+        draftId in screen.value.importingAttachmentsFor || screen.value.pendingAttachments[draftId].orEmpty().isNotEmpty()
+
+    private fun withoutSessionBootstrap(state: AiStudioScreenState): AiStudioScreenState {
+        val draftId = state.sessionBootstrap?.id ?: return state
+        return state.copy(sessionBootstrap = null, pendingAttachments = state.pendingAttachments - draftId)
+    }
+
+    private fun enqueueAttachmentConfirmation(draftId: String, file: File) {
+        if (!hasAttachmentDraft(draftId)) {
+            discardAttachmentCopy(file)
+            return
+        }
+        screen.update { state ->
+            val queue = state.pendingAttachments[draftId].orEmpty() + file
+            state.copy(pendingAttachments = state.pendingAttachments + (draftId to queue))
+        }
+    }
+
+    @Throwable(CancellationException::class)
+    private suspend fun confirmAttachment(action: AiStudioAction.ConfirmAttachment) {
+        if (!hasAttachmentDraft(action.draftId)) return
+        val file = screen.value.pendingAttachments[action.draftId]?.firstOrNull() ?: return
+        if (file.id != action.fileId) return
+        val details = file.withAttachmentDetails(action.name, action.description, action.deferredReading) ?: return
+        val updated = if (action.editedImage != null) {
+            importEditedImage(action.draftId, details, action.editedImage) ?: return
+        } else details
+        addAttachment(action.draftId, updated)
+        consumePendingAttachment(action.draftId, action.fileId)
+    }
+
+    @Throwable(CancellationException::class)
+    private suspend fun updateDraftAttachment(action: AiStudioAction.UpdateDraftAttachment) {
+        val state = screen.value
+        val bootstrap = state.sessionBootstrap
+        val draftId = bootstrap?.id ?: state.chat?.id
+        if (draftId != action.draftId || draftId in state.submittingDrafts || bootstrap?.operation != null) return
+        if (!hasAttachmentDraft(action.draftId)) return
+        val files = bootstrap?.attachments ?: selected.attachments
+        val file = files.firstOrNull { it.id == action.fileId } ?: return
+        val details = file.withAttachmentDetails(action.name, action.description, action.deferredReading) ?: return
+        val updated = if (action.editedImage != null) {
+            importEditedImage(action.draftId, details, action.editedImage) ?: return
+        } else details
+        val updatedFiles = files.map { if (it.id == file.id) updated else it }
+        if (bootstrap == null) {
+            attachments(updatedFiles)
+        } else {
+            screen.update {
+                it.copy(sessionBootstrap = it.sessionBootstrap?.copy(attachments = updatedFiles))
+                    .clearAttachmentError(action.draftId)
+            }
+        }
+    }
+
+    @Throwable(CancellationException::class)
+    private suspend fun importEditedImage(
+        scopeId: String,
+        file: File,
+        source: AttachmentImportSource,
+        onFailure: () -> Unit = { reportAttachmentError(scopeId, "Не удалось сохранить копию изображения") },
+    ): File? {
+        val useCase = importAttachment ?: return null
+        if (file.image == null) return null
+        val target = clipboardTarget(scopeId, generatedImage = true)
+        var copy: File? = null
+        try {
+            source.withReferences { references ->
+                val imported = withContext(defaultDispatcher) { useCase(references.single(), target).getOrThrow() }.display()
+                val stem = file.name.substringBeforeLast('.').ifBlank { file.name }
+                copy = imported.copy(
+                    name = "${stem.removeSuffix("-edited")}-edited.png",
+                    description = file.description,
+                    deferredReading = file.deferredReading || imported.exceedsInlineImageLimit,
+                )
+            }
+            return checkNotNull(copy)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            copy?.let(::discardAttachmentCopy)
+            onFailure()
+            return null
+        }
+    }
+
+    @Throwable(CancellationException::class)
+    private suspend fun saveViewedImageCopy(action: AiStudioAction.SaveViewedImageCopy) {
+        val loader = imageLoader ?: return
+        val state = screen.value
+        val file = state.viewer?.takeIf { state.chat?.id == action.sessionId && it.openId == action.fileId } ?: return
+        val copy = importEditedImage(action.sessionId, file, action.source) {
+            screen.update { it.copy(viewerCopyError = true) }
+        } ?: return
+        val loaded = withContext(defaultDispatcher) { loader.load(copy).getOrNull() }
+        if (loaded == null) discardAttachmentCopy(copy)
+        screen.update { it.copy(viewer = loaded ?: file, viewerCopyError = loaded == null) }
+    }
+
+    private fun File.withAttachmentDetails(name: String, description: String?, deferredReading: Boolean): File? {
+        val label = name.trim()
+        if (label.isEmpty() || label.any(Char::isISOControl) || deferredReading && !canDeferReading) return null
+        return copy(name = label, description = description?.trim()?.takeIf(String::isNotEmpty), deferredReading = deferredReading)
+    }
+
+    private fun consumePendingAttachment(draftId: String, fileId: String): File? {
+        val file = screen.value.pendingAttachments[draftId]?.firstOrNull()?.takeIf { it.id == fileId } ?: return null
+        screen.update { state ->
+            val queue = state.pendingAttachments[draftId].orEmpty()
+            if (queue.firstOrNull()?.id != fileId) return@update state
+            val remaining = queue.drop(1)
+            val pending = if (remaining.isEmpty()) state.pendingAttachments - draftId
+            else state.pendingAttachments + (draftId to remaining)
+            state.copy(pendingAttachments = pending)
+        }
+        return file
+    }
+
+    private fun discardAttachmentCopy(file: File) {
+        val useCase = importAttachment ?: return
+        val location = file.attachmentLocation() as? AttachmentLocation.ManagedCopy ?: return
+        scope.launch {
+            withContext(defaultDispatcher) { useCase.discard(location) }
+        }
+    }
+
     private fun addAttachment(draftId: String, file: File) {
         if (screen.value.sessionBootstrap?.id == draftId) {
             screen.update { state ->
@@ -712,7 +918,7 @@ internal class DefaultAiStudioStore(
             return
         }
         if (!hasAttachmentDraft(draftId)) return
-        updateChat(draftId) { it.copy(attachments = it.attachments + file) }
+        updateChat(draftId) { it.editDraft(files = it.attachments + file) }
         val files = chat(draftId).attachments
         screen.update { if (it.chat?.id == draftId) it.copy(attachments = files) else it }
         save()
@@ -722,9 +928,12 @@ internal class DefaultAiStudioStore(
         screen.value.sessionBootstrap?.id == id ||
             workspace.chats.any { it.summary.id == id && it.payloadLoaded && id !in workspace.archivedChats }
 
-    private fun reportAttachmentError(id: String) {
-        if (hasAttachmentDraft(id)) screen.update { it.copy(attachmentErrorFor = id) }
+    private fun reportAttachmentError(id: String, message: String? = null) {
+        if (hasAttachmentDraft(id)) screen.update { it.copy(attachmentErrorFor = id, attachmentErrorMessage = message) }
     }
+
+    private fun AiStudioScreenState.clearAttachmentError(id: String) =
+        if (attachmentErrorFor == id) copy(attachmentErrorFor = null, attachmentErrorMessage = null) else this
 
     private fun detach(fileId: String) {
         val bootstrap = screen.value.sessionBootstrap
@@ -735,14 +944,14 @@ internal class DefaultAiStudioStore(
             screen.update {
                 it.copy(sessionBootstrap = it.sessionBootstrap?.let { current ->
                     current.copy(attachments = current.attachments.filterNot { file -> file.id == fileId })
-                })
+                    }).clearAttachmentError(bootstrap.id)
             }
         }
     }
 
     private fun attachments(value: List<File>) {
-        updateChat(workspace.selectedId) { it.copy(attachments = value) }
-        screen.update { it.copy(attachments = value) }
+        updateChat(workspace.selectedId) { it.editDraft(files = value) }
+        screen.update { it.copy(attachments = value).clearAttachmentError(workspace.selectedId) }
         save()
     }
 
@@ -757,7 +966,8 @@ internal class DefaultAiStudioStore(
         val chatId = chat.summary.id
         val text = draft.text.trim()
         val activeTurn = chatId in turns || remoteTurns?.isRunning(chatId) == true
-        if (chatId in screen.value.importingAttachmentsFor) return
+        if (hasPendingAttachmentWork(chatId)) return
+        if (chat.attachments.any { it.hasInvalidImageExtension() }) return
         if (screen.value.isPromptBlockedBySecurityMode(chat.summary)) return
         if (draft.chatId != chatId || !ChatPrompt.canSend(text, chat.attachments.isNotEmpty(), activeTurn)) return
         val remote = remoteTurns
@@ -767,7 +977,7 @@ internal class DefaultAiStudioStore(
         }
         val summary = summaryForPrompt(chat, text) ?: return
         editor.compareAndSet(draft, draft.copy(text = ""))
-        updateChat(chatId) { it.copy(attachments = listOf(), summary = summary) }
+        updateChat(chatId) { it.editDraft(files = emptyList()).copy(summary = summary) }
         val user = User(
             nextId(), MockTime, text, chat.attachments, Delivery.Sending,
             scenario = chat.summary.scenario, access = chat.summary.access,
@@ -777,10 +987,37 @@ internal class DefaultAiStudioStore(
 
     private suspend fun sendToEngine(remote: RemoteChatTurns, draft: Draft, text: String, chat: AuroraChat) {
         val id = chat.summary.id
-        screen.update { it.copy(submittingDrafts = it.submittingDrafts + id) }
+        if (editor.value != draft) return
+        screen.update {
+            it.copy(
+                submittingDrafts = it.submittingDrafts + id,
+                attachmentErrorFor = it.attachmentErrorFor.takeUnless { failedId -> failedId == id },
+                attachmentErrorMessage = it.attachmentErrorMessage.takeUnless { _ -> it.attachmentErrorFor == id },
+            )
+        }
         try {
-            val files = screen.readStored { chat.attachments.map { it.withContent(persistence) } } ?: return
-            startEngineTurn(remote, id, RemoteChatTurns.Submission.New(text, files) { saveSubmittedDraft(draft, chat) })
+            val find = findPromptReferences
+            val importer = importAttachment
+            val referencedImages = if (find == null || importer == null) emptyList() else {
+                withContext(defaultDispatcher) { find.importPromptImages(chat, text, importer, attachmentReferences) }
+            }
+            if (editor.value != draft) return
+            rememberDraft(draft)
+            if (referencedImages.isNotEmpty()) {
+                updateChat(id) { it.editDraft(files = it.attachments + referencedImages) }
+            }
+            if (this.chat(id).draftRevision == null) {
+                updateChat(id) { it.copy(draftRevision = nextId()) }
+            }
+            val submitted = this.chat(id)
+            if (snapshots.saveNow(workspace).isFailure) {
+                reportChatSaveError(id)
+                return
+            }
+            val submission = RemoteChatTurns.Submission.New(
+                nextId(), text, submitted.attachments, checkNotNull(submitted.draftRevision),
+            ) { consumeSubmittedDraft(draft, submitted) }
+            startEngineTurn(remote, id, submission)
         } finally {
             if (!remote.isRunning(id)) finishDraftSubmission(id)
         }
@@ -796,7 +1033,10 @@ internal class DefaultAiStudioStore(
             complete = { outcome ->
                 if (submission is RemoteChatTurns.Submission.New) finishDraftSubmission(id)
                 if (workspace.chats.any { it.summary.id == id }) {
-                    if (outcome?.exceptionOrNull() is StudioRepositoryException) reportChatSaveError(id)
+                    when (val failure = outcome?.exceptionOrNull()) {
+                        is StudioRepositoryException -> reportChatSaveError(id)
+                        is AttachmentTransferException -> reportAttachmentError(id, failure.message)
+                    }
                     val status = chat(id).summary.navigationStatus
                     if (status == NavigationStatus.Working || status == NavigationStatus.Attention) finish(id)
                 }
@@ -813,28 +1053,25 @@ internal class DefaultAiStudioStore(
         if (screen.value.chat?.id == id) screen.update { it.copy(chat = chat(id).summary) }
     }
 
-    @Throwable(CancellationException::class)
-    private suspend fun saveSubmittedDraft(draft: Draft, submittedChat: AuroraChat): Result<Unit> {
+    private fun consumeSubmittedDraft(draft: Draft, submittedChat: AuroraChat) {
         val id = submittedChat.summary.id
-        if (workspace.chats.none { it.summary.id == id }) throw CancellationException("Chat was removed")
+        if (workspace.chats.none { it.summary.id == id }) return
         rememberDraft(editor.value)
         val submittedFiles = submittedChat.attachments.toSet()
-        val next = workspace.copy(chats = workspace.chats.map { chat ->
-            if (chat.summary.id == id) {
-                chat.copy(
-                    draft = if (chat.draft == draft.text) "" else chat.draft,
-                    attachments = chat.attachments - submittedFiles,
-                    persistedThroughDomain = true,
-                )
+        updateChat(id) { chat ->
+            val text = if (chat.draft == draft.text) "" else chat.draft
+            val files = chat.attachments - submittedFiles
+            val remaining = if (chat.draftRevision == submittedChat.draftRevision) {
+                // SQLite has already consumed this revision.
+                chat.copy(draft = text, attachments = files)
             } else {
-                chat
+                chat.editDraft(text, files)
             }
-        })
-        return snapshots.saveNow(next).onSuccess {
-            workspace = next
-            editor.compareAndSet(draft, draft.copy(text = ""))
-            finishDraftSubmission(id)
+            remaining.copy(persistedThroughDomain = true)
         }
+        editor.compareAndSet(draft, draft.copy(text = ""))
+        finishDraftSubmission(id)
+        save()
     }
 
     private fun finishDraftSubmission(id: String) {
@@ -901,13 +1138,15 @@ internal class DefaultAiStudioStore(
         return turn
     }
 
-    private fun retry(id: String) {
+    private fun retry(id: String, expectedFailedRevisionId: Long?) {
         if (screen.value.isPromptBlockedBySecurityMode(selected.summary)) return
         val message = findMessage(id)
         if ((message as? User)?.retryAllowed == false || (message as? Reply)?.retryAllowed == false) return
         remoteTurns?.let { remote ->
             if (message is User && message.delivery == Delivery.Failed && !message.answers) {
-                startEngineTurn(remote, workspace.selectedId, RemoteChatTurns.Submission.Retry(id))
+                val revisionId = expectedFailedRevisionId ?: return
+                if (message.revisionId != revisionId) return
+                startEngineTurn(remote, workspace.selectedId, RemoteChatTurns.Submission.Retry(id, revisionId))
             }
             return
         }
@@ -943,8 +1182,30 @@ internal class DefaultAiStudioStore(
     }
 
     private suspend fun openViewer(file: File?) {
-        val opened = screen.readStored { file?.withContent(persistence) }
-        screen.update { it.copy(viewer = opened) }
+        val opened = loadAttachment(file)
+        screen.update { it.copy(viewer = opened, viewerCopyError = false) }
+    }
+
+    private suspend fun saveAttachment(file: File?) {
+        if (screen.value.artifactToSave != null) return
+        val opened = loadAttachment(file) ?: return
+        screen.update { it.copy(artifactToSave = opened) }
+    }
+
+    private suspend fun loadAttachment(file: File?): File? {
+        if (file == null || file.openId in screen.value.removedAttachmentLinks) return null
+        return try {
+            val stored = if (file.deferredReading && file.storedAttachmentId == null && persistence != null) {
+                val sessionId = screen.value.chat?.id ?: return null
+                persistence.listFiles(sessionId).firstOrNull { it.id == file.id && it.deferredReading } ?: return null
+            } else file
+            val loaded = stored.withContent(persistence)
+            screen.update { it.copy(attachmentLoadFailures = it.attachmentLoadFailures - file.openId) }
+            loaded
+        } catch (_: StudioRepositoryException) {
+            screen.update { it.copy(attachmentLoadFailures = it.attachmentLoadFailures + file.openId) }
+            null
+        }
     }
 
     private fun findMessage(id: String?): Message? = screen.value.messages.firstOrNull { it.id == id }
@@ -1053,6 +1314,9 @@ internal class DefaultAiStudioStore(
         // The completed screen revision already owns the full final document. Keep the last
         // live revision until a new turn/chat replaces it, so collectors cannot see a blank handoff.
         save()
+        if (messages != null && persistence != null) enqueue {
+            if (screen.value.chat?.id == chatId) workspaceFiles.refreshCatalog(screen, persistence)
+        }
     }
 
     internal fun event(command: () -> Unit) = enqueue { command() }
@@ -1082,7 +1346,8 @@ internal class DefaultAiStudioStore(
 
     private fun rememberDraft(draft: Draft) {
         val id = draft.chatId ?: return
-        if (chat(id).draft != draft.text) updateChat(id) { it.copy(draft = draft.text) }
+        val previous = workspace.chats.firstOrNull { it.summary.id == id } ?: return
+        if (previous.draft != draft.text) updateChat(id) { it.editDraft(text = draft.text) }
     }
 
     private fun save() {

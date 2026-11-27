@@ -2,6 +2,8 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.usecase
 
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentCopyTarget
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
@@ -10,7 +12,6 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.util.rethrowCancell
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
-import kotlin.uuid.Uuid
 
 @Inject
 internal class ImportChatAttachmentUseCaseImpl(
@@ -18,23 +19,45 @@ internal class ImportChatAttachmentUseCaseImpl(
 ) : ImportChatAttachmentUseCase {
 
     @Throwable(CancellationException::class)
-    override suspend fun invoke(reference: String): Result<ChatAttachment> = runCatching {
-        val (name, bytes) = attachments.read(reference, ChatImage.MaxBytes)
-        require(name.isNotBlank() && bytes.size <= ChatImage.MaxBytes)
-        val image = ChatImage.identify(bytes)
-        if (image != null) {
-            if (image == ChatImage.Png) ChatPng.validate(bytes)
-            val thumbnail = requireNotNull(attachments.imageThumbnail(bytes, image, ChatImage.ThumbnailSize))
-            ChatPng.validate(thumbnail, thumbnail = true)
-            return@runCatching ChatAttachment(
-                Uuid.random().toString(), name, "Изображение", Base64.encode(bytes), null, null, bytes.size.toLong(),
-                ChatAttachment.Image(image.mimeType, Base64.encode(thumbnail)),
-            )
-        }
-        val content = bytes.decodeToString(throwOnInvalidSequence = true)
-        require('\u0000' !in content)
-        val kind = if (isMarkdownAttachment(name)) "Markdown" else "Text"
-        ChatAttachment(Uuid.random().toString(), name, kind, content, null, null, bytes.size.toLong())
+    override suspend fun invoke(reference: String, copyTarget: AttachmentCopyTarget?): Result<ChatAttachment> = runCatching {
+        val file = if (copyTarget != null) attachments.copyClipboard(reference, copyTarget) else attachments.inspect(reference)
+        val format = ChatImage.forMimeType(file.mimeType)
+        val thumbnail = if (format != null && file.sizeBytes?.let { it <= ChatImage.MaxBytes } == true) {
+            runCatching {
+                val (_, bytes) = attachments.read(attachments.reference(file.location), ChatImage.MaxBytes)
+                require(bytes.size <= ChatImage.MaxBytes)
+                attachments.imageThumbnail(bytes, format, ChatImage.ThumbnailSize)?.let {
+                    ChatPng.validate(it, thumbnail = true)
+                    Base64.encode(it)
+                }
+            }.rethrowCancellation().getOrNull()
+        } else null
+
+        ChatAttachment(
+            id = file.id,
+            name = file.name,
+            kind = when {
+                format != null -> "Изображение"
+                isMarkdownAttachment(file.name) -> "Markdown"
+                else -> "File"
+            },
+            content = "",
+            date = null,
+            storageId = null,
+            size = file.sizeBytes,
+            image = format?.let { ChatAttachment.Image(it.mimeType, thumbnail) },
+            mimeType = file.mimeType,
+            base64Encoded = format != null || file.mimeType?.let { !it.startsWith("text/") } == true,
+            source = file,
+        )
     }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
+    override suspend fun copyToSession(location: AttachmentLocation.ManagedCopy, target: AttachmentCopyTarget) =
+        runCatching { attachments.copyToSession(location, target) }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
+    override suspend fun discard(location: AttachmentLocation.ManagedCopy) =
+        runCatching { attachments.discardCopy(location) }.rethrowCancellation()
 
 }

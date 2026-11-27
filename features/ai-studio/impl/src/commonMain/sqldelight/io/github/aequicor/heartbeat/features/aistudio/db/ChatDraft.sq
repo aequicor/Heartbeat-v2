@@ -1,0 +1,45 @@
+CREATE TABLE chat_draft (
+    session_id TEXT NOT NULL PRIMARY KEY REFERENCES studio_session(id) ON DELETE CASCADE,
+    revision TEXT NOT NULL CHECK (length(revision) > 0),
+    body TEXT NOT NULL
+);
+
+CREATE TABLE draft_attachment (
+    session_id TEXT NOT NULL REFERENCES chat_draft(session_id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
+    file_id TEXT NOT NULL CHECK (length(file_id) > 0),
+    attachment_id TEXT NOT NULL REFERENCES attachment(id),
+    transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    PRIMARY KEY (session_id, position)
+);
+
+CREATE INDEX draft_attachment_file ON draft_attachment(attachment_id);
+
+selectDraft:
+SELECT revision, body FROM chat_draft WHERE session_id = :session_id;
+
+insertDraft:
+INSERT OR IGNORE INTO chat_draft(session_id, revision, body) VALUES (:session_id, :revision, :body);
+
+updateDraft:
+UPDATE chat_draft SET revision = :revision, body = :body WHERE session_id = :session_id;
+
+clearSubmittedDraft:
+UPDATE chat_draft SET body = ''
+WHERE session_id = :session_id AND revision = :revision
+    AND EXISTS (
+        SELECT 1 FROM studio_session WHERE id = :session_id AND status = 'ACTIVE'
+            AND (work_state_owner IS NULL OR work_state_owner = :writer_owner)
+    );
+
+selectDraftFiles:
+SELECT d.attachment_id, d.file_id, d.transfer_mode, a.presentation, a.original_uri, a.managed_path
+FROM draft_attachment d JOIN attachment a ON d.attachment_id = a.id
+WHERE d.session_id = :session_id ORDER BY d.position;
+
+insertDraftFile:
+INSERT INTO draft_attachment(session_id, position, file_id, attachment_id, transfer_mode)
+VALUES (:session_id, :position, :file_id, :attachment_id, :transfer_mode);
+
+deleteDraftFiles:
+DELETE FROM draft_attachment WHERE session_id = :session_id;

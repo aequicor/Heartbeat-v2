@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aistudio.MaxAttachmentImagePreviewBytes
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.Project
@@ -30,11 +31,15 @@ public data class AiStudioScreenState(
     val restoreAnchor: Anchor = Anchor(),
     val restoreIndex: Int = 0,
     val fileGroups: List<FileGroup> = listOf(),
+    val attachmentLoadFailures: Set<String> = emptySet(),
+    val removedAttachmentLinks: Set<String> = emptySet(),
+    val promptReferences: PromptReferences? = null,
     val fileChoices: List<File> = listOf(),
     val attachments: List<File> = listOf(),
     val fileSearch: String = "",
     val fileSearchVisible: Boolean = false,
     val viewer: File? = null,
+    val viewerCopyError: Boolean = false,
     val chatsVisible: Boolean = false,
     val filesVisible: Boolean = false,
     val expandedWork: Set<String> = setOf(),
@@ -51,9 +56,12 @@ public data class AiStudioScreenState(
     val olderMessagesBefore: Long? = null,
     val allowsFileImport: Boolean = false,
     val importingAttachmentsFor: Set<String> = emptySet(),
+    val pendingAttachments: Map<String, List<File>> = emptyMap(),
     val attachmentErrorFor: String? = null,
+    val attachmentErrorMessage: String? = null,
     val openedHistory: OpenedHistory? = null,
     val artifactToSave: File? = null,
+    val fileToCopy: File? = null,
     val submittingDrafts: Set<String> = emptySet(),
 ) {
 
@@ -133,6 +141,25 @@ public data class AiStudioScreenState(
     }
 
     public data class Draft(val chatId: String? = null, val text: String = "")
+
+    public data class PromptReferences(
+        val draftId: String,
+        val projectId: String?,
+        val query: String,
+        val entries: List<Entry>,
+    ) {
+
+        public data class Entry(
+            val category: Category,
+            val name: String,
+            val uri: String,
+            val detail: String?,
+            val image: ImageAttachment? = null,
+        )
+
+        public enum class Category { SessionFile, ProjectFile, Skill }
+    }
+
     public data class LiveText(
         val replyId: String? = null, val text: String = "", val document: ReplyDocument? = null,
     ) {
@@ -197,6 +224,7 @@ public data class AiStudioScreenState(
         val strike: Boolean = false,
         val code: Boolean = false,
         val url: String? = null,
+        val attachmentReference: Boolean = false,
     )
 
     public enum class ReplyAlignment { Left, Center, Right }
@@ -356,6 +384,7 @@ public data class AiStudioScreenState(
         val promptId: String? = null,
         val access: Access = Access.Workspace,
         val retryAllowed: Boolean = true,
+        @Transient val revisionId: Long? = null,
     ) : Message
 
     @Serializable
@@ -497,8 +526,42 @@ public data class AiStudioScreenState(
         val image: ImageAttachment? = null,
         val mimeType: String? = null,
         val base64Encoded: Boolean = false,
+        val originalUri: String? = null,
+        val managedCopyPath: String? = null,
+        val sourceSizeBytes: Long? = null,
+        val description: String? = null,
+        val deferredReading: Boolean = false,
+        @Transient internal val catalogUri: String? = null,
     ) {
         public val openId: String get() = storedAttachmentId ?: id
+
+        public val sizeLabel: String get() = formatAttachmentSize(
+            sourceSizeBytes ?: storedSizeBytes ?: if (base64Encoded) {
+                val padding = when {
+                    content.endsWith("==") -> 2
+                    content.endsWith('=') -> 1
+                    else -> 0
+                }
+                (content.length.toLong() * 3 / 4 - padding).coerceAtLeast(0L)
+            } else {
+                content.encodeToByteArray().size.toLong()
+            },
+        )
+
+        public val canDeferReading: Boolean
+            get() = managedCopyPath != null || originalUri?.startsWith("file:", ignoreCase = true) == true
+
+        public val exceedsInlineImageLimit: Boolean
+            get() = image != null && (sourceSizeBytes ?: 0L) > ChatImage.MaxBytes
+
+        public fun hasInvalidImageExtension(displayName: String = name): Boolean {
+            val format = ChatImage.forMimeType(image?.mimeType ?: mimeType) ?: return false
+            val label = displayName.trim()
+            val dot = label.lastIndexOf('.')
+            if (dot < 0) return false
+            val extension = label.substring(dot + 1).lowercase()
+            return extension != format.extension && (format != ChatImage.Jpeg || extension != "jpeg")
+        }
 
         public val isPatch: Boolean get() = kind == "Патч" || mimeType == "text/x-diff" || mimeType == "text/x-patch"
         private val isTextFile: Boolean get() = !base64Encoded || mimeType?.startsWith("text/") == true || isPatch
@@ -518,8 +581,12 @@ public data class AiStudioScreenState(
 
         public fun imageBytes(): ByteArray? {
             val format = ChatImage.forMimeType(image?.mimeType) ?: return null
+            if (content.length > (MaxAttachmentImagePreviewBytes + 2) / 3 * 4) return null
             return try {
-                format.decode(content)
+                Base64.decode(content).also { bytes ->
+                    require(bytes.size <= MaxAttachmentImagePreviewBytes && ChatImage.identify(bytes) == format)
+                    if (format == ChatImage.Png && bytes.size <= ChatImage.MaxBytes) ChatPng.validate(bytes)
+                }
             } catch (_: IllegalArgumentException) {
                 null
             }
@@ -549,6 +616,10 @@ public data class AiStudioScreenState(
         val size: String,
         val date: String?,
         val image: ImageAttachment? = null,
+        val isMedia: Boolean = image != null,
+        val originalUri: String? = null,
+        val managedCopyPath: String? = null,
+        val canRemove: Boolean = false,
     ) {
         val accessibilityLabel: String = listOfNotNull(name, size, date).joinToString(", ")
     }

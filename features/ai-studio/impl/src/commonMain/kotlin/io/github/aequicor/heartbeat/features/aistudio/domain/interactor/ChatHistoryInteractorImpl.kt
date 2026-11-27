@@ -33,6 +33,10 @@ internal class ChatHistoryInteractorImpl(private val history: ChatHistoryDataSou
     override suspend fun file(id: String): Result<ChatAttachment> = runCatching { history.file(id) }.rethrowCancellation()
 
     @Throwable(CancellationException::class)
+    override suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String): Result<Unit> =
+        runCatching { history.removeUnavailableAttachment(sessionId, snapshotId) }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
     override suspend fun partBody(id: Long): Result<String> = runCatching { history.partBody(id) }.rethrowCancellation()
 
     @Throwable(CancellationException::class)

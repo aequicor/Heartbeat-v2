@@ -6,6 +6,8 @@ internal data class ChatAttachment(
     val image: Image? = null,
     val mimeType: String? = null,
     val base64Encoded: Boolean = false,
+    val source: AttachmentFile? = null,
+    val transferMode: AttachmentTransferMode = AttachmentTransferMode.Resource,
 ) {
 
     data class Date(val year: Int, val month: Int, val day: Int, val time: String)

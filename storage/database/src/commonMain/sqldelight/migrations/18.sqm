@@ -1,0 +1,48 @@
+-- Populate a separate catalog for each current chat without rewriting its message parts.
+CREATE TABLE session_attachment (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    snapshot_id TEXT NOT NULL REFERENCES sent_attachment(id) ON DELETE CASCADE,
+    PRIMARY KEY (chat_id, snapshot_id)
+);
+
+CREATE INDEX session_attachment_snapshot ON session_attachment(snapshot_id);
+
+CREATE TRIGGER register_inserted_attachment AFTER INSERT ON message_part
+WHEN new.sent_attachment_id IS NOT NULL
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+END;
+
+CREATE TRIGGER register_changed_attachment AFTER UPDATE OF sent_attachment_id ON message_part
+WHEN new.sent_attachment_id IS NOT NULL AND new.sent_attachment_id IS NOT old.sent_attachment_id
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+END;
+
+CREATE TRIGGER register_entry_attachments AFTER INSERT ON chat_entry
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT new.chat_id, sent_attachment_id FROM message_part
+    WHERE revision_id = new.revision_id AND sent_attachment_id IS NOT NULL;
+END;
+
+CREATE TRIGGER register_new_revision_attachments AFTER UPDATE OF revision_id ON chat_entry
+WHEN new.revision_id <> old.revision_id
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT new.chat_id, p.sent_attachment_id FROM message_part p
+    WHERE p.revision_id = new.revision_id AND p.sent_attachment_id IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM message_part previous
+          WHERE previous.revision_id = old.revision_id AND previous.sent_attachment_id = p.sent_attachment_id
+      );
+END;
+
+INSERT INTO session_attachment(chat_id, snapshot_id)
+SELECT DISTINCT e.chat_id, p.sent_attachment_id
+FROM chat_entry e
+JOIN message_part p ON p.revision_id = e.revision_id
+WHERE p.sent_attachment_id IS NOT NULL
+ORDER BY e.chat_id, e.position, p.position;

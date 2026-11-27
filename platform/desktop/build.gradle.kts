@@ -90,6 +90,9 @@ compose.desktop {
 
         // DecoratedWindow needs JBR; jlink and runtime checks override this with the JCEF SDK.
         javaHome = jcefJdk.runJavaHome.absolutePath
+        if (System.getProperty("os.name").startsWith("Mac")) {
+            jvmArgs("--add-exports=java.desktop/com.apple.eawt.event=ALL-UNNAMED")
+        }
 
         nativeDistributions {
             // SQLite JDBC loads java.sql; DataStore's protobuf adapter uses sun.misc.Unsafe from

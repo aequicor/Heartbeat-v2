@@ -31,5 +31,12 @@ internal interface ChatConversationDao {
     suspend fun save(sessionId: String, messages: List<ChatTurnMessageRecord>)
 
     @Throwable(DaoException::class, CancellationException::class)
-    suspend fun reserveRetry(sessionId: String, messageId: String): ChatEntryRecord?
+    suspend fun commitUserPrompt(
+        sessionId: String,
+        message: ChatTurnMessageRecord,
+        expectedDraftRevision: String,
+    ): ChatEntryRecord?
+
+    @Throwable(DaoException::class, CancellationException::class)
+    suspend fun reserveRetry(sessionId: String, messageId: String, expectedFailedRevisionId: Long): ChatEntryRecord?
 }

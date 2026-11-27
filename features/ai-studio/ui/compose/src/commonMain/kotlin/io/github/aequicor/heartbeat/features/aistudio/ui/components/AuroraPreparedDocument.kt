@@ -174,6 +174,10 @@ private val safeLinkPrefixes = listOf("https://", "http://", "mailto:")
 
 private fun AnnotatedString.Builder.appendReplySpans(spans: List<ReplyInline>, monospace: FontFamily) {
     for (span in spans) {
+        if (span.attachmentReference) {
+            appendPromptLinkLabel(span.text)
+            continue
+        }
         val emphasis = span.bold || span.italic || span.strike
         if (!emphasis && !span.code && span.url == null) {
             append(span.text)

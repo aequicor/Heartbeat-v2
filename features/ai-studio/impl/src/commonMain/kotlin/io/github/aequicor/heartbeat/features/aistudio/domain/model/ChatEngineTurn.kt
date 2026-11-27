@@ -15,5 +15,5 @@ internal data class ChatEngineTurn(
 
     enum class Status { Running, Completed, Stopped, CancelledBeforeDispatch, Rejected, SendFailed, Failed }
 
-    enum class Rejection { ImageUnsupported }
+    enum class Rejection { ImageUnsupported, EmbeddedResourceUnsupported }
 }

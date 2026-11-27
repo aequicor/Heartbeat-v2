@@ -17,6 +17,7 @@ dependencies {
     api(project(":features:engines:acp:api"))
     api(project(":di:api"))
     implementation(libs.acp)
+    implementation(libs.snakeyaml)
     implementation(libs.metro.runtime)
     runtimeOnly(libs.slf4j.api)
     testImplementation(kotlin("test-junit"))

@@ -36,19 +36,25 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentDialog
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentPreviewWindow
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDiagramPreviews
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.BindAuroraDiagramContext
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.LocalDiagramPreviews
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.LocalAttachmentLoadFailures
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.LocalRemovedAttachmentLinks
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraChats
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDesktopSidebar
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPaneSplitter
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPanelDialog
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraViewer
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentViewerUsesWorkspaceOverlay
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentImageEditSource
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraSidebarSurface
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraTouchFilesFrame
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberArtifactSaveLauncher
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.rememberAttachmentCopyLauncher
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.resize_files_pane
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.resize_projects_sessions_pane
@@ -73,6 +79,10 @@ internal fun AiStudioScreen(
     LaunchedEffect(state.artifactToSave) {
         state.artifactToSave?.let(saveArtifact)
     }
+    val copyFile = rememberAttachmentCopyLauncher { failed -> onAction(AiStudioAction.FileCopyFinished(failed)) }
+    LaunchedEffect(state.fileToCopy) {
+        state.fileToCopy?.let(copyFile)
+    }
     val previews = remember(state.chat?.id) { AuroraDiagramPreviews() }
     val splitterWidth = HbSizes.minimumTarget
     val touch = splitterWidth >= AuroraLayout.TouchTarget
@@ -85,7 +95,7 @@ internal fun AiStudioScreen(
     val hiddenSemantics = Modifier.clearAndSetSemantics {
         hideFromAccessibility()
     }
-    val backgroundSemantics = if (viewer == null) Modifier else hiddenSemantics
+    val backgroundSemantics = if (viewer != null && attachmentViewerUsesWorkspaceOverlay) hiddenSemantics else Modifier
     val workspaceSemantics = if (touch && state.filesVisible) hiddenSemantics else backgroundSemantics
     BoxWithConstraints(modifier.fillMaxSize().background(canvas).imePadding()) {
         val panes = auroraPaneLayout(
@@ -121,7 +131,11 @@ internal fun AiStudioScreen(
                 )
             }
             Box(Modifier.weight(1f).fillMaxSize()) {
-                CompositionLocalProvider(LocalDiagramPreviews provides previews) {
+                CompositionLocalProvider(
+                    LocalDiagramPreviews provides previews,
+                    LocalAttachmentLoadFailures provides state.attachmentLoadFailures,
+                    LocalRemovedAttachmentLinks provides state.removedAttachmentLinks,
+                ) {
                     AuroraWorkspace(
                         state, draft, liveText, backdrop, touch, onAction, showNavigation = !panes.sidebar,
                         modifier = Modifier.fillMaxSize(),
@@ -158,7 +172,23 @@ internal fun AiStudioScreen(
                 AuroraFiles(state, touch, onAction, Modifier.padding(top = panes.filesTop).width(panes.filesWidth))
             }
         }
-        viewer?.let { file -> AuroraViewer(file, touch, previews) { onAction(AiStudioAction.CloseViewer) } }
+        viewer?.let { file ->
+            val editSource = attachmentImageEditSource()
+            val canEdit = state.allowsFileImport && file.image != null
+            val saveCopy = state.chat?.id?.takeIf { canEdit }?.let { sessionId ->
+                { bytes: ByteArray -> onAction(AiStudioAction.SaveViewedImageCopy(sessionId, file.openId, editSource(bytes))) }
+            }
+            AuroraAttachmentPreviewWindow(file, previews, saveCopy, state.viewerCopyError) { onAction(AiStudioAction.CloseViewer) }
+        }
+        val attachmentDraftId = state.sessionBootstrap?.id ?: state.chat?.id
+        if (attachmentDraftId != null) {
+            state.pendingAttachments[attachmentDraftId]?.firstOrNull()?.let { file ->
+                AuroraAttachmentDialog(
+                    attachmentDraftId, file, onAction,
+                    state.attachmentErrorMessage.takeIf { state.attachmentErrorFor == attachmentDraftId },
+                )
+            }
+        }
     }
 }
 

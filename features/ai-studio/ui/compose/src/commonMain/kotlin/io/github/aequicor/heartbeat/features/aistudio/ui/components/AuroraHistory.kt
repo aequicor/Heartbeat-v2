@@ -54,7 +54,6 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
@@ -335,18 +334,25 @@ internal fun AuroraUserBubble(
         Modifier.background(AuroraColors.User, RoundedCornerShape(AuroraLayout.MessageRadius))
     }
     val textPresent = user.text.isNotEmpty()
-    val inlineTime = textPresent && user.delivery == Delivery.Sent
+    val attachmentLayout = !touch && user.files.isNotEmpty()
+    val inlineTime = user.delivery == Delivery.Sent && (textPresent || user.files.isNotEmpty())
     val width = if (!touch && user.files.isEmpty()) AuroraLayout.DesktopMessageBubble else AuroraLayout.UserBubble
-    val horizontalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset
+    val horizontalInset = when {
+        touch -> AuroraLayout.ContentInset
+        attachmentLayout -> AuroraLayout.MessageAttachmentInset
+        else -> AuroraLayout.DesktopMessageHorizontalInset
+    }
     val desktopDeliveryError = !touch && user.delivery == Delivery.Failed
     val top = when {
         touch -> AuroraLayout.Space
         desktopDeliveryError -> AuroraLayout.DesktopCompactMessageTopInset
+        attachmentLayout -> AuroraLayout.MessageAttachmentInset
         else -> AuroraLayout.DesktopMessageVerticalInset
     }
     val bottom = when {
         touch -> null
         desktopDeliveryError -> AuroraLayout.DesktopCompactMessageBottomInset
+        attachmentLayout -> AuroraLayout.MessageAttachmentInset
         else -> AuroraLayout.DesktopMessageVerticalInset
     }
     AuroraMessageTimestamp(
@@ -359,18 +365,30 @@ internal fun AuroraUserBubble(
         bottomPadding = bottom,
         status = { AuroraDeliveryStatus(user, touch) },
     ) { onTextLayout ->
-        Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
-            user.files.forEach { file ->
-                AuroraControl(
-                    { onAction(AiStudioAction.OpenFile(file.openId)) }, touch = touch,
-                    background = Color.Transparent, round = false,
-                ) {
-                    AuroraFileLabel(file, Modifier.padding(vertical = AuroraLayout.SmallGap))
+        val gap = if (attachmentLayout) AuroraLayout.MessageAttachmentGap else AuroraLayout.SmallGap
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            user.files.forEachIndexed { index, file ->
+                val open = { onAction(AiStudioAction.OpenFile(file.openId)) }
+                val measureTimestampTail = inlineTime && !textPresent && index == user.files.lastIndex
+                if (attachmentLayout) {
+                    AuroraMessageAttachment(file, onAction, open, measureTimestampTail = measureTimestampTail)
+                } else {
+                    val issue = messageAttachmentSourceIssue(file)
+                    if (issue?.blocksPreview(file) == true) {
+                        AuroraUnavailableFileRow(file.name, issue)
+                    } else {
+                        AuroraControl(
+                            open, modifier = if (measureTimestampTail) Modifier.attachmentTimestampTail() else Modifier,
+                            touch = touch, background = Color.Transparent, round = false,
+                        ) {
+                            AuroraFileLabel(file, Modifier.padding(vertical = AuroraLayout.SmallGap))
+                        }
+                    }
                 }
             }
             if (textPresent) SelectionContainer(state = selection) {
                 AuroraTimestampParagraph(
-                    remember(user.text) { AnnotatedString(user.text) },
+                    remember(user.text) { PromptLinkTransformation(user.text).rendered },
                     Modifier,
                     auroraMessageStyle(),
                     onTextLayout,

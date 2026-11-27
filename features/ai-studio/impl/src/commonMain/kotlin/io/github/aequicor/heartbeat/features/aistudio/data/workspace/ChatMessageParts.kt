@@ -1,7 +1,9 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.syncPart
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.writeAttachmentSnapshot
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.AgentArtifactPart
+import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Delivery
@@ -14,7 +16,6 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.json.Json
 import kotlin.io.encoding.Base64
-import kotlin.uuid.Uuid
 
 internal fun Message.header(): String = Json.encodeToString<Message>(
     when (this) {
@@ -42,14 +43,14 @@ internal fun ChatQueries.writeParts(revision: Long, message: Message) {
     var position = 0L
     fun part(
         kind: String, body: String? = null, parent: Long? = null, title: String? = null,
-        status: String? = null, toolId: String? = null, attachment: String? = null, metadata: String? = null,
+        status: String? = null, toolId: String? = null, snapshot: String? = null, metadata: String? = null,
     ): Long = syncPart(
         remaining,
-        Message_part(0, revision, parent, position++, kind, title, status, body, toolId, attachment, metadata),
+        Message_part(0, revision, parent, position++, kind, title, status, body, toolId, metadata, snapshot),
     )
 
     fun filePart(file: File, metadata: String? = null, parent: Long? = null) =
-        part("attachment", title = file.name, attachment = storeAttachment(file), metadata = metadata, parent = parent)
+        part("attachment", title = file.name, snapshot = storeAttachment(file), metadata = metadata, parent = parent)
 
     when (message) {
         is User -> {
@@ -85,21 +86,21 @@ internal fun ChatQueries.writeParts(revision: Long, message: Message) {
 
 private fun WorkEvent.partKind(): String = if (kind == WorkEventKind.Thinking) "reasoning" else "tool_call"
 
-// Share an attachment only when both its metadata and content match the earlier version.
 private fun ChatQueries.storeAttachment(file: File): String {
     if (file.storedAttachmentId != null) return file.storedAttachmentId
-    val metadata = Json.encodeToString(file.copy(content = ""))
-    return findInlineAttachment(metadata, file.content).executeAsOneOrNull() ?: insertFile(file, metadata)
-}
-
-private fun ChatQueries.insertFile(file: File, metadata: String): String {
-    val id = Uuid.random().toString()
+    val binary = file.base64Encoded || file.image != null
     val mime = file.mimeType ?: file.image?.mimeType ?: if (file.isMarkdown) "text/markdown" else "text/plain"
-    val size = file.storedSizeBytes ?: if (file.base64Encoded || file.image != null) Base64.decode(file.content).size.toLong()
+    val size = file.storedSizeBytes ?: if (binary) Base64.decode(file.content).size.toLong()
     else file.content.encodeToByteArray().size.toLong()
-    insertInlineAttachment(
-        id, file.name, mime, size,
-        "sqlite:attachment/$id", metadata, file.content,
+    return writeAttachmentSnapshot(
+        ChatTurnMessageRecord.Attachment(
+            null, file.name, mime, file.content, file.storedAttachmentHeader(), size,
+            originalUri = file.originalUri,
+            managedPath = file.managedCopyPath,
+            base64Encoded = binary,
+            description = file.description,
+            linkUri = file.originalUri?.takeIf { file.deferredReading && file.managedCopyPath == null },
+        ),
+        prepared = null,
     )
-    return id
 }

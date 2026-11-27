@@ -4,7 +4,6 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -13,29 +12,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +41,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Draft
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.PromptReferences
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SessionBootstrapState
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_error
@@ -86,7 +75,6 @@ internal fun AuroraLowerControls(
             }
         }
     }
-    val currentField = if (field.text == text) field else TextFieldValue(text, TextRange(text.length))
     val submitting = chatId in state.submittingDrafts
     val editing by rememberUpdatedState(state.request == null)
     val measuredPanel = Modifier.onSizeChanged { onPanelHeight(it.height) }
@@ -105,7 +93,7 @@ internal fun AuroraLowerControls(
             )
         } else {
             AuroraComposer(
-                field = currentField,
+                field = field,
                 submitting = submitting,
                 onEdit = {
                     val current = draft.value
@@ -116,16 +104,21 @@ internal fun AuroraLowerControls(
                     }
                 },
                 activity = state.activity,
-                sendBlocked = state.isPromptBlockedBySecurityMode(chat),
+                sendBlocked = state.isPromptBlockedBySecurityMode(chat) || chatId in state.pendingAttachments,
                 files = state.attachments,
                 touch = touch,
                 attachmentDraftId = chatId.takeIf { state.allowsFileImport && !submitting },
                 importingAttachment = chatId in state.importingAttachmentsFor,
                 attachmentError = state.attachmentErrorFor == chatId,
+                attachmentErrorMessage = state.attachmentErrorMessage,
+                referenceDraftId = chatId,
+                referenceProjectId = chat.projectId,
+                references = state.promptReferences,
                 attach = {
                     if (state.allowsFileImport) {
                         AuroraAttachmentPickerButton(
-                            chatId, chatId in state.importingAttachmentsFor, touch, onAction, enabled = !submitting,
+                            chatId, chatId in state.importingAttachmentsFor, touch, onAction,
+                            enabled = !submitting && chatId !in state.pendingAttachments,
                         )
                     } else {
                         AuroraAttachMenu(state.fileChoices, state.attachments, touch, onAction)
@@ -186,16 +179,21 @@ internal fun AuroraBootstrapComposer(
                     onAction(action)
                 }
             },
-            sendBlocked = bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null ||
+            sendBlocked = bootstrap.id in state.pendingAttachments ||
+                bootstrap.operation != null || bootstrap.picker.confirmed == null || bootstrap.picker.step != null ||
                 bootstrap.picker.securityModeBusy || bootstrap.picker.securityModeError != null || bootstrap.picker.securityMode?.requiresUserChoice == true,
             attachmentDraftId = bootstrap.id.takeIf { state.allowsFileImport && bootstrap.operation == null },
             importingAttachment = bootstrap.id in state.importingAttachmentsFor,
             attachmentError = state.attachmentErrorFor == bootstrap.id,
+            attachmentErrorMessage = state.attachmentErrorMessage,
+            referenceDraftId = bootstrap.id,
+            referenceProjectId = (bootstrap.project as? SessionBootstrapState.Project.Existing)?.id,
+            references = state.promptReferences,
             attach = {
                 if (state.allowsFileImport) {
                     AuroraAttachmentPickerButton(
                         bootstrap.id, bootstrap.id in state.importingAttachmentsFor, touch, onAction,
-                        enabled = bootstrap.operation == null,
+                        enabled = bootstrap.operation == null && bootstrap.id !in state.pendingAttachments,
                     )
                 }
             },
@@ -218,20 +216,29 @@ private fun AuroraComposer(
     attachmentDraftId: String?,
     importingAttachment: Boolean = false,
     attachmentError: Boolean = false,
+    attachmentErrorMessage: String? = null,
+    referenceDraftId: String,
+    referenceProjectId: String?,
+    references: PromptReferences?,
     attach: @Composable () -> Unit,
 ) {
     val working = activity != Activity.Idle
     val stopping = activity == Activity.Stopping
-    val sendEnabled = !submitting && !sendBlocked && !importingAttachment && (field.text.isNotBlank() || files.isNotEmpty())
+    val invalidImageName = files.any { it.hasInvalidImageExtension() }
+    val sendEnabled = !submitting && !sendBlocked && !importingAttachment && !invalidImageName &&
+        (field.text.isNotBlank() || files.isNotEmpty())
     val visibleField = if (submitting) TextFieldValue() else field
     val onSend = { onAction(AiStudioAction.Send) }
     val attachmentInput = rememberAttachmentInput(attachmentDraftId, importingAttachment, onAction)
+    var editedAttachmentId by remember(referenceDraftId) { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
+    var keepOutlineHidden by remember { mutableStateOf(false) }
+    val showFocusOutline = !touch && focused && !keepOutlineHidden && HbFocusIndication.keyboardNavigation
     val surface = if (touch) {
         Modifier.background(AuroraColors.Pearl, RoundedCornerShape(AuroraLayout.ComposerRadius))
             .padding(horizontal = AuroraLayout.ControlGap, vertical = AuroraLayout.SmallGap)
     } else {
-        Modifier.auroraComposerSurface(focused && HbFocusIndication.keyboardNavigation)
+        Modifier.auroraComposerSurface(showFocusOutline)
             .padding(AuroraLayout.ControlGap)
     }
 
@@ -239,8 +246,12 @@ private fun AuroraComposer(
         modifier.fillMaxWidth().then(attachmentInput.dropModifier).then(surface),
         verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
     ) {
-        if (!submitting && files.isNotEmpty()) AuroraDraftAttachments(files, touch, onAction)
-        if (attachmentError) AuroraHeaderStorageError(stringResource(Res.string.chat_attachment_error))
+        if (!submitting && files.isNotEmpty()) {
+            AuroraDraftAttachments(files, touch, { editedAttachmentId = it.id }, onAction)
+        }
+        if (attachmentError) AuroraHeaderStorageError(
+            attachmentErrorMessage ?: stringResource(Res.string.chat_attachment_error),
+        )
         AuroraComposerActivity(activity)
         Row(
             Modifier.fillMaxWidth()
@@ -252,13 +263,36 @@ private fun AuroraComposer(
             AuroraComposerField(
                 visibleField, onEdit, onSend, touch, sendEnabled && !working, maxTextHeight,
                 modifier = Modifier.weight(1f)
-                    .onFocusChanged { focused = it.isFocused }
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        if (!focused) keepOutlineHidden = false
+                    }
                     .then(attachmentInput.pasteModifier),
                 readOnly = submitting,
+                focused = focused,
+                referenceDraftId = referenceDraftId,
+                referenceProjectId = referenceProjectId,
+                references = references,
+                onAction = onAction,
+                onNavigateReferences = {
+                    // An arrow handled by the popup keeps the editor's current focus appearance.
+                    if (!touch && !showFocusOutline) keepOutlineHidden = true
+                },
             )
             AuroraSendControl(working, if (working) !stopping else sendEnabled, touch) {
                 if (working) onAction(AiStudioAction.CancelTurn) else onSend()
             }
+        }
+    }
+    if (!submitting) files.firstOrNull { it.id == editedAttachmentId }?.let { file ->
+        key(referenceDraftId, file.id) {
+            AuroraDraftAttachmentEditor(
+                file, onDismiss = { editedAttachmentId = null },
+                onSave = { name, description, deferred, edit ->
+                    onAction(AiStudioAction.UpdateDraftAttachment(referenceDraftId, file.id, name, description, deferred, edit))
+                    editedAttachmentId = null
+                },
+            )
         }
     }
 }
@@ -271,53 +305,5 @@ private fun AuroraComposerActivity(activity: Activity) {
         Modifier.padding(start = AuroraLayout.ContentInset, top = AuroraLayout.SmallGap)
             .semantics { liveRegion = LiveRegionMode.Polite },
         small = true, color = AuroraColors.Muted,
-    )
-}
-
-@Composable
-private fun AuroraComposerField(
-    field: TextFieldValue,
-    onEdit: (TextFieldValue) -> Unit,
-    onSend: () -> Unit,
-    touch: Boolean,
-    canSend: Boolean,
-    maxTextHeight: Dp,
-    modifier: Modifier = Modifier,
-    readOnly: Boolean = false,
-) {
-    val style = auroraMessageStyle()
-    val focusManager = LocalFocusManager.current
-    BasicTextField(
-        value = field,
-        onValueChange = onEdit,
-        readOnly = readOnly,
-        modifier = modifier.heightIn(max = if (touch) AuroraLayout.ComposerMaxText else maxTextHeight)
-            .padding(vertical = if (touch) AuroraLayout.ControlGap else AuroraLayout.ControlGap - AuroraLayout.Stroke)
-            .semantics { contentDescription = "Сообщение" }
-            .onPreviewKeyEvent { event ->
-                if (touch || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (event.key == Key.Tab) {
-                    // The multiline editor otherwise treats Tab as text input.
-                    focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)
-                    return@onPreviewKeyEvent true
-                }
-                val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
-                val handled = enter && !event.isShiftPressed && field.composition == null
-                if (handled && canSend) onSend()
-                handled
-            },
-        textStyle = style,
-        cursorBrush = SolidColor(AuroraColors.Primary),
-        decorationBox = { content ->
-            Box {
-                if (field.text.isEmpty()) {
-                    BasicText(
-                        if (touch) "Сообщение…" else "Сообщение",
-                        style = style.copy(color = if (touch) AuroraColors.MessageMuted else AuroraColors.ComposerPlaceholder),
-                    )
-                }
-                content()
-            }
-        },
     )
 }

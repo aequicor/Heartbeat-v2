@@ -60,11 +60,42 @@ public sealed interface AiStudioAction {
     public data class SetEffort(val effort: String) : AiStudioAction
     public data class Attach(val fileId: String) : AiStudioAction
     public data class ImportAttachment(val draftId: String, val reference: String) : AiStudioAction
-    public data class ImportAttachments(val draftId: String, val source: AttachmentImportSource) : AiStudioAction
+    public data class ImportAttachments(
+        val draftId: String,
+        val source: AttachmentImportSource,
+        val origin: Origin = Origin.File,
+    ) : AiStudioAction {
+
+        public enum class Origin { File, ClipboardFile, ClipboardImage }
+    }
     public data class AttachmentPickerFailed(val draftId: String) : AiStudioAction
+    public data class ConfirmAttachment(
+        val draftId: String,
+        val fileId: String,
+        val name: String,
+        val description: String?,
+        val deferredReading: Boolean,
+        val editedImage: AttachmentImportSource? = null,
+    ) : AiStudioAction
+
+    public data class CancelAttachment(val draftId: String, val fileId: String) : AiStudioAction
+    public data class UpdateDraftAttachment(
+        val draftId: String,
+        val fileId: String,
+        val name: String,
+        val description: String?,
+        val deferredReading: Boolean,
+        val editedImage: AttachmentImportSource? = null,
+    ) : AiStudioAction
+    public data class SaveViewedImageCopy(
+        val sessionId: String,
+        val fileId: String,
+        val source: AttachmentImportSource,
+    ) : AiStudioAction
+
     public data class Detach(val fileId: String) : AiStudioAction
     public data class EditMessage(val id: String) : AiStudioAction
-    public data class Retry(val id: String) : AiStudioAction
+    public data class Retry(val id: String, val expectedFailedRevisionId: Long? = null) : AiStudioAction
     public data class InteractWithRequest(val requestId: String) : AiStudioAction
     public data class Choose(val requestId: String, val questionId: String, val option: String) : AiStudioAction
     public data class EditAnswer(val requestId: String, val questionId: String, val text: String) : AiStudioAction
@@ -74,9 +105,14 @@ public sealed interface AiStudioAction {
     public data class DeclineQuestionnaire(val requestId: String) : AiStudioAction
     public data class AnswerPermission(val requestId: String, val allow: Boolean, val chatId: String? = null) : AiStudioAction
     public data class OpenFile(val id: String) : AiStudioAction
+    public data class SearchPromptReferences(val draftId: String, val projectId: String?, val query: String?) : AiStudioAction
+    public data class RemoveUnavailableFile(val sessionId: String, val id: String) : AiStudioAction
     public data class OpenResult(val id: String) : AiStudioAction
     public data class OpenArtifact(val replyId: String, val fileId: String) : AiStudioAction
+    public data class CopyFile(val id: String) : AiStudioAction
+    public data class SaveFile(val id: String) : AiStudioAction
     public data class SaveArtifact(val replyId: String, val fileId: String) : AiStudioAction
+    public data class FileCopyFinished(val failed: Boolean) : AiStudioAction
     public data class ArtifactSaveFinished(val failed: Boolean) : AiStudioAction
     public data class ToggleWork(val id: String) : AiStudioAction
     public data class ToggleStep(val replyId: String, val stepId: String) : AiStudioAction

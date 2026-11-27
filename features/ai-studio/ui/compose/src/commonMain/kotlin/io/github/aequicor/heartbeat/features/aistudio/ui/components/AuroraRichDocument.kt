@@ -60,7 +60,7 @@ internal fun AuroraRichDocument(
     if (plain != null) {
         val body = archiveReveal?.let { reveal -> Modifier.onPlaced { reveal.markPlaced() } } ?: Modifier
         SelectionContainer(state = selection, modifier = modifier) {
-            AuroraReplyText(plain, body, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+            AuroraTimestampParagraph(remember(plain) { AnnotatedString(plain) }, body, auroraMessageStyle(), onTextLayout)
         }
         return
     }

@@ -10,8 +10,36 @@ public sealed interface SessionEvent {
     ) : SessionEvent
 
     public sealed interface PromptFile {
+
         public data class Text(val content: String) : PromptFile
+
         public data class Image(val mimeType: String, val base64: String) : PromptFile
+
+        public data class Resource(
+            val uri: String,
+            val name: String,
+            val content: Content,
+            val mimeType: String? = null,
+            val description: String? = null,
+        ) : PromptFile {
+
+            public sealed interface Content {
+
+                public data class Text(val value: String) : Content
+
+                public data class Binary(val base64: String) : Content
+            }
+        }
+
+        /** The URI resolves in the agent's environment. */
+        public data class ResourceLink(
+            val uri: String,
+            val name: String,
+            val title: String = name,
+            val mimeType: String? = null,
+            val sizeBytes: Long? = null,
+            val description: String? = null,
+        ) : PromptFile
     }
     public data object Cancel : SessionEvent
     public data class AnswerPermission(val requestId: String, val optionId: String) : SessionEvent

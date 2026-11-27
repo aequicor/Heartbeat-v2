@@ -9,6 +9,9 @@ import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatDraftOwnership
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.accessStudioDatabase
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.readFileCatalog
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.toDomain
+import io.github.aequicor.heartbeat.features.aistudio.db.ChatDraftQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.SelectWorkspaceSessions
 import io.github.aequicor.heartbeat.features.aistudio.db.StudioProjectQueries
@@ -21,6 +24,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.SecurityMode
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ContextUsage
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraChat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.StudioWorkspaceMetadata
@@ -39,6 +43,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ChatEnginePickerState.Selection
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import okio.ByteString.Companion.encodeUtf8
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.uuid.Uuid
@@ -50,12 +55,22 @@ internal class StudioWorkspacePersistence(
     @Named("io") private val ioDispatcher: CoroutineDispatcher,
     @Named("studio-chat-writes") private val writeLock: Mutex,
     private val draftOwnership: ChatDraftOwnership,
+    private val attachmentMigration: AiStudioAttachmentMigration,
 ) : StudioWorkspaceMetadata {
 
     private val restoreLock = Mutex()
     private var recoveredWork = false
 
     private val queries get() = StudioWorkspaceQueries(connection.driver)
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun listFiles(sessionId: String): List<File> = withContext(ioDispatcher) {
+        workspaceOperation("Read session file catalog") {
+            ChatQueries(connection.driver).readFileCatalog(sessionId).map { record ->
+                record.toDomain().display().copy(catalogUri = record.uri)
+            }
+        }
+    }
 
     override fun observeSecurityMode(sessionId: String): Flow<SecurityMode?> = flow {
         val query = withContext(ioDispatcher) { ChatQueries(connection.driver).chatSecurityMode(sessionId) }
@@ -108,20 +123,22 @@ internal class StudioWorkspacePersistence(
             workspaceOperation("Save studio workspace") {
                 val workspaceQueries = queries
                 val history = ChatQueries(connection.driver)
+                val drafts = ChatDraftQueries(connection.driver)
                 val writer by lazy(LazyThreadSafetyMode.NONE) { draftOwnership.claim()?.toString() }
                 workspaceQueries.transaction {
+                    // Take the SQLite write lock before reading draft revisions from another window.
+                    workspaceQueries.upsertWorkspaceMetadata(metadata)
                     for (chat in workspace.chats.filter(AuroraChat::payloadLoaded)) {
                         val id = chat.summary.id
                         val workState = chat.summary.workState
                         val previousState = previousWorkStates[id] ?: SessionWorkState.Idle
                         val writerOwner = if (workState.isActive || previousState.isActive) writer else null
                         val saved = workspaceQueries.updateWorkspaceSession(
-                            payload = Json.encodeToString(chat.copy(messages = listOf(), interrupted = null)),
-                            summary = Json.encodeToString(chat.summary),
-                            id = id,
-                            writer_owner = writerOwner,
+                            Json.encodeToString(chat.withoutDraft().copy(messages = emptyList(), interrupted = null)),
+                            Json.encodeToString(chat.summary), id, writerOwner,
                         ).value
                         if (saved == 0L) continue
+                        drafts.saveDraft(history, chat, previousChats[id])
                         if (!chat.persistedThroughDomain) {
                             val chatId = history.chatForSession(id).executeAsOneOrNull()
                             if (chatId != null) history.saveHistory(chatId, chat, previousChats[id])
@@ -135,7 +152,6 @@ internal class StudioWorkspacePersistence(
                             )
                         }
                     }
-                    workspaceQueries.upsertWorkspaceMetadata(metadata)
                 }
             }
         }
@@ -175,17 +191,14 @@ internal class StudioWorkspacePersistence(
             )
         }
         val summary = measured.copy(configuration = configuration, navigationStatus = navigationStatus)
-        if (saved.messages.isNotEmpty() || saved.interrupted != null) {
-            val metadata = saved.copy(messages = listOf(), interrupted = null)
-            val migrated = workspaceQueries.updateWorkspaceSession(
-                Json.encodeToString(metadata), Json.encodeToString(summary), sessionId, writer_owner = null,
-            ).value
-            if (migrated == 1L) {
-                val history = ChatQueries(connection.driver)
-                history.saveHistory(history.chatForSession(sessionId).executeAsOne(), saved, previous = null)
-            }
-        }
-        return saved.copy(summary = summary, messages = emptyList(), interrupted = null, payloadLoaded = true)
+        val drafts = ChatDraftQueries(connection.driver)
+        val draft = drafts.selectDraft(sessionId).executeAsOneOrNull()
+        return saved.copy(
+            summary = summary, messages = emptyList(), interrupted = null, payloadLoaded = true,
+            draft = draft?.body.orEmpty(),
+            attachments = if (draft == null) emptyList() else drafts.readDraftFiles(sessionId),
+            draftRevision = draft?.revision, loadedDraftRevision = draft?.revision,
+        )
     }
 
     private fun read(resetInterruptedWork: Boolean = false): AuroraWorkspace? =
@@ -208,7 +221,7 @@ internal class StudioWorkspacePersistence(
 
     private fun import(workspace: AuroraWorkspace) {
         val projectId = ProjectId.Ungrouped.value.toString()
-        val sessionIds = workspace.chats.associate { it.summary.id to Uuid.random().toString() }
+        val sessionIds = workspace.chats.associate { it.summary.id to legacyWorkspaceSessionId(it.summary.id) }
         val expandAllRoots = workspace.chats.any { it.summary.project in workspace.expandedProjects }
         val metadata = AuroraWorkspace(
             selectedId = sessionIds[workspace.selectedId].orEmpty(),
@@ -218,8 +231,10 @@ internal class StudioWorkspacePersistence(
         )
         accessStudioDatabase("Import studio workspace") {
             val workspaceQueries = queries
+            val drafts = ChatDraftQueries(connection.driver)
+            val history = ChatQueries(connection.driver)
             workspaceQueries.transaction {
-                if (workspaceQueries.selectWorkspaceMetadata().executeAsOneOrNull() != null) return@transaction
+                if (workspaceQueries.initializeWorkspaceMetadata(Json.encodeToString(metadata)).value == 0L) return@transaction
                 if (workspace.chats.any { it.summary.project == Chat.UngroupedProjectKey }) {
                     val expanded = "project:${Chat.UngroupedProjectKey}" !in workspace.collapsedNavigation
                     StudioProjectQueries(connection.driver).updateProjectExpanded(if (expanded) 1L else 0L, projectId)
@@ -236,6 +251,7 @@ internal class StudioWorkspacePersistence(
                     else SessionStatus.ACTIVE
                     val workState = summary.workState.takeIf { it == SessionWorkState.Waiting }
                         ?: SessionWorkState.Idle
+                    val imported = chat.copy(summary = summary, mockId = old.id).recover()
                     workspaceQueries.importWorkspaceSession(
                         id = summary.id,
                         project_id = projectId,
@@ -244,12 +260,21 @@ internal class StudioWorkspacePersistence(
                         updated_at = -index.toLong(),
                         parent_id = summary.parentId,
                         expanded = if (old.id in workspace.collapsedNavigation) 0L else 1L,
-                        payload = Json.encodeToString(chat.copy(summary = summary, mockId = old.id)),
+                        payload = Json.encodeToString(imported.withoutDraft().copy(messages = emptyList(), interrupted = null)),
                         summary = Json.encodeToString(summary),
                         work_state = workState.name,
                     )
+                    if (chat.draft.isNotEmpty() || chat.attachments.isNotEmpty()) {
+                        drafts.replaceDraft(
+                            history, summary.id, Uuid.random().toString(), chat.draft,
+                            attachmentMigration.copyLegacyDraftFiles(projectId, summary.id, chat.attachments),
+                        )
+                    }
+                    if (imported.messages.isNotEmpty()) {
+                        val archived = attachmentMigration.archiveLegacyHistory(projectId, summary.id, imported)
+                        history.saveHistory(history.chatForSession(summary.id).executeAsOne(), archived, previous = null)
+                    }
                 }
-                workspaceQueries.upsertWorkspaceMetadata(Json.encodeToString(metadata))
             }
         }
     }
@@ -288,6 +313,28 @@ private fun String.asChoice(previous: Choice?): Choice = previous?.takeIf { it.i
 
 private fun contextUsage(used: Long?, size: Long?): ContextUsage? =
     if (used != null && used >= 0 && size != null && size > 0) ContextUsage(used, size) else null
+
+private fun ChatDraftQueries.saveDraft(history: ChatQueries, chat: AuroraChat, previous: AuroraChat?) {
+    val revision = chat.draftRevision ?: return
+    val id = chat.summary.id
+    val previousRevision = if (previous?.payloadLoaded == true) previous.draftRevision else chat.loadedDraftRevision
+    // Rewriting metadata must not resurrect a submitted draft from a stale window.
+    if (revision == previousRevision) return
+    val storedRevision = selectDraft(id).executeAsOneOrNull()?.revision
+    if (revision == storedRevision) return
+    check(storedRevision == previousRevision) { "Черновик изменился в другом окне" }
+    replaceDraft(history, id, revision, chat.draft, chat.attachments)
+}
+
+private fun AuroraChat.withoutDraft() = copy(draft = "", attachments = emptyList())
+
+private fun legacyWorkspaceSessionId(id: String): String {
+    // Keep the target directory stable if an import stops after writing its files.
+    val bytes = "workspace_v1:$id".encodeUtf8().sha256().substring(0, 16).toByteArray()
+    bytes[6] = ((bytes[6].toInt() and 0x0F) or 0x80).toByte()
+    bytes[8] = ((bytes[8].toInt() and 0x3F) or 0x80).toByte()
+    return Uuid.fromByteArray(bytes).toString()
+}
 
 @Suppress("TooGenericExceptionCaught") // Driver and legacy serializer exceptions cross the same storage boundary.
 private inline fun <T> workspaceOperation(operation: String, block: () -> T): T = try {

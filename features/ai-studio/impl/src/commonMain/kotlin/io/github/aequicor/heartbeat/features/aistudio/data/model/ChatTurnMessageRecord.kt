@@ -6,6 +6,7 @@ internal data class ChatTurnMessageRecord(
     val status: String,
     val header: String,
     val parts: List<Part>,
+    val expectedRevisionId: Long? = null,
 ) {
 
     data class Part(
@@ -17,6 +18,7 @@ internal data class ChatTurnMessageRecord(
         val toolId: String? = null,
         val header: String? = null,
         val attachment: Attachment? = null,
+        val snapshot: SentAttachmentRecord? = null,
     )
 
     data class Attachment(
@@ -26,5 +28,10 @@ internal data class ChatTurnMessageRecord(
         val content: String,
         val header: String,
         val size: Long,
+        val originalUri: String? = null,
+        val managedPath: String? = null,
+        val base64Encoded: Boolean = false,
+        val description: String? = null,
+        val linkUri: String? = null,
     )
 }

@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ContextUsage
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import kotlinx.coroutines.flow.Flow
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
@@ -25,4 +26,7 @@ internal interface StudioWorkspaceMetadata {
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun loadMetadata(chat: AuroraChat): AuroraChat
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun listFiles(sessionId: String): List<File>
 }

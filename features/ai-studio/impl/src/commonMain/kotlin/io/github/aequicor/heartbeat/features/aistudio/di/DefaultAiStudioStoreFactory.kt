@@ -7,10 +7,13 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ProjectsSessionsInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ObserveProjectsSessionsUseCase
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.DefaultAiStudioStore
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.DraftAttachmentImageLoader
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStore
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AttachmentReferenceResolver
 import dev.zacsweers.metro.Named
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +27,9 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
     @Named("studio-default") private val defaultDispatcher: CoroutineDispatcher,
     private val chatTurn: ChatTurnInteractor,
     private val importAttachment: ImportChatAttachmentUseCase,
+    private val findPromptReferences: FindPromptReferencesUseCase,
+    private val attachmentReferences: AttachmentReferenceResolver,
+    private val imageLoader: DraftAttachmentImageLoader,
 ) : AiStudioStoreFactory {
 
     override fun create(scope: CoroutineScope): AiStudioStore =
@@ -37,5 +43,8 @@ internal class DefaultAiStudioStoreFactory @Inject constructor(
             defaultDispatcher,
             chatTurn,
             importAttachment,
+            findPromptReferences,
+            attachmentReferences,
+            imageLoader,
         )
 }

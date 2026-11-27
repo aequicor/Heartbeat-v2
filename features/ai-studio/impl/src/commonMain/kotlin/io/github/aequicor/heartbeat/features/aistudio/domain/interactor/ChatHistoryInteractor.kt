@@ -17,6 +17,9 @@ internal interface ChatHistoryInteractor {
     suspend fun file(id: String): Result<ChatAttachment>
 
     @Throwable(CancellationException::class)
+    suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String): Result<Unit>
+
+    @Throwable(CancellationException::class)
     suspend fun partBody(id: Long): Result<String>
 
     @Throwable(CancellationException::class)

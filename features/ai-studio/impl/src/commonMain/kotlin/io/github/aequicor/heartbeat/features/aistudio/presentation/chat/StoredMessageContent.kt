@@ -8,8 +8,14 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.StepStatus
 
-internal suspend fun File.withContent(storage: StudioWorkspaceStorage?): File =
-    if (storedAttachmentId != null && storage != null) copy(content = storage.openFile(storedAttachmentId).content) else this
+internal suspend fun File.withContent(storage: StudioWorkspaceStorage?): File {
+    if (storedAttachmentId == null || storage == null) return this
+    val opened = storage.openFile(storedAttachmentId)
+    return copy(
+        content = opened.content, mimeType = opened.mimeType ?: mimeType,
+        base64Encoded = opened.base64Encoded, image = opened.image,
+    )
+}
 
 private suspend fun Reply.withEventBodies(
     storage: StudioWorkspaceStorage,

@@ -19,5 +19,16 @@ internal interface ChatConversationDataSource {
     suspend fun save(sessionId: String, messages: List<ChatHistoryEntry.Message>)
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
-    suspend fun reserveRetry(sessionId: String, messageId: String): ChatHistoryEntry.User?
+    suspend fun commitUserPrompt(
+        sessionId: String,
+        message: ChatHistoryEntry.User,
+        expectedDraftRevision: String,
+    ): ChatHistoryEntry.User?
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun reserveRetry(
+        sessionId: String,
+        messageId: String,
+        expectedFailedRevisionId: Long,
+    ): ChatHistoryEntry.User?
 }

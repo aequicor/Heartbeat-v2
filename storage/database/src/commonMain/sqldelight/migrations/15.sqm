@@ -1,0 +1,25 @@
+INSERT INTO attachment_migration_pending(version) VALUES (15);
+
+CREATE TRIGGER keep_message_part_snapshot_insert BEFORE INSERT ON message_part
+WHEN new.attachment_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Attachment parts require a snapshot');
+END;
+
+CREATE TRIGGER keep_message_part_snapshot_update BEFORE UPDATE OF attachment_id, sent_attachment_id ON message_part
+WHEN new.attachment_id IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Attachment parts require a snapshot');
+END;
+
+CREATE TRIGGER keep_attachment_metadata_insert BEFORE INSERT ON attachment
+WHEN new.inline_text IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Attachment content belongs in its snapshot');
+END;
+
+CREATE TRIGGER keep_attachment_metadata_update BEFORE UPDATE OF inline_text ON attachment
+WHEN new.inline_text IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'Attachment content belongs in its snapshot');
+END;

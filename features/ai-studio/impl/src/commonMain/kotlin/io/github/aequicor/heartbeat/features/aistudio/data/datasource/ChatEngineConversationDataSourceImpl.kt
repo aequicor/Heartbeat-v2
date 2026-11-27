@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
+import io.github.aequicor.heartbeat.features.aiengine.api.AiEngineConnection
 import io.github.aequicor.heartbeat.features.aiengine.api.session.PendingPermission
 import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aiengine.api.session.Session
@@ -16,22 +17,22 @@ import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineOptions
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
-import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPng
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SentMessageAttachment
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okio.Buffer
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.io.encoding.Base64
 import kotlin.uuid.Uuid
 
 internal class ChatEngineConversationDataSourceImpl(
@@ -47,11 +48,37 @@ internal class ChatEngineConversationDataSourceImpl(
 
     override val settings get() = session.state.value.settings.toDomain()
 
+    @Throwable(AttachmentTransferException::class, CancellationException::class)
+    override suspend fun resolveAttachmentUri(file: AttachmentFile, transferMode: AttachmentTransferMode): String {
+        val uri = try {
+            attachments.reference(file.location)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            throw AttachmentTransferException("Не удалось открыть «${file.name}»", failure)
+        }
+        when (transferMode) {
+            AttachmentTransferMode.Resource -> if (!session.supportsEmbeddedResources) {
+                throw AttachmentTransferException("Агент не поддерживает встроенные ресурсы")
+            }
+            AttachmentTransferMode.ResourceLink -> if (
+                session.key.engine.connection != AiEngineConnection.ACP || !uri.startsWith("file:", ignoreCase = true)
+            ) {
+                throw AttachmentTransferException("Агент не может открыть ссылку на «${file.name}»")
+            }
+        }
+        return uri
+    }
+
     @Throwable(Exception::class, CancellationException::class)
     override suspend fun select(id: String, value: String): ChatEngineOptions = session.selectSetting(id, value).toDomain()
 
     @Throwable(Exception::class, CancellationException::class)
-    override suspend fun send(text: String, files: List<ChatAttachment>, update: suspend (ChatEngineTurn) -> Unit) {
+    override suspend fun send(
+        text: String,
+        snapshots: List<SentMessageAttachment>,
+        update: suspend (ChatEngineTurn) -> Unit,
+    ) {
         val validated = try {
             validateSecurityMode()
         } catch (cancelled: CancellationException) {
@@ -69,11 +96,7 @@ internal class ChatEngineConversationDataSourceImpl(
                 throw ChatTurnException("Сессия движка недоступна", notDispatched = true)
             }
             val offset = state.messages.items.size
-            val promptFiles = files.map { file ->
-                val image = file.image
-                if (image != null) SessionEvent.PromptFile.Image(image.mimeType, file.content)
-                else SessionEvent.PromptFile.Text("${file.name}\n${file.content}")
-            }
+            val promptFiles = snapshots.map(::promptResource)
             session.dispatch(SessionEvent.SendPrompt(text, turnId, promptFiles = promptFiles, validatedSettings = validated))
             check(session.state.value.turn?.id == turnId) { "The engine did not accept this turn" }
             runningId = turnId
@@ -85,12 +108,15 @@ internal class ChatEngineConversationDataSourceImpl(
         }
         try {
             var accepted = false
-            val decoded = mutableMapOf<SessionContent.Artifact, ChatAttachment?>()
+            val decoded = mutableMapOf<Pair<SessionContent, String?>, ChatAttachment?>()
+            val attachedReferences = mutableSetOf<SessionContent.Resource>()
             val replyFiles = linkedMapOf<String, ChatAttachment>()
             val toolFiles = mutableMapOf<String, MutableMap<String, ChatAttachment>>()
-            suspend fun receive(artifact: SessionContent.Artifact): ChatAttachment? {
-                if (artifact !in decoded) decoded[artifact] = attachments.receive(artifact)
-                return decoded[artifact]
+            suspend fun receive(content: SessionContent, directory: String?): ChatAttachment? {
+                if (content is SessionContent.Text) return null
+                val key = content to directory
+                if (key !in decoded) decoded[key] = attachments.receiveAgentAttachment(content, directory)
+                return decoded[key]?.also { if (content is SessionContent.Resource) attachedReferences.add(content) }
             }
             session.state.first { state ->
                 val turn = state.turn?.takeIf { it.id == turnId }
@@ -103,26 +129,34 @@ internal class ChatEngineConversationDataSourceImpl(
                 for (item in items) {
                     when (item) {
                         is SessionTimelineItem.AgentMessage -> if (!item.reasoning) {
-                            for (artifact in item.content.filterIsInstance<SessionContent.Artifact>()) {
-                                val file = receive(artifact) ?: continue
-                                replyFiles.getOrPut(file.id) { file }
+                            for (content in item.content) {
+                                val file = receive(content, session.key.workingDirectory) ?: continue
+                                replyFiles.recordAttachment(file)
                             }
                         }
                         is SessionTimelineItem.ToolCall -> for (output in item.output) {
-                            val artifact = (output as? ToolOutput.Content)?.value as? SessionContent.Artifact ?: continue
-                            val file = receive(item.withReadSource(artifact)) ?: continue
-                            toolFiles.getOrPut(item.id) { linkedMapOf() }.getOrPut(file.id) { file }
+                            val content = item.attachmentContent(output) ?: continue
+                            val file = receive(content, item.workingDirectory ?: session.key.workingDirectory) ?: continue
+                            if (item.isGeneratedImage(file)) {
+                                replyFiles.recordAttachment(file)
+                            } else {
+                                toolFiles.getOrPut(item.id) { linkedMapOf() }.getOrPut(file.id) { file }
+                            }
                         }
                         is SessionTimelineItem.UserMessage, is SessionTimelineItem.ContextCompaction -> Unit
                     }
                 }
-                val progress = items.toChatTurn(status, permission, toolFiles.mapValues { it.value.values.toList() }).copy(
+                val progress = items.toChatTurn(
+                    status, permission, toolFiles.mapValues { it.value.values.toList() }, attachedReferences,
+                ).copy(
                     questionnaire = state.questionnaires.firstOrNull(),
                     accepted = accepted, artifacts = replyFiles.values.toList(),
                 )
                 val updateWithFailure = when (turn?.failure) {
                     SessionTurn.Failure.RateLimited -> progress.copy(failure = ChatHistoryEntry.ReplyFailure.RateLimited)
                     SessionTurn.Failure.ImageUnsupported -> progress.copy(rejection = ChatEngineTurn.Rejection.ImageUnsupported)
+                    SessionTurn.Failure.EmbeddedResourceUnsupported ->
+                        progress.copy(rejection = ChatEngineTurn.Rejection.EmbeddedResourceUnsupported)
                     null -> progress
                 }
                 update(updateWithFailure)
@@ -156,6 +190,19 @@ internal class ChatEngineConversationDataSourceImpl(
         session.dispatch(SessionEvent.AnswerQuestionnaire(requestId, answer))
 }
 
+private fun SessionTimelineItem.ToolCall.isGeneratedImage(file: ChatAttachment): Boolean =
+    status == ToolCallStatus.COMPLETED && title == "Image generation" &&
+        file.mimeType?.startsWith("image/") == true
+
+private fun MutableMap<String, ChatAttachment>.recordAttachment(file: ChatAttachment) {
+    val existing = getOrPut(file.id) { file }
+    if (existing.mimeType?.startsWith("image/", ignoreCase = true) == true &&
+        existing.name.isGeneratedImageStorageName() && !file.name.isGeneratedImageStorageName()
+    ) {
+        this[file.id] = existing.copy(name = file.name, source = existing.source?.copy(name = file.name))
+    }
+}
+
 private fun PendingPermission.toChatPermission(): ChatTurn.Permission {
     val paths = tool?.paths.orEmpty().ifEmpty { listOfNotNull(tool?.inputPath) }
     return ChatTurn.Permission(
@@ -176,6 +223,28 @@ private fun SessionTurn.Status.toDomain(): ChatEngineTurn.Status = when (this) {
     SessionTurn.Status.Rejected -> ChatEngineTurn.Status.Rejected
     SessionTurn.Status.SendFailed -> ChatEngineTurn.Status.SendFailed
     SessionTurn.Status.Failed -> ChatEngineTurn.Status.Failed
+}
+
+private fun promptResource(snapshot: SentMessageAttachment): SessionEvent.PromptFile = when (snapshot) {
+    is SentMessageAttachment.Resource -> SessionEvent.PromptFile.Resource(
+        uri = snapshot.uri,
+        name = snapshot.metadata.name,
+        content = when (val content = snapshot.content) {
+            is SentMessageAttachment.Resource.Content.Text -> SessionEvent.PromptFile.Resource.Content.Text(content.value)
+            is SentMessageAttachment.Resource.Content.Binary ->
+                SessionEvent.PromptFile.Resource.Content.Binary(content.base64)
+        },
+        mimeType = snapshot.metadata.mimeType,
+        description = snapshot.metadata.description,
+    )
+
+    is SentMessageAttachment.ResourceLink -> SessionEvent.PromptFile.ResourceLink(
+        uri = snapshot.uri,
+        name = snapshot.metadata.name,
+        mimeType = snapshot.metadata.mimeType,
+        sizeBytes = snapshot.metadata.sizeBytes,
+        description = snapshot.metadata.description,
+    )
 }
 
 private fun SessionContent.display(): String = when (this) {
@@ -201,97 +270,17 @@ internal fun ToolOutput.display(): String = when (this) {
     ).joinToString("\n")
 }
 
-private const val MaxArtifactBytes = 1_048_576
-
-private suspend fun ChatAttachmentDataSource.receive(artifact: SessionContent.Artifact): ChatAttachment? {
-    val payload = artifact.payload
-    val encoded = payload is SessionContent.Artifact.Payload.Base64
-    val declaredType = artifact.mimeType?.substringBefore(';')?.trim()?.lowercase()?.takeUnless { it.isBlank() }
-        ?: if (encoded) "application/octet-stream" else "text/plain"
-    val content: String
-    val bytes: ByteArray
-    when (payload) {
-        is SessionContent.Artifact.Payload.Text -> {
-            content = payload.text
-            if (content.length > MaxArtifactBytes) return null
-            bytes = content.encodeToByteArray()
-        }
-        is SessionContent.Artifact.Payload.Base64 -> {
-            content = payload.data
-            if (content.length > (MaxArtifactBytes + 2) / 3 * 4) return null
-            bytes = try {
-                Base64.decode(content)
-            } catch (_: IllegalArgumentException) {
-                return null
-            }
-        }
-    }
-    if (bytes.size > MaxArtifactBytes) return null
-    val format = ChatImage.identify(bytes).takeIf { encoded }
-    val mimeType = format?.mimeType ?: declaredType
-    val name = artifact.fileName(format)
-    val image = if (format != null) {
-        try {
-            if (format == ChatImage.Png) ChatPng.validate(bytes)
-            val thumbnail = imageThumbnail(bytes, format, ChatImage.ThumbnailSize)
-            thumbnail?.let { ChatAttachment.Image(mimeType, Base64.encode(it)) }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            null
-        }
-    } else null
-    val kind = when (name.substringAfterLast('.', "").lowercase()) {
-        "md", "markdown" -> "Markdown"
-        "diff", "patch" -> "Патч"
-        "" -> "Файл"
-        else -> name.substringAfterLast('.').uppercase()
-    }
-    // ACP content blocks have no attachment ID. The source and original bytes identify
-    // a replay even when the agent changes between text and Base64 resource blocks.
-    val source = artifact.fileReference() ?: name
-    val id = "artifact-" + Buffer().writeUtf8(source).writeByte(0).write(bytes).readByteString().sha256().hex()
-    return ChatAttachment(
-        id, name, kind, content, null, null, bytes.size.toLong(),
-        image = image, mimeType = mimeType, base64Encoded = encoded,
-    )
-}
-
-private fun SessionContent.Artifact.fileName(format: ChatImage? = null): String {
-    val name = fileReference()?.substringAfterLast('/')?.substringAfterLast('\\')
-        ?.filterNot { it.isISOControl() || it in "<>:\"|?*" }?.take(180)?.trim()?.trimEnd('.')
-    if (!name.isNullOrBlank() && name != "." && name != "..") return name
-    val type = mimeType?.substringBefore(';')?.lowercase()
-    val extension = (format ?: ChatImage.forMimeType(type))?.extension ?: when (type) {
-        "text/plain" -> "txt"
-        "text/markdown" -> "md"
-        "application/pdf" -> "pdf"
-        else -> "bin"
-    }
-    return "Вложение.$extension"
-}
-
-private fun SessionContent.Artifact.fileReference(): String? =
-    uri?.takeUnless { it.startsWith("data:", ignoreCase = true) }?.substringBefore('?')?.substringBefore('#')
-
-private fun SessionTimelineItem.ToolCall.withReadSource(artifact: SessionContent.Artifact): SessionContent.Artifact {
-    val path = inputPath ?: paths.singleOrNull()
-    return if (path != null && kind == ToolCallKind.READ && artifact.uri == null &&
-        artifact.mimeType?.startsWith("image/", ignoreCase = true) == true
-    ) artifact.copy(uri = path) else artifact
-}
-
 internal fun List<SessionTimelineItem>.toChatTurn(
     status: ChatEngineTurn.Status,
     permission: ChatTurn.Permission? = null,
     toolFiles: Map<String, List<ChatAttachment>> = emptyMap(),
+    attachedReferences: Set<SessionContent.Resource> = emptySet(),
 ): ChatEngineTurn {
     val steps = mutableListOf<ChatHistoryEntry.Step>()
     val events = mutableListOf<ChatHistoryEntry.Event>()
     val summaries = mutableListOf<String>()
     val preparation = mutableListOf<String>()
     val answer = StringBuilder()
-    val firstTool = indexOfFirst { it is SessionTimelineItem.ToolCall }
     val lastWork = indexOfLast { it is SessionTimelineItem.ToolCall || it is SessionTimelineItem.AgentMessage && it.reasoning }
     val lastMessageIndex = indexOfLast { it is SessionTimelineItem.AgentMessage || it is SessionTimelineItem.ToolCall }
     val currentStatus = status.toStepStatus()
@@ -312,10 +301,12 @@ internal fun List<SessionTimelineItem>.toChatTurn(
         when (item) {
             is SessionTimelineItem.ToolCall -> {
                 if (summaries.isNotEmpty()) finishToolStage(ChatHistoryEntry.StepStatus.Done)
-                events.add(item.toToolEvent(toolFiles[item.id].orEmpty()))
+                events.add(item.toToolEvent(toolFiles[item.id].orEmpty(), attachedReferences))
             }
             is SessionTimelineItem.AgentMessage -> {
-                val text = item.content.joinToString("") { it.display() }
+                val text = item.content.filterNot {
+                    !item.reasoning && it is SessionContent.Resource && it in attachedReferences
+                }.joinToString("") { it.display() }
                 if (item.reasoning) {
                     if (summaries.isNotEmpty()) finishToolStage(ChatHistoryEntry.StepStatus.Done)
                     val state = if (index == lastMessageIndex) currentStatus else ChatHistoryEntry.StepStatus.Done
@@ -323,7 +314,7 @@ internal fun List<SessionTimelineItem>.toChatTurn(
                 } else if (index < lastWork) {
                     // ACP marks both intermediate and final output as agent_message_chunk.
                     if (text.isNotBlank()) {
-                        if (events.isEmpty() || firstTool == -1 || index < firstTool) preparation.add(text)
+                        if (events.isEmpty()) preparation.add(text)
                         else summaries.add(text)
                     }
                 } else {
@@ -353,7 +344,9 @@ private fun SessionTimelineItem.AgentMessage.toReasoningEvent(text: String, stat
         null, ChatHistoryEntry.DetailFormat.Markdown, null, ChatHistoryEntry.ToolOperation.THINK,
     )
 
-private fun SessionTimelineItem.ToolCall.toToolEvent(files: List<ChatAttachment>): ChatHistoryEntry.Event {
+private fun SessionTimelineItem.ToolCall.toToolEvent(
+    files: List<ChatAttachment>, attachedReferences: Set<SessionContent.Resource>,
+): ChatHistoryEntry.Event {
     val state = when (status) {
         ToolCallStatus.PENDING, ToolCallStatus.IN_PROGRESS -> ChatHistoryEntry.StepStatus.Current
         ToolCallStatus.COMPLETED -> ChatHistoryEntry.StepStatus.Done
@@ -361,7 +354,13 @@ private fun SessionTimelineItem.ToolCall.toToolEvent(files: List<ChatAttachment>
         ToolCallStatus.CANCELLED -> ChatHistoryEntry.StepStatus.Stopped
     }
     val operation = kind?.let { ChatHistoryEntry.ToolOperation.valueOf(it.name) }
-    val textOutput = if (files.isEmpty()) output else output.filterNot { it is ToolOutput.Content && it.value is SessionContent.Artifact }
+    val textOutput = if (files.isEmpty()) output else output.filterNot { output ->
+        when (val content = (output as? ToolOutput.Content)?.value) {
+            is SessionContent.Artifact -> true
+            is SessionContent.Resource -> content in attachedReferences
+            else -> false
+        }
+    }
     val read = if (operation == ChatHistoryEntry.ToolOperation.READ && state == ChatHistoryEntry.StepStatus.Done) {
         val content = textOutput.singleOrNull() as? ToolOutput.Content
         (content?.value as? SessionContent.Text)?.text?.let(DshReadEnvelope::matchEntire)

@@ -1,0 +1,67 @@
+CREATE TABLE sent_attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    attachment_id TEXT NOT NULL REFERENCES attachment(id),
+    transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    uri TEXT NOT NULL CHECK (length(uri) > 0),
+    name TEXT NOT NULL,
+    description TEXT,
+    mime_type TEXT,
+    size_bytes INTEGER CHECK (size_bytes IS NULL OR (typeof(size_bytes) = 'integer' AND size_bytes >= 0)),
+    content_text TEXT,
+    content_blob BLOB,
+    CHECK (
+        (transfer_mode = 'resource_link' AND content_text IS NULL AND content_blob IS NULL)
+        OR (transfer_mode = 'resource' AND (
+            (typeof(content_text) = 'text' AND content_blob IS NULL)
+            OR (content_text IS NULL AND typeof(content_blob) = 'blob')
+        ))
+    )
+);
+
+CREATE INDEX sent_attachment_file ON sent_attachment(attachment_id);
+
+CREATE TRIGGER sent_attachment_immutable BEFORE UPDATE ON sent_attachment
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable sent attachment');
+END;
+
+ALTER TABLE message_part ADD COLUMN sent_attachment_id TEXT REFERENCES sent_attachment(id);
+
+CREATE TEMPORARY TABLE attachment_upgrade_assert (
+    valid INTEGER NOT NULL CHECK (valid = 1)
+);
+
+INSERT INTO attachment_upgrade_assert
+SELECT NOT EXISTS (SELECT 1 FROM message_part WHERE (kind = 'attachment') <> (attachment_id IS NOT NULL));
+
+DROP TABLE attachment_upgrade_assert;
+
+CREATE TRIGGER check_part_attachment_insert BEFORE INSERT ON message_part
+WHEN (new.kind = 'attachment' AND
+      (new.attachment_id IS NOT NULL) + (new.sent_attachment_id IS NOT NULL) <> 1)
+  OR (new.kind <> 'attachment' AND (new.attachment_id IS NOT NULL OR new.sent_attachment_id IS NOT NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid attachment reference for message part');
+END;
+
+CREATE TRIGGER check_part_attachment_update BEFORE UPDATE OF kind, attachment_id, sent_attachment_id ON message_part
+WHEN (new.kind = 'attachment' AND
+      (new.attachment_id IS NOT NULL) + (new.sent_attachment_id IS NOT NULL) <> 1)
+  OR (new.kind <> 'attachment' AND (new.attachment_id IS NOT NULL OR new.sent_attachment_id IS NOT NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid attachment reference for message part');
+END;
+
+CREATE INDEX message_part_sent_attachment ON message_part(sent_attachment_id);
+CREATE INDEX message_part_attachment ON message_part(attachment_id);
+
+CREATE TABLE prompt_submission (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (chat_id, message_id)
+);
+
+INSERT INTO prompt_submission(chat_id, message_id)
+SELECT DISTINCT e.chat_id, r.display_id
+FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
+WHERE r.role = 'user';

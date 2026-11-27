@@ -8,6 +8,8 @@ import io.github.aequicor.heartbeat.core.database.DatabaseConnection
 import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatHistoryDataSource
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.ChatHistoryDataSourceImpl
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.AttachmentReferenceResolverImpl
+import io.github.aequicor.heartbeat.features.aistudio.data.datasource.DraftAttachmentImageLoaderImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatHistoryInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatHistoryInteractorImpl
 import io.github.aequicor.heartbeat.features.aistudio.data.workspace.StudioWorkspacePersistence
@@ -32,6 +34,8 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ApplyChatConfigurationUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ApplyChatConfigurationUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCase
+import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.FindPromptReferencesUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ImportChatAttachmentUseCaseImpl
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.PrepareChatContextUseCase
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.PrepareChatContextUseCaseImpl
@@ -49,6 +53,8 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.Projects
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.SessionBootstrapInteractorImpl
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioStoreFactory
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AttachmentReferenceResolver
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.DraftAttachmentImageLoader
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 
@@ -90,6 +96,15 @@ public interface DefaultAiStudioInteractorBindings {
 
         @Provides
         internal fun provideImportChatAttachmentUseCase(impl: ImportChatAttachmentUseCaseImpl): ImportChatAttachmentUseCase = impl
+
+        @Provides
+        internal fun provideFindPromptReferencesUseCase(impl: FindPromptReferencesUseCaseImpl): FindPromptReferencesUseCase = impl
+
+        @Provides
+        internal fun provideAttachmentReferenceResolver(impl: AttachmentReferenceResolverImpl): AttachmentReferenceResolver = impl
+
+        @Provides
+        internal fun provideDraftAttachmentImageLoader(impl: DraftAttachmentImageLoaderImpl): DraftAttachmentImageLoader = impl
 
         @Provides
         internal fun providePrepareChatContextUseCase(impl: PrepareChatContextUseCaseImpl): PrepareChatContextUseCase = impl

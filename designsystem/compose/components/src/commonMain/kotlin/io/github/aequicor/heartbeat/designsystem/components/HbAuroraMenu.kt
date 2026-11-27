@@ -26,17 +26,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -50,25 +55,43 @@ internal fun HbAuroraMenuSurface(
     popupBackground: (@Composable (Shape) -> Modifier)?,
     content: @Composable (Dp) -> Unit,
 ) {
-    val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
     val settings = presentation == HbMenuPresentation.AuroraSettings
+    val fileActions = presentation == HbMenuPresentation.AuroraFileActions
+    val attachment = presentation == HbMenuPresentation.AuroraAttachment || fileActions
+    val radius = if (attachment) AttachmentMenuRadius else AuroraLayout.SmallRadius
+    val shape = RoundedCornerShape(radius)
     val (surface, outline) = when (presentation) {
         HbMenuPresentation.AuroraSettings -> HbTheme.colors.surface.raised to HbTheme.colors.border.control
         HbMenuPresentation.AuroraDesktopMessageActions ->
             AuroraColors.MessageActionSurface to AuroraColors.MessageActionOutline
+        HbMenuPresentation.AuroraAttachment -> Color.White to AuroraColors.Line
+        HbMenuPresentation.AuroraFileActions -> Color.White to Color.Transparent
         else -> AuroraColors.Pearl to AuroraColors.Line
     }
-    val width = if (settings) Modifier.width(SettingsMenuWidth) else Modifier.compactMenuWidth()
+    val width = when {
+        settings -> Modifier.width(SettingsMenuWidth)
+        fileActions -> Modifier.width(FileActionsWidth)
+        attachment -> Modifier.width(AttachmentMenuWidth)
+        else -> Modifier.compactMenuWidth()
+    }
     BoxWithConstraints {
         val height = minOf(maxHeight, AuroraPopupMaxHeight)
         val surfaceModifier = if (popupBackground == null) {
-            HbAuroraOutline(surface, outline, AuroraLayout.SmallRadius)
+            HbAuroraOutline(surface, outline, radius)
         } else {
             Modifier.clip(shape).then(popupBackground(shape)).border(AuroraLayout.Stroke, outline, shape)
         }
-        Box(
-            width.shadow(AuroraLayout.Space, shape, clip = false).then(surfaceModifier),
-        ) { content(height) }
+        val shadow = if (attachment) {
+            Modifier.dropShadow(
+                shape,
+                Shadow(
+                    radius = AttachmentMenuShadowRadius,
+                    color = AttachmentMenuShadow,
+                    offset = DpOffset(Dp.Hairline, AuroraLayout.Space),
+                ),
+            )
+        } else Modifier.shadow(AuroraLayout.Space, shape, clip = false)
+        Box(width.then(shadow).then(surfaceModifier)) { content(height) }
     }
 }
 
@@ -85,6 +108,8 @@ internal fun HbAuroraMenuItem(
     val hovered by interaction.collectIsHoveredAsState()
     val shape = RoundedCornerShape(AuroraLayout.SmallRadius)
     val settings = presentation == HbMenuPresentation.AuroraSettings
+    val fileActions = presentation == HbMenuPresentation.AuroraFileActions
+    val attachment = presentation == HbMenuPresentation.AuroraAttachment || fileActions
     val color = menuItemInk(presentation, action.destructive)
     val hover = when (presentation) {
         HbMenuPresentation.AuroraSettings -> HbTheme.colors.surface.subtle
@@ -95,6 +120,7 @@ internal fun HbAuroraMenuItem(
     val minHeight = when (presentation) {
         HbMenuPresentation.AuroraTouchMessage -> AuroraLayout.TouchTarget
         HbMenuPresentation.AuroraSettings -> HbEngineSettingsLayout.actionHeight
+        HbMenuPresentation.AuroraAttachment, HbMenuPresentation.AuroraFileActions -> AttachmentMenuRowHeight
         else -> AuroraLayout.DesktopTarget
     }
     val selected = action.selected
@@ -109,17 +135,25 @@ internal fun HbAuroraMenuItem(
             )
             .then(if (selected == null) Modifier else Modifier.semantics { this.selected = selected })
             .padding(
-                horizontal = if (settings) AuroraLayout.ContentInset else AuroraLayout.Space,
-                vertical = AuroraLayout.ControlGap,
+                horizontal = if (fileActions) FileActionInset else if (settings) AuroraLayout.ContentInset else AuroraLayout.Space,
+                vertical = if (attachment) Dp.Hairline else AuroraLayout.ControlGap,
             ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AuroraLayout.Space),
+        horizontalArrangement = Arrangement.spacedBy(when {
+            fileActions -> FileActionsIconGap
+            attachment -> AttachmentMenuIconGap
+            else -> AuroraLayout.Space
+        }),
     ) {
         MenuActionIcon(action, color, settings)
         BasicText(
             action.label,
             modifier = Modifier.weight(1f),
-            style = HbTypography.Label.copy(color = color),
+            style = if (fileActions) HbTypography.Label.copy(
+                color = color, fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Normal,
+            ) else if (attachment) HbTypography.Label.copy(
+                color = color, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
+            ) else HbTypography.Label.copy(color = color),
         )
         when (selected) {
             true -> HbIcon(HbIconGlyph.Check, tint = AuroraColors.Primary, size = AuroraLayout.Glyph)
@@ -163,3 +197,13 @@ private val AuroraPopupMinWidth = 112.dp
 private val AuroraPopupMaxHeight = 280.dp
 
 private val SettingsMenuWidth = 202.dp
+
+private val AttachmentMenuWidth = 174.dp
+private val FileActionsWidth = 178.dp
+private val FileActionInset = 8.dp
+private val FileActionsIconGap = 12.dp
+private val AttachmentMenuRadius = 10.dp
+private val AttachmentMenuRowHeight = 40.dp
+private val AttachmentMenuIconGap = 10.dp
+private val AttachmentMenuShadowRadius = 14.dp
+private val AttachmentMenuShadow = Color(0x30140F1F)

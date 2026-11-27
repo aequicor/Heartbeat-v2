@@ -40,22 +40,25 @@ internal class ChatTurnInteractorImpl(
     @Throwable(CancellationException::class)
     override suspend fun send(
         sessionId: String,
+        messageId: String,
         text: String,
         attachments: List<ChatAttachment>,
+        expectedDraftRevision: String,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runTurn(sessionId, cancellationRequested, update) { started, publish ->
-        sendMessage(sessionId, text, attachments, started, publish)
+        sendMessage(sessionId, messageId, text, attachments, expectedDraftRevision, started, publish)
     }
 
     @Throwable(CancellationException::class)
     override suspend fun retry(
         sessionId: String,
         messageId: String,
+        expectedFailedRevisionId: Long,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runTurn(sessionId, cancellationRequested, update) { started, publish ->
-        sendMessage.retry(sessionId, messageId, started, publish)
+        sendMessage.retry(sessionId, messageId, expectedFailedRevisionId, started, publish)
     }
 
     private suspend fun runTurn(
@@ -77,7 +80,7 @@ internal class ChatTurnInteractorImpl(
                 { snapshot ->
                     update(snapshot)
                     if (snapshot.running && snapshot.reply == null) {
-                        // The first update finishes saving the submitted draft before preparation can be cancelled.
+                        // Once the prompt is committed, cancellation can interrupt engine preparation.
                         val stopped = lock.withLock {
                             turn.preparation = preparation
                             turn.cancelled || cancellationRequested()

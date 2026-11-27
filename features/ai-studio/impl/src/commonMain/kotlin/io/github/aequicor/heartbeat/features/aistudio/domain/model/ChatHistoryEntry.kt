@@ -38,6 +38,8 @@ internal data class ChatHistoryEntry(
         val scenario: Scenario,
         val access: Access,
         val retryAllowed: Boolean = true,
+        val revisionId: Long? = null,
+        val sentAttachments: List<SentMessageAttachment> = emptyList(),
     ) : Message
 
     data class Reply(

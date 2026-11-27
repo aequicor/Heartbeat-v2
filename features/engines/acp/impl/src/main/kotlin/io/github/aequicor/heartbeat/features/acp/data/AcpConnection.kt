@@ -47,7 +47,7 @@ internal class AcpConnection(
             process.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                 while (true) {
                     val line = reader.readLine() ?: break
-                    emit(withModeOptionNames(line))
+                    emit(withModeOptionNames(withSdkAuthCapabilities(line)))
                 }
             }
         },

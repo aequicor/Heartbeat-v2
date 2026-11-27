@@ -1,0 +1,318 @@
+-- The application runs the required Kotlin data conversion before this migration.
+CREATE TEMPORARY TABLE attachment_cutover_assert (
+    valid INTEGER NOT NULL CHECK (valid = 1)
+);
+
+INSERT INTO attachment_cutover_assert
+SELECT NOT EXISTS (SELECT 1 FROM attachment WHERE inline_text IS NOT NULL)
+    AND NOT EXISTS (SELECT 1 FROM message_part
+        WHERE attachment_id IS NOT NULL OR (kind = 'attachment') <> (sent_attachment_id IS NOT NULL))
+    AND NOT EXISTS (
+        SELECT 1 FROM message_part child LEFT JOIN message_part parent ON parent.id = child.parent_part_id
+        WHERE child.parent_part_id IS NOT NULL
+          AND (parent.id IS NULL OR child.revision_id <> parent.revision_id OR child.id = parent.id)
+    )
+    AND NOT EXISTS (SELECT 1 FROM studio_session WHERE draft_revision IS NOT NULL)
+    AND (NOT EXISTS (SELECT 1 FROM studio_session WHERE workspace_payload IS NOT NULL)
+        OR NOT EXISTS (SELECT 1 FROM attachment_migration_pending WHERE version = 14));
+
+-- Back up only the retained columns. Rebuild in foreign-key order with foreign_keys still enabled.
+
+CREATE TABLE attachment_cutover_studio_session AS
+SELECT id, project_id, title, status, created_at_seconds, created_at_nanos,
+        updated_at_seconds, updated_at_nanos, parent_session_id, is_expanded,
+        workspace_payload, workspace_summary, work_state, work_state_owner
+FROM studio_session;
+
+CREATE TABLE attachment_cutover_chat AS
+SELECT id, session_id, engine_id, model_name, reasoning_level, engine_session_id,
+        engine_context_stale, source_chat_id, source_revision_id,
+        context_used_tokens, context_size_tokens, security_config_json
+FROM chat;
+
+CREATE TABLE attachment_cutover_chat_entry AS
+SELECT chat_id, position, message_id, revision_id, predates_edit
+FROM chat_entry;
+
+CREATE TABLE attachment_cutover_prompt_submission AS
+SELECT chat_id, message_id
+FROM prompt_submission;
+
+CREATE TABLE attachment_cutover_attachment AS
+SELECT id, name, mime_type, size_bytes, original_uri, managed_path, presentation
+FROM attachment;
+
+CREATE TABLE attachment_cutover_sent_attachment AS
+SELECT id, attachment_id, transfer_mode, uri, name, description, mime_type,
+        size_bytes, content_text, content_blob
+FROM sent_attachment;
+
+CREATE TABLE attachment_cutover_chat_draft AS
+SELECT session_id, revision, body
+FROM chat_draft;
+
+CREATE TABLE attachment_cutover_draft_attachment AS
+SELECT session_id, position, file_id, attachment_id, transfer_mode
+FROM draft_attachment;
+
+CREATE TABLE attachment_cutover_message_part AS
+SELECT id, revision_id, parent_part_id, position, kind, title, status, body,
+        tool_call_id, presentation, sent_attachment_id
+FROM message_part;
+
+DROP TRIGGER create_session_chat;
+DROP TRIGGER sent_attachment_immutable;
+DROP TRIGGER check_message_part_parent;
+DROP TRIGGER keep_message_part_identity;
+DROP TRIGGER check_part_attachment_insert;
+DROP TRIGGER check_part_attachment_update;
+DROP TRIGGER keep_message_part_snapshot_insert;
+DROP TRIGGER keep_message_part_snapshot_update;
+DROP TRIGGER keep_attachment_metadata_insert;
+DROP TRIGGER keep_attachment_metadata_update;
+
+DROP INDEX studio_session_root_page;
+DROP INDEX studio_session_child_page;
+DROP INDEX chat_entry_revision;
+DROP INDEX attachment_presentation;
+DROP INDEX sent_attachment_file;
+DROP INDEX draft_attachment_file;
+DROP INDEX message_part_sent_attachment;
+DROP INDEX message_part_attachment;
+
+DROP TABLE message_part;
+DROP TABLE draft_attachment;
+DROP TABLE chat_draft;
+DROP TABLE sent_attachment;
+DROP TABLE attachment;
+DROP TABLE prompt_submission;
+DROP TABLE chat_entry;
+DROP TABLE chat;
+DROP TABLE studio_session;
+
+CREATE TABLE studio_session (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES studio_project(id),
+    title TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    created_at_seconds INTEGER NOT NULL,
+    created_at_nanos INTEGER NOT NULL,
+    updated_at_seconds INTEGER NOT NULL,
+    updated_at_nanos INTEGER NOT NULL,
+    parent_session_id TEXT,
+    is_expanded INTEGER NOT NULL DEFAULT 1,
+    workspace_payload TEXT,
+    workspace_summary TEXT,
+    work_state TEXT NOT NULL DEFAULT 'Idle',
+    work_state_owner TEXT
+);
+
+CREATE TABLE chat (
+    id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL UNIQUE REFERENCES studio_session(id) ON DELETE CASCADE,
+    engine_id TEXT,
+    model_name TEXT,
+    reasoning_level TEXT,
+    engine_session_id TEXT,
+    engine_context_stale INTEGER NOT NULL DEFAULT 0 CHECK (engine_context_stale IN (0, 1)),
+    source_chat_id TEXT REFERENCES chat(id) ON DELETE SET NULL,
+    source_revision_id INTEGER REFERENCES message_revision(revision_id),
+    context_used_tokens INTEGER,
+    context_size_tokens INTEGER,
+    security_config_json TEXT
+);
+
+CREATE TABLE chat_entry (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    revision_id INTEGER NOT NULL,
+    predates_edit INTEGER NOT NULL DEFAULT 0 CHECK (predates_edit IN (0, 1)),
+    PRIMARY KEY (chat_id, position),
+    UNIQUE (chat_id, message_id),
+    FOREIGN KEY (message_id, revision_id) REFERENCES message_revision(message_id, revision_id)
+);
+
+CREATE TABLE prompt_submission (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (chat_id, message_id)
+);
+
+CREATE TABLE attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    mime_type TEXT,
+    size_bytes INTEGER NOT NULL CHECK (typeof(size_bytes) = 'integer' AND size_bytes >= 0),
+    original_uri TEXT CHECK (original_uri IS NULL OR length(original_uri) > 0),
+    managed_path TEXT CHECK (
+        managed_path IS NULL OR (
+            length(managed_path) > 0 AND substr(managed_path, 1, 1) <> '/'
+            AND instr(managed_path, char(92)) = 0 AND instr('/' || managed_path || '/', '/../') = 0
+        )
+    ),
+    presentation TEXT
+);
+
+CREATE TABLE sent_attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    attachment_id TEXT NOT NULL REFERENCES attachment(id),
+    transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    uri TEXT NOT NULL CHECK (length(uri) > 0),
+    name TEXT NOT NULL,
+    description TEXT,
+    mime_type TEXT,
+    size_bytes INTEGER CHECK (size_bytes IS NULL OR (typeof(size_bytes) = 'integer' AND size_bytes >= 0)),
+    content_text TEXT,
+    content_blob BLOB,
+    CHECK (
+        (transfer_mode = 'resource_link' AND content_text IS NULL AND content_blob IS NULL)
+        OR (transfer_mode = 'resource' AND (
+            (typeof(content_text) = 'text' AND content_blob IS NULL)
+            OR (content_text IS NULL AND typeof(content_blob) = 'blob')
+        ))
+    )
+);
+
+CREATE TABLE chat_draft (
+    session_id TEXT NOT NULL PRIMARY KEY REFERENCES studio_session(id) ON DELETE CASCADE,
+    revision TEXT NOT NULL CHECK (length(revision) > 0),
+    body TEXT NOT NULL
+);
+
+CREATE TABLE draft_attachment (
+    session_id TEXT NOT NULL REFERENCES chat_draft(session_id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
+    file_id TEXT NOT NULL CHECK (length(file_id) > 0),
+    attachment_id TEXT NOT NULL REFERENCES attachment(id),
+    transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    PRIMARY KEY (session_id, position)
+);
+
+CREATE TABLE message_part (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    revision_id INTEGER NOT NULL REFERENCES message_revision(revision_id) ON DELETE CASCADE,
+    parent_part_id INTEGER REFERENCES message_part(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
+    kind TEXT NOT NULL CHECK (kind IN ('text', 'step', 'reasoning', 'tool_call', 'attachment')),
+    title TEXT,
+    status TEXT,
+    body TEXT,
+    tool_call_id TEXT,
+    presentation TEXT,
+    sent_attachment_id TEXT REFERENCES sent_attachment(id),
+    UNIQUE (revision_id, position),
+    CHECK ((kind = 'attachment') = (sent_attachment_id IS NOT NULL))
+);
+
+INSERT INTO studio_session(id, project_id, title, status, created_at_seconds, created_at_nanos,
+        updated_at_seconds, updated_at_nanos, parent_session_id, is_expanded,
+        workspace_payload, workspace_summary, work_state, work_state_owner)
+SELECT id, project_id, title, status, created_at_seconds, created_at_nanos,
+        updated_at_seconds, updated_at_nanos, parent_session_id, is_expanded,
+        workspace_payload, workspace_summary, work_state, work_state_owner
+FROM attachment_cutover_studio_session;
+
+INSERT INTO chat(id, session_id, engine_id, model_name, reasoning_level, engine_session_id,
+        engine_context_stale, source_chat_id, source_revision_id,
+        context_used_tokens, context_size_tokens, security_config_json)
+SELECT id, session_id, engine_id, model_name, reasoning_level, engine_session_id,
+        engine_context_stale, source_chat_id, source_revision_id,
+        context_used_tokens, context_size_tokens, security_config_json
+FROM attachment_cutover_chat;
+
+INSERT INTO chat_entry(chat_id, position, message_id, revision_id, predates_edit)
+SELECT chat_id, position, message_id, revision_id, predates_edit
+FROM attachment_cutover_chat_entry;
+
+INSERT INTO prompt_submission(chat_id, message_id)
+SELECT chat_id, message_id
+FROM attachment_cutover_prompt_submission;
+
+INSERT INTO attachment(id, name, mime_type, size_bytes, original_uri, managed_path, presentation)
+SELECT id, name, mime_type, size_bytes, original_uri, managed_path, presentation
+FROM attachment_cutover_attachment;
+
+INSERT INTO sent_attachment(id, attachment_id, transfer_mode, uri, name, description, mime_type,
+        size_bytes, content_text, content_blob)
+SELECT id, attachment_id, transfer_mode, uri, name, description, mime_type,
+        size_bytes, content_text, content_blob
+FROM attachment_cutover_sent_attachment;
+
+INSERT INTO chat_draft(session_id, revision, body)
+SELECT session_id, revision, body
+FROM attachment_cutover_chat_draft;
+
+INSERT INTO draft_attachment(session_id, position, file_id, attachment_id, transfer_mode)
+SELECT session_id, position, file_id, attachment_id, transfer_mode
+FROM attachment_cutover_draft_attachment;
+
+INSERT INTO message_part(id, revision_id, parent_part_id, position, kind, title, status, body,
+        tool_call_id, presentation, sent_attachment_id)
+SELECT id, revision_id, parent_part_id, position, kind, title, status, body,
+        tool_call_id, presentation, sent_attachment_id
+FROM attachment_cutover_message_part;
+
+INSERT INTO attachment_cutover_assert
+SELECT (SELECT count(*) FROM studio_session) = (SELECT count(*) FROM attachment_cutover_studio_session)
+    AND (SELECT count(*) FROM chat) = (SELECT count(*) FROM attachment_cutover_chat)
+    AND (SELECT count(*) FROM chat_entry) = (SELECT count(*) FROM attachment_cutover_chat_entry)
+    AND (SELECT count(*) FROM prompt_submission) = (SELECT count(*) FROM attachment_cutover_prompt_submission)
+    AND (SELECT count(*) FROM attachment) = (SELECT count(*) FROM attachment_cutover_attachment)
+    AND (SELECT count(*) FROM sent_attachment) = (SELECT count(*) FROM attachment_cutover_sent_attachment)
+    AND (SELECT count(*) FROM chat_draft) = (SELECT count(*) FROM attachment_cutover_chat_draft)
+    AND (SELECT count(*) FROM draft_attachment) = (SELECT count(*) FROM attachment_cutover_draft_attachment)
+    AND (SELECT count(*) FROM message_part) = (SELECT count(*) FROM attachment_cutover_message_part);
+
+CREATE INDEX studio_session_root_page
+ON studio_session(project_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC)
+WHERE parent_session_id IS NULL;
+
+CREATE INDEX studio_session_child_page
+ON studio_session(parent_session_id, status, updated_at_seconds DESC, updated_at_nanos DESC, id ASC);
+
+CREATE INDEX chat_entry_revision ON chat_entry(revision_id);
+
+CREATE INDEX attachment_presentation ON attachment(presentation);
+
+CREATE INDEX sent_attachment_file ON sent_attachment(attachment_id);
+
+CREATE INDEX draft_attachment_file ON draft_attachment(attachment_id);
+
+CREATE INDEX message_part_sent_attachment ON message_part(sent_attachment_id);
+
+CREATE TRIGGER create_session_chat AFTER INSERT ON studio_session
+BEGIN
+    INSERT INTO chat(id, session_id) SELECT id, id FROM studio_session WHERE rowid = last_insert_rowid();
+END;
+
+CREATE TRIGGER sent_attachment_immutable BEFORE UPDATE ON sent_attachment
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable sent attachment');
+END;
+
+CREATE TRIGGER check_message_part_parent BEFORE INSERT ON message_part
+WHEN new.parent_part_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM message_part WHERE id = new.parent_part_id AND revision_id = new.revision_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'Invalid message_part parent');
+END;
+
+CREATE TRIGGER keep_message_part_identity BEFORE UPDATE OF id, revision_id, parent_part_id ON message_part
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable message_part identity');
+END;
+
+DROP TABLE attachment_cutover_message_part;
+DROP TABLE attachment_cutover_draft_attachment;
+DROP TABLE attachment_cutover_chat_draft;
+DROP TABLE attachment_cutover_sent_attachment;
+DROP TABLE attachment_cutover_attachment;
+DROP TABLE attachment_cutover_prompt_submission;
+DROP TABLE attachment_cutover_chat_entry;
+DROP TABLE attachment_cutover_chat;
+DROP TABLE attachment_cutover_studio_session;
+
+DROP TABLE attachment_migration_pending;
+DROP TABLE attachment_cutover_assert;

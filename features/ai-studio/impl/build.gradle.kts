@@ -49,6 +49,10 @@ kotlin {
     }
     sourceSets.jvmMain.dependencies {
         implementation(libs.skiko.awt)
+        implementation(libs.snakeyaml)
+    }
+    sourceSets.androidMain.dependencies {
+        implementation(libs.snakeyaml)
     }
     sourceSets.jvmTest.dependencies {
         implementation(libs.sqldelight.sqlite.driver)

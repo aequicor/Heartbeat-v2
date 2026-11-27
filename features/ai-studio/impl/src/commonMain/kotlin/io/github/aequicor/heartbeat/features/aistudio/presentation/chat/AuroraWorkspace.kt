@@ -15,6 +15,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlin.uuid.Uuid
 
 @Serializable
 internal data class AuroraWorkspace(
@@ -51,7 +52,14 @@ internal data class AuroraChat(
     @Transient val persistedThroughDomain: Boolean = false,
     @Transient val historyAtLoad: List<Message> = listOf(),
     @Transient val olderBefore: Long? = null,
+    @Transient val draftRevision: String? = null,
+    @Transient val loadedDraftRevision: String? = null,
 ) {
+
+    fun editDraft(text: String = draft, files: List<File> = attachments): AuroraChat =
+        if (text == draft && files == attachments) this
+        else copy(draft = text, attachments = files, draftRevision = Uuid.random().toString())
+
     fun recover(): AuroraChat {
         val history = messages.map { message ->
             when (message) {

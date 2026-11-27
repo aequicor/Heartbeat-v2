@@ -1,24 +1,31 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileDate
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.FileGroup
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Message
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
 internal class WorkspaceFiles {
 
-    private var stored = listOf<File>()
+    private var stored: List<File>? = null
+    private val removedFileIds = mutableSetOf<String>()
+    private val removedFileKeys = mutableSetOf<String>()
     private var files = listOf<File>()
+    private var listedFiles = listOf<File>()
     private var groups = listOf<FileGroup>()
 
     fun find(id: String): File? = files.firstOrNull { it.openId == id }
 
-    fun setStored(headers: List<File>) {
-        stored = headers
+    fun selectSession() {
+        stored = null
+        removedFileIds.clear()
+        removedFileKeys.clear()
     }
 
     suspend fun toggleFiles(
@@ -26,22 +33,83 @@ internal class WorkspaceFiles {
         visible: Boolean,
         storage: StudioWorkspaceStorage?,
     ) {
+        if (!visible) {
+            screen.update { it.copy(filesVisible = false) }
+            return
+        }
+        refreshCatalog(screen, storage, visible = true)
+    }
+
+    suspend fun refreshCatalog(
+        screen: MutableStateFlow<AiStudioScreenState>,
+        storage: StudioWorkspaceStorage?,
+        visible: Boolean = screen.value.filesVisible,
+    ) {
         val id = screen.value.chat?.id
-        if (visible && id != null && storage != null) {
+        if (id != null && storage != null) {
             stored = screen.readStored { storage.listFiles(id) } ?: return
             refresh(listOfNotNull(screen.value.live) + screen.value.messages)
         }
-        screen.update { it.copy(filesVisible = visible, fileGroups = groups(it.fileSearch)) }
+        screen.update {
+            it.copy(filesVisible = visible, fileGroups = groups(it.fileSearch), removedAttachmentLinks = removedLinks())
+        }
     }
 
     fun groups(query: String): List<FileGroup> = groups.filterFiles(query)
 
     fun refresh(messages: List<Message>) {
-        val next = (files(messages) + stored).distinctBy(File::openId)
-        if (next != files) {
-            files = next
-            groups = prepareFileGroups(next.distinctBy(File::id))
+        val displayed = files(messages)
+        val catalog = stored
+        files = (displayed + catalog.orEmpty()).distinctBy(File::openId)
+        val listed = if (catalog == null) displayed else {
+            // Use persisted membership for saved attachments and retain unpublished live files.
+            catalog + displayed.filter {
+                it.storedAttachmentId == null && it.id !in removedFileIds && it.catalogKey !in removedFileKeys
+            }
         }
+        val next = listed.groupBy(File::catalogKey).values.map { versions ->
+            val newest = versions.first()
+            val firstDate = versions.asSequence().mapNotNull(File::date).minWithOrNull(FileDateOrder)
+            if (firstDate == newest.date) newest else newest.copy(date = firstDate)
+        }.distinctBy(File::id)
+        if (next != listedFiles) {
+            listedFiles = next
+            groups = prepareFileGroups(next)
+        }
+    }
+
+    suspend fun removeUnavailable(
+        screen: MutableStateFlow<AiStudioScreenState>,
+        storage: StudioWorkspaceStorage,
+        sessionId: String,
+        snapshotId: String,
+    ) {
+        val selected = screen.value
+        if (selected.chat?.id != sessionId) return
+        val file = stored?.find { it.openId == snapshotId } ?: return
+        try {
+            storage.removeUnavailableAttachment(sessionId, snapshotId)
+        } catch (_: StudioRepositoryException) {
+            screen.update { it.copy(storageError = "Не удалось удалить запись о вложении") }
+            return
+        }
+        removedFileKeys += file.catalogKey
+        stored = stored?.filterNot {
+            val removed = it.catalogKey == file.catalogKey
+            if (removed) removedFileIds += it.id
+            removed
+        }
+        refresh(listOfNotNull(selected.live) + selected.messages)
+        screen.update { it.copy(fileGroups = groups(it.fileSearch), removedAttachmentLinks = removedLinks()) }
+    }
+
+    private fun removedLinks(): Set<String> {
+        val catalog = stored ?: return emptySet()
+        val listed = catalog.mapTo(mutableSetOf(), File::openId)
+        return files.filter {
+            it.deferredReading && if (it.storedAttachmentId != null) it.openId !in listed
+            else it.id in removedFileIds || it.catalogKey in removedFileKeys
+        }.mapTo(mutableSetOf(), File::openId)
     }
 
     fun search(screen: AiStudioScreenState, query: String): AiStudioScreenState =
@@ -68,3 +136,8 @@ internal class WorkspaceFiles {
         }
     }.distinctBy(File::openId)
 }
+
+private val File.catalogKey: String
+    get() = catalogUri ?: managedCopyPath?.let { "managed:$it" } ?: originalUri ?: "file-id:$id"
+
+private val FileDateOrder = compareBy(FileDate::year, FileDate::month, FileDate::day, FileDate::time)

@@ -4,6 +4,9 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireA
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Access
@@ -15,12 +18,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.Throws as Throwable
 
 internal class RemoteChatTurns(
     private val turns: ChatTurnInteractor,
@@ -55,14 +55,13 @@ internal class RemoteChatTurns(
                         turns.cancel(chatId)
                     }
                     try {
-                        var draftSaved = false
-                        val saveDraft = (submission as? Submission.New)?.saveDraft
+                        var draftConsumed = false
                         val onUpdate: suspend (ChatTurn) -> Unit = { update ->
+                            if (submission is Submission.New && !draftConsumed) {
+                                draftConsumed = true
+                                enqueue { submission.onCommitted() }
+                            }
                             if (update.running) {
-                                if (saveDraft != null && !draftSaved) {
-                                    awaitDraftWrite(saveDraft).getOrThrow()
-                                    draftSaved = true
-                                }
                                 enqueue {
                                     current[chatId] = update
                                     val questionnaire = update.questionnaire
@@ -79,9 +78,12 @@ internal class RemoteChatTurns(
                         val shouldCancel = { cancellationRequested.isCompleted }
                         when (submission) {
                             is Submission.New -> turns.send(
-                                chatId, submission.prompt, submission.files.map(File::forTurn), shouldCancel, onUpdate,
+                                chatId, submission.messageId, submission.prompt,
+                                submission.files.map(File::forTurn), submission.expectedDraftRevision, shouldCancel, onUpdate,
                             )
-                            is Submission.Retry -> turns.retry(chatId, submission.messageId, shouldCancel, onUpdate)
+                            is Submission.Retry -> turns.retry(
+                                chatId, submission.messageId, submission.expectedFailedRevisionId, shouldCancel, onUpdate,
+                            )
                         }
                     } catch (cancelled: CancellationException) {
                         val storageFailure = generateSequence<kotlin.Throwable>(cancelled) { it.cause }
@@ -106,21 +108,6 @@ internal class RemoteChatTurns(
                 }
             }
         }
-    }
-
-    @Throwable(CancellationException::class)
-    private suspend fun awaitDraftWrite(saveDraft: suspend () -> Result<Unit>): Result<Unit> {
-        // The first update is emitted after the user message is stored and before the prompt reaches ACP.
-        val saved = CompletableDeferred<Result<Unit>>()
-        enqueue {
-            try {
-                saved.complete(saveDraft())
-            } catch (cancelled: CancellationException) {
-                saved.cancel(cancelled)
-                currentCoroutineContext().ensureActive()
-            }
-        }
-        return saved.await()
     }
 
     fun discard(chatId: String) {
@@ -244,12 +231,27 @@ internal class RemoteChatTurns(
     }
 
     sealed interface Submission {
-        data class New(val prompt: String, val files: List<File>, val saveDraft: suspend () -> Result<Unit>) : Submission
-        data class Retry(val messageId: String) : Submission
+        data class New(
+            val messageId: String,
+            val prompt: String,
+            val files: List<File>,
+            val expectedDraftRevision: String,
+            val onCommitted: () -> Unit,
+        ) : Submission
+        data class Retry(val messageId: String, val expectedFailedRevisionId: Long) : Submission
     }
 }
 
-private fun File.forTurn() = ChatAttachment(
+internal fun File.forTurn() = ChatAttachment(
     id, name, kind, content, date?.let { ChatAttachment.Date(it.year, it.month, it.day, it.time) },
     storedAttachmentId, storedSizeBytes, image?.let { ChatAttachment.Image(it.mimeType, it.thumbnail) },
+    mimeType, base64Encoded,
+    source = attachmentLocation()?.let {
+        AttachmentFile(id, name, it, description, mimeType, sourceSizeBytes ?: storedSizeBytes)
+    },
+    transferMode = if (deferredReading) AttachmentTransferMode.ResourceLink else AttachmentTransferMode.Resource,
 )
+
+internal fun File.attachmentLocation(): AttachmentLocation? =
+    managedCopyPath?.let { AttachmentLocation.ManagedCopy(it, originalUri) }
+        ?: originalUri?.let { AttachmentLocation.Original(it) }

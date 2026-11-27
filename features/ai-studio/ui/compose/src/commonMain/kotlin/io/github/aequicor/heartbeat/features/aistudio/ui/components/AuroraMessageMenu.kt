@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,11 @@ internal fun AuroraMessageMenu(
     val expanded = menu.expanded
     val onContextMenu by rememberUpdatedState(onAction)
     val hasContext = !touch && (actions.isNotEmpty() || workMenu != null)
+    val hasFileMenu = !touch && when (message) {
+        is User -> message.files.isNotEmpty()
+        is Reply -> message.result != null || message.artifacts.isNotEmpty() ||
+            message.steps.any { step -> step.events.any { it.files.isNotEmpty() } }
+    }
     val openContext = remember(hitArea, menu, workMenu, hasContext) {
         if (hasContext) { root: Offset ->
             val anchor = hitArea.anchorAt(root - hitArea.rootOrigin)
@@ -116,7 +122,16 @@ internal fun AuroraMessageMenu(
         bubble = {
             val atEdge = if (touchAtEdge && actions.isNotEmpty()) Modifier.openMenuOnHold(menu.open)
             else Modifier
-            Box(atEdge) { content((hitArea.hoveredOutsideBubble || expanded) && actions.isNotEmpty()) }
+            Box(atEdge) {
+                val menuHovered = (hitArea.hoveredOutsideBubble || expanded) && actions.isNotEmpty()
+                if (hasFileMenu) {
+                    CompositionLocalProvider(LocalAttachmentContextMenuOpened provides hitArea.attachmentMenuOpened) {
+                        content(menuHovered)
+                    }
+                } else {
+                    content(menuHovered)
+                }
+            }
         },
         menu = {
             val menuActions = menu.contextActions + actions
@@ -150,7 +165,9 @@ internal fun AuroraMessageMenu(
             }
         },
         modifier = modifier.onGloballyPositioned { hitArea.rootOrigin = it.positionInRoot() }
-            .trackMessageMenuPointer(hitArea, openContext, menu.openOnHover.takeIf { !touch && actions.isNotEmpty() }),
+            .trackMessageMenuPointer(
+                hitArea, openContext, menu.openOnHover.takeIf { !touch && actions.isNotEmpty() }, hasFileMenu,
+            ),
     )
 }
 
@@ -188,7 +205,11 @@ private fun AuroraMessageMenuLayout(
     footer: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Layout(contents = listOf(bubble, menu, footer), modifier = modifier.fillMaxWidth()) { slots, constraints ->
+    val externalTimestamp = remember { mutableStateOf(false) }
+    val bodyWithTimestamp: @Composable () -> Unit = {
+        CompositionLocalProvider(LocalAuroraExternalTimestamp provides externalTimestamp, content = bubble)
+    }
+    Layout(contents = listOf(bodyWithTimestamp, menu, footer), modifier = modifier.fillMaxWidth()) { slots, constraints ->
         val (bodySlot, menuSlot, footerSlot) = slots
         val width = constraints.maxWidth
         val reading = if (readingWidth.value.isFinite()) minOf(width, readingWidth.roundToPx()) else width
@@ -200,7 +221,7 @@ private fun AuroraMessageMenuLayout(
         val left = (width - column) / 2
         val right = left + column
         val body = bodySlot.single().measure(constraints.copy(minWidth = 0, maxWidth = column))
-        val stamp = if (body.needsExternalTimestamp()) {
+        val stamp = if (externalTimestamp.value) {
             footerSlot.singleOrNull()?.measure(Constraints(maxWidth = column))
         } else null
 
@@ -326,6 +347,8 @@ private class MessageMenuHitArea {
     private var connectedBounds = Rect.Zero
     private var triggerBounds = Rect.Zero
     private var overBadge = false
+    var attachmentMenuHandled = false
+    val attachmentMenuOpened: () -> Unit = { attachmentMenuHandled = true }
     var rootOrigin = Offset.Zero
     var opensOnBadgeEnter = false
     var outsideFits by mutableStateOf(false)
@@ -382,7 +405,8 @@ private fun Modifier.trackMessageMenuPointer(
     hitArea: MessageMenuHitArea,
     onContextMenu: ((Offset) -> Unit)?,
     onBadgeEnter: (() -> Unit)?,
-): Modifier = pointerInput(hitArea, onContextMenu, onBadgeEnter) {
+    hasFileMenu: Boolean,
+): Modifier = pointerInput(hitArea, onContextMenu, onBadgeEnter, hasFileMenu) {
     awaitPointerEventScope {
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -397,8 +421,15 @@ private fun Modifier.trackMessageMenuPointer(
                 PointerEventType.Press -> if (onContextMenu != null && event.buttons.isSecondaryPressed &&
                     hitArea.containsMessage(mouse.position)
                 ) {
-                    mouse.consume()
-                    onContextMenu(hitArea.rootOrigin + mouse.position)
+                    hitArea.attachmentMenuHandled = false
+                    if (hasFileMenu) {
+                        // A file inside the bubble can handle the same press during the main pass.
+                        awaitPointerEvent(PointerEventPass.Final)
+                    }
+                    if (!hitArea.attachmentMenuHandled) {
+                        mouse.consume()
+                        onContextMenu(hitArea.rootOrigin + mouse.position)
+                    }
                 }
                 else -> Unit
             }
@@ -461,7 +492,7 @@ private fun auroraMessageActions(
             }
             if (message.failed && retryAllowed) {
                 val label = if (!touch && message is User) "Отправить повторно" else "Повторить отправку"
-                add(HbMenuAction(label, { onAction(AiStudioAction.Retry(message.id)) },
+                add(HbMenuAction(label, { onAction(AiStudioAction.Retry(message.id, (message as? User)?.revisionId)) },
                     glyph = HbIconGlyph.Retry, destructive = true))
             }
             if (touch && message is Reply && message.result != null) {

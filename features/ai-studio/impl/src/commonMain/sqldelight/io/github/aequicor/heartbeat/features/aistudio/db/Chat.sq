@@ -89,32 +89,115 @@ CREATE TABLE chat_entry (
 
 CREATE INDEX chat_entry_revision ON chat_entry(revision_id);
 
+CREATE TABLE prompt_submission (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (chat_id, message_id)
+);
+
 CREATE TABLE attachment (
     id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
     mime_type TEXT,
-    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
-    storage_ref TEXT NOT NULL,
-    presentation TEXT,
-    inline_text TEXT
+    size_bytes INTEGER NOT NULL CHECK (typeof(size_bytes) = 'integer' AND size_bytes >= 0),
+    original_uri TEXT CHECK (original_uri IS NULL OR length(original_uri) > 0),
+    managed_path TEXT CHECK (
+        managed_path IS NULL OR (
+            length(managed_path) > 0 AND substr(managed_path, 1, 1) <> '/'
+            AND instr(managed_path, char(92)) = 0 AND instr('/' || managed_path || '/', '/../') = 0
+        )
+    ),
+    presentation TEXT
 );
 
 CREATE INDEX attachment_presentation ON attachment(presentation);
+
+CREATE TABLE sent_attachment (
+    id TEXT NOT NULL PRIMARY KEY,
+    attachment_id TEXT NOT NULL REFERENCES attachment(id),
+    transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    uri TEXT NOT NULL CHECK (length(uri) > 0),
+    name TEXT NOT NULL,
+    description TEXT,
+    mime_type TEXT,
+    size_bytes INTEGER CHECK (size_bytes IS NULL OR (typeof(size_bytes) = 'integer' AND size_bytes >= 0)),
+    content_text TEXT,
+    content_blob BLOB,
+    CHECK (
+        (transfer_mode = 'resource_link' AND content_text IS NULL AND content_blob IS NULL)
+        OR (transfer_mode = 'resource' AND (
+            (typeof(content_text) = 'text' AND content_blob IS NULL)
+            OR (content_text IS NULL AND typeof(content_blob) = 'blob')
+        ))
+    )
+);
+
+CREATE INDEX sent_attachment_file ON sent_attachment(attachment_id);
+
+CREATE TRIGGER sent_attachment_immutable BEFORE UPDATE ON sent_attachment
+BEGIN
+    SELECT RAISE(ABORT, 'Immutable sent attachment');
+END;
 
 CREATE TABLE message_part (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     revision_id INTEGER NOT NULL REFERENCES message_revision(revision_id) ON DELETE CASCADE,
     parent_part_id INTEGER REFERENCES message_part(id) ON DELETE CASCADE,
-    position INTEGER NOT NULL,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
     kind TEXT NOT NULL CHECK (kind IN ('text', 'step', 'reasoning', 'tool_call', 'attachment')),
     title TEXT,
     status TEXT,
     body TEXT,
     tool_call_id TEXT,
-    attachment_id TEXT REFERENCES attachment(id),
     presentation TEXT,
-    UNIQUE (revision_id, position)
+    sent_attachment_id TEXT REFERENCES sent_attachment(id),
+    UNIQUE (revision_id, position),
+    CHECK ((kind = 'attachment') = (sent_attachment_id IS NOT NULL))
 );
+
+CREATE INDEX message_part_sent_attachment ON message_part(sent_attachment_id);
+
+-- Session membership can be removed independently of the sent snapshots used by history and retry.
+CREATE TABLE session_attachment (
+    chat_id TEXT NOT NULL REFERENCES chat(id) ON DELETE CASCADE,
+    snapshot_id TEXT NOT NULL REFERENCES sent_attachment(id) ON DELETE CASCADE,
+    PRIMARY KEY (chat_id, snapshot_id)
+);
+
+CREATE INDEX session_attachment_snapshot ON session_attachment(snapshot_id);
+
+CREATE TRIGGER register_inserted_attachment AFTER INSERT ON message_part
+WHEN new.sent_attachment_id IS NOT NULL
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+END;
+
+CREATE TRIGGER register_changed_attachment AFTER UPDATE OF sent_attachment_id ON message_part
+WHEN new.sent_attachment_id IS NOT NULL AND new.sent_attachment_id IS NOT old.sent_attachment_id
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+END;
+
+CREATE TRIGGER register_entry_attachments AFTER INSERT ON chat_entry
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT new.chat_id, sent_attachment_id FROM message_part
+    WHERE revision_id = new.revision_id AND sent_attachment_id IS NOT NULL;
+END;
+
+CREATE TRIGGER register_new_revision_attachments AFTER UPDATE OF revision_id ON chat_entry
+WHEN new.revision_id <> old.revision_id
+BEGIN
+    INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
+    SELECT new.chat_id, p.sent_attachment_id FROM message_part p
+    WHERE p.revision_id = new.revision_id AND p.sent_attachment_id IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM message_part previous
+          WHERE previous.revision_id = old.revision_id AND previous.sent_attachment_id = p.sent_attachment_id
+      );
+END;
 
 CREATE TRIGGER check_message_revision_parent AFTER INSERT ON message_revision
 WHEN EXISTS (
@@ -131,11 +214,9 @@ BEGIN
     SELECT RAISE(ABORT, 'Immutable message_revision identity');
 END;
 
-CREATE TRIGGER check_message_part_parent AFTER INSERT ON message_part
-WHEN EXISTS (
-    SELECT 1 FROM message_part child JOIN message_part parent ON parent.id = child.parent_part_id
-    WHERE child.id = last_insert_rowid()
-      AND (child.revision_id != parent.revision_id OR child.id = parent.id)
+CREATE TRIGGER check_message_part_parent BEFORE INSERT ON message_part
+WHEN new.parent_part_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM message_part WHERE id = new.parent_part_id AND revision_id = new.revision_id
 )
 BEGIN
     SELECT RAISE(ABORT, 'Invalid message_part parent');
@@ -162,6 +243,10 @@ END;
 chatForSession:
 SELECT id FROM chat WHERE session_id = :session_id;
 
+claimPromptSubmission:
+INSERT OR IGNORE INTO prompt_submission(chat_id, message_id)
+VALUES (:chat_id, :message_id);
+
 selectHistoryPage:
 SELECT e.position, e.predates_edit, r.*
 FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
@@ -176,7 +261,8 @@ WHERE e.chat_id = :chat_id AND r.display_id = :display_id;
 failedUserMessage:
 SELECT e.position, e.message_id, e.revision_id, r.presentation
 FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
-WHERE e.chat_id = :chat_id AND r.display_id = :display_id AND r.role = 'user' AND r.status = 'error';
+WHERE e.chat_id = :chat_id AND r.display_id = :display_id AND r.revision_id = :expected_revision
+  AND r.role = 'user' AND r.status = 'error';
 
 insertFirstRevision:
 INSERT INTO message_revision(message_id, role, status, created_at, display_id, presentation)
@@ -203,17 +289,21 @@ INSERT INTO message_revision(message_id, parent_revision_id, role, status, creat
 SELECT r.message_id, r.revision_id, r.role, 'draft', :created_at, r.display_id, :presentation
 FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
 WHERE e.chat_id = :chat_id AND e.position = :position AND r.revision_id = :failed_revision
-  AND r.role = 'user' AND r.status = 'error';
+  AND r.role = 'user' AND r.status = 'error' AND r.presentation = :checked_header;
 
 copyPromptParts:
-INSERT INTO message_part(revision_id, position, kind, title, status, body, attachment_id, presentation)
-SELECT :draft_revision, position, kind, title, status, body, attachment_id, presentation
+INSERT INTO message_part(revision_id, position, kind, title, status, body, presentation, sent_attachment_id)
+SELECT :draft_revision, position, kind, title, status, body, presentation, sent_attachment_id
 FROM message_part
 WHERE revision_id = :failed_revision AND parent_part_id IS NULL AND kind IN ('text', 'attachment');
 
 selectRevision:
 UPDATE chat_entry SET revision_id = :revision_id, predates_edit = 0
 WHERE chat_id = :chat_id AND position = :position;
+
+selectRetryRevision:
+UPDATE chat_entry SET revision_id = :revision_id, predates_edit = 0
+WHERE chat_id = :chat_id AND position = :position AND revision_id = :failed_revision;
 
 markLaterReplies:
 UPDATE chat_entry SET predates_edit = 1
@@ -227,10 +317,10 @@ markContextStale:
 UPDATE chat SET engine_context_stale = 1, context_used_tokens = NULL, context_size_tokens = NULL WHERE id = :chat_id;
 
 copyUserAttachments:
-INSERT INTO message_part(revision_id, position, kind, title, status, attachment_id, presentation)
+INSERT INTO message_part(revision_id, position, kind, title, status, presentation, sent_attachment_id)
 SELECT :revision_id, position - (SELECT min(position) FROM message_part
     WHERE revision_id = :parent_revision AND kind = 'attachment') + :first_position,
-    kind, title, status, attachment_id, presentation
+    kind, title, status, presentation, sent_attachment_id
 FROM message_part WHERE revision_id = :parent_revision AND kind = 'attachment';
 
 sharedRevision:
@@ -265,15 +355,15 @@ deletePartsFrom:
 DELETE FROM message_part WHERE revision_id = :revision_id AND position >= :position;
 
 updatePart:
-UPDATE message_part SET title = :title, status = :status, body = :body, attachment_id = :attachment_id,
-                        presentation = :presentation
+UPDATE message_part SET title = :title, status = :status, body = :body,
+                        presentation = :presentation, sent_attachment_id = :sent_attachment_id
 WHERE id = :id;
 
 insertPart:
 INSERT INTO message_part(revision_id, parent_part_id, position, kind, title, status, body, tool_call_id,
-                         attachment_id, presentation)
+                         presentation, sent_attachment_id)
 VALUES (:revision_id, :parent_part_id, :position, :kind, :title, :status, :body, :tool_call_id,
-        :attachment_id, :presentation);
+        :presentation, :sent_attachment_id);
 
 selectParts:
 SELECT * FROM message_part WHERE revision_id = :revision_id ORDER BY position;
@@ -285,33 +375,68 @@ SELECT id, revision_id, parent_part_id, position, kind, title, status,
            WHEN 'tool_call' THEN NULL
            ELSE body
        END AS body,
-       tool_call_id, attachment_id, presentation
+       tool_call_id, presentation, sent_attachment_id
 FROM message_part WHERE revision_id = :revision_id ORDER BY position;
 
 selectPartBody:
 SELECT body FROM message_part WHERE id = :id;
 
-findInlineAttachment:
-SELECT id FROM attachment
-WHERE presentation = :presentation AND inline_text = :content LIMIT 1;
+findAttachmentSnapshot:
+SELECT s.id FROM attachment a JOIN sent_attachment s ON s.attachment_id = a.id
+WHERE a.presentation = :presentation AND s.transfer_mode = :transfer_mode
+    AND (s.transfer_mode = 'resource' OR s.uri IS :link_uri)
+    AND a.original_uri IS :original_uri AND a.managed_path IS :managed_path
+    AND s.content_text IS :content_text AND s.content_blob IS :content_blob
+LIMIT 1;
 
-insertInlineAttachment:
-INSERT INTO attachment(id, name, mime_type, size_bytes, storage_ref, presentation, inline_text)
-VALUES (:id, :name, :mime_type, :size_bytes, :storage_ref, :presentation, :content);
+insertAttachment:
+INSERT INTO attachment(id, name, mime_type, size_bytes, original_uri, managed_path, presentation)
+VALUES (:id, :name, :mime_type, :size_bytes, :original_uri, :managed_path, :presentation);
 
-attachmentHeader:
-SELECT id, size_bytes, presentation FROM attachment WHERE id = :id;
+snapshotHeader:
+SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
+       coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path
+FROM sent_attachment s JOIN attachment a ON a.id = s.attachment_id WHERE s.id = :id;
+
+storedAttachmentSnapshot:
+SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
+       coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path,
+       s.content_text, s.content_blob
+FROM sent_attachment s JOIN attachment a ON a.id = s.attachment_id WHERE s.id = :id;
 
 chatFileHeaders:
-SELECT a.id, a.size_bytes, a.presentation
+SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
+       coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path,
+       coalesce((SELECT strftime('%Y-%m-%d %H:%M', nullif(r.created_at, 0) / 1000, 'unixepoch', 'localtime')
+                 FROM message_revision r WHERE r.message_id = e.message_id ORDER BY r.revision_id LIMIT 1), '') AS added_at
 FROM chat_entry e
 JOIN message_part p ON p.revision_id = e.revision_id
-JOIN attachment a ON a.id = p.attachment_id
+JOIN session_attachment catalog ON catalog.chat_id = e.chat_id AND catalog.snapshot_id = p.sent_attachment_id
+JOIN sent_attachment s ON s.id = catalog.snapshot_id
+JOIN attachment a ON a.id = s.attachment_id
 WHERE e.chat_id = :chat_id
 ORDER BY e.position DESC, p.position;
 
+removeCatalogAttachment:
+DELETE FROM session_attachment
+WHERE chat_id = :chat_id AND snapshot_id IN (
+    SELECT member.snapshot_id FROM session_attachment member
+    JOIN sent_attachment s ON s.id = member.snapshot_id
+    JOIN session_attachment target ON target.chat_id = member.chat_id
+    JOIN sent_attachment selected ON selected.id = target.snapshot_id AND selected.uri = s.uri
+    WHERE target.chat_id = :chat_id AND target.snapshot_id = :snapshot_id
+);
+
 selectAttachment:
 SELECT * FROM attachment WHERE id = :id;
+
+insertSentAttachment:
+INSERT INTO sent_attachment(
+    id, attachment_id, transfer_mode, uri, name, description, mime_type, size_bytes, content_text, content_blob
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectSentAttachment:
+SELECT * FROM sent_attachment WHERE id = :id;
 
 revisionForEdit:
 SELECT r.role, r.status, EXISTS (
@@ -351,5 +476,17 @@ WITH RECURSIVE retained(id) AS (
 )
 DELETE FROM message_revision WHERE revision_id NOT IN (SELECT id FROM retained);
 
+deleteUnreferencedSentAttachments:
+DELETE FROM sent_attachment
+WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE sent_attachment_id = sent_attachment.id);
+
 deleteUnreferencedAttachments:
-DELETE FROM attachment WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE attachment_id = attachment.id);
+DELETE FROM attachment
+WHERE NOT EXISTS (SELECT 1 FROM sent_attachment WHERE attachment_id = attachment.id)
+  AND NOT EXISTS (SELECT 1 FROM draft_attachment WHERE attachment_id = attachment.id);
+
+deleteUnusedDraftFiles:
+DELETE FROM attachment
+WHERE id IN :ids
+  AND NOT EXISTS (SELECT 1 FROM sent_attachment WHERE attachment_id = attachment.id)
+  AND NOT EXISTS (SELECT 1 FROM draft_attachment WHERE attachment_id = attachment.id);

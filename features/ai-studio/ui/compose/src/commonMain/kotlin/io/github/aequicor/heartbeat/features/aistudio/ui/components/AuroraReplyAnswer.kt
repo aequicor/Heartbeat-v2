@@ -144,10 +144,19 @@ private fun AuroraReplyContent(
     }
     val textPresent = reply.text.isNotEmpty()
     val simple = reply.historyContent?.plain != false
-    val inline = liveText == null && reply.inlineAnswerTime
-    val horizontalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageHorizontalInset
-    val verticalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.DesktopMessageVerticalInset
-    val compact = !touch && textPresent && reply.status == ReplyStatus.Completed
+    val inline = liveText == null && reply.status == ReplyStatus.Completed
+    val attachmentLayout = !touch && reply.hasFiles
+    val horizontalInset = when {
+        touch -> AuroraLayout.ContentInset
+        attachmentLayout -> AuroraLayout.MessageAttachmentInset
+        else -> AuroraLayout.DesktopMessageHorizontalInset
+    }
+    val verticalInset = when {
+        touch -> AuroraLayout.ContentInset
+        attachmentLayout -> AuroraLayout.MessageAttachmentInset
+        else -> AuroraLayout.DesktopMessageVerticalInset
+    }
+    val compact = !touch && !attachmentLayout && textPresent && reply.status == ReplyStatus.Completed
     val padding = Modifier.padding(
         start = horizontalInset, end = horizontalInset,
         top = if (compact) AuroraLayout.DesktopCompactMessageTopInset else verticalInset,
@@ -160,7 +169,8 @@ private fun AuroraReplyContent(
         bottomPadding = if (compact) AuroraLayout.DesktopCompactMessageBottomInset else verticalInset,
         status = { AuroraReplyStatus(reply, touch) },
     ) { onTextLayout ->
-        Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
+        val gap = if (attachmentLayout) AuroraLayout.MessageAttachmentGap else AuroraLayout.SmallGap
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             AuroraReplyBlocks(
                 reply, touch, onAction, current, liveText != null, selection,
                 viewportHeight, archiveReveal, onTextLayout,
@@ -235,9 +245,6 @@ internal fun AuroraWorkActivityDots(modifier: Modifier = Modifier) {
     }
 }
 
-private val Reply.inlineAnswerTime: Boolean
-    get() = status == ReplyStatus.Completed && !hasFiles && text.isNotEmpty()
-
 private val Reply.hasFiles: Boolean get() = result != null || artifacts.isNotEmpty()
 
 @Composable
@@ -291,6 +298,39 @@ private fun AuroraReplyBlocks(
             else -> Dp.Hairline
         }
     }
+    val result = reply.result
+    val attachmentTail = reply.status == ReplyStatus.Completed && !streaming && reply.text.isEmpty()
+    if (result != null) {
+        val open = { onAction(AiStudioAction.OpenResult(reply.id)) }
+        val attachment = Modifier.trackReplyArrivalBlock()
+        val measureTimestampTail = attachmentTail && reply.artifacts.isEmpty()
+        if (!touch) {
+            AuroraMessageAttachment(result, onAction, open, attachment, measureTimestampTail)
+        } else {
+            val issue = messageAttachmentSourceIssue(result)
+            if (issue?.blocksPreview(result) == true) {
+                AuroraUnavailableFileRow(result.name, issue, attachment)
+            } else {
+                val resultModifier = if (measureTimestampTail) attachment.attachmentTimestampTail() else attachment
+                AuroraControl(open, resultModifier, touch = true, background = AuroraColors.Canvas, round = false) {
+                    AuroraFileLabel(result, Modifier.padding(vertical = AuroraLayout.SmallGap))
+                }
+            }
+        }
+    }
+    if (touch) {
+        AuroraArtifactRows(reply.artifacts, reply.id, touch = true, onAction, width)
+    } else {
+        reply.artifacts.forEachIndexed { index, file ->
+            key(file.openId) {
+                AuroraMessageAttachment(
+                    file, onAction, { onAction(AiStudioAction.OpenArtifact(reply.id, file.id)) },
+                    Modifier.trackReplyArrivalBlock(),
+                    measureTimestampTail = attachmentTail && index == reply.artifacts.lastIndex,
+                )
+            }
+        }
+    }
     if (frame.preparing) {
         AuroraPreparingReply(width, preparingHeight)
     } else if (frame.text.isNotEmpty()) {
@@ -298,17 +338,6 @@ private fun AuroraReplyBlocks(
             frame, touch, selection, onTextLayout, width, preparingHeight, archiveReveal,
         )
     }
-    val result = reply.result
-    if (result != null) {
-        AuroraControl(
-            { onAction(AiStudioAction.OpenResult(reply.id)) },
-            modifier = Modifier.trackReplyArrivalBlock(),
-            touch = touch, background = AuroraColors.Canvas, round = false,
-        ) {
-            AuroraFileLabel(result, Modifier.padding(vertical = AuroraLayout.SmallGap))
-        }
-    }
-    AuroraArtifactRows(reply.artifacts, reply.id, touch, onAction, width)
 }
 
 @Composable
@@ -327,9 +356,23 @@ internal fun AuroraArtifactRows(
 
 @Composable
 private fun AuroraArtifactRow(file: File, replyId: String, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
+    val issue = messageAttachmentSourceIssue(file)
+    if (issue?.blocksPreview(file) == true) {
+        AuroraUnavailableFileRow(file.name, issue, Modifier.trackReplyArrivalBlock())
+        return
+    }
     val button = Modifier.size(if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget)
     Row(Modifier.fillMaxWidth().trackReplyArrivalBlock(), verticalAlignment = Alignment.CenterVertically) {
-        AuroraFileLabel(file, Modifier.weight(1f), attachmentTile = true)
+        AuroraAttachmentFileMenu(file.openId, touch, onAction, Modifier.weight(1f)) { trigger, _ ->
+            if (touch) AuroraFileLabel(file, trigger, attachmentTile = true) else {
+                AuroraControl(
+                    { onAction(AiStudioAction.OpenArtifact(replyId, file.id)) }, trigger,
+                    label = file.name, background = Color.Transparent, horizontalPadding = Dp.Hairline,
+                ) {
+                    AuroraFileLabel(file, attachmentTile = true)
+                }
+            }
+        }
         AuroraControl(
             { onAction(AiStudioAction.OpenArtifact(replyId, file.id)) },
             modifier = button,
@@ -469,7 +512,8 @@ private fun AuroraAnswerDocument(
         AuroraStreamingPlainText(document?.plainText ?: text, selection, onTextLayout, modifier)
     } else if (document == null) {
         SelectionContainer(state = selection) {
-            AuroraReplyText(text, modifier, style = auroraMessageStyle(), onTextLayout = onTextLayout)
+            val rendered = remember(text) { PromptLinkTransformation(text).rendered }
+            AuroraTimestampParagraph(rendered, modifier, auroraMessageStyle(), onTextLayout)
         }
     } else {
         AuroraRichDocument(

@@ -3,9 +3,13 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentCopyTarget
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.ImageIO
@@ -13,6 +17,8 @@ import javax.imageio.stream.MemoryCacheImageInputStream
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okio.buffer
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import okio.source
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Codec
@@ -24,17 +30,66 @@ import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Surface
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.uuid.Uuid
 
 @Inject
 internal class ChatAttachmentDataSourceImpl(
+    dataDirectory: String,
     @Named("io") private val ioDispatcher: CoroutineDispatcher,
 ) : ChatAttachmentDataSource {
 
+    private val managed = ManagedAttachmentFiles(dataDirectory.toPath() / "attachments", FileSystem.SYSTEM)
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun copyClipboard(reference: String, target: AttachmentCopyTarget): AttachmentFile =
+        withContext(ioDispatcher) {
+            val source = attachmentPath(reference)
+            managed.store(target, source.fileName.toString(), Files.probeContentType(source), source.toUri().toASCIIString()) {
+                Files.newInputStream(source).source()
+            }
+        }
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun reference(location: AttachmentLocation): String = withContext(ioDispatcher) {
+        when (location) {
+            is AttachmentLocation.Original -> {
+                val path = runCatching { Path.of(location.reference) }.getOrNull()
+                path?.takeIf { it.isAbsolute }?.normalize()?.toUri()?.toASCIIString() ?: location.reference
+            }
+            is AttachmentLocation.ManagedCopy -> managed.path(location).toNioPath().toUri().toASCIIString()
+        }
+    }
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun copyToSession(location: AttachmentLocation.ManagedCopy, target: AttachmentCopyTarget) =
+        withContext(ioDispatcher) { managed.copyToSession(location, target) }
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun discardCopy(location: AttachmentLocation.ManagedCopy) =
+        withContext(ioDispatcher) { managed.discard(location) }
+
+    @Throwable(Exception::class, CancellationException::class)
+    override suspend fun inspect(reference: String): AttachmentFile = withContext(ioDispatcher) {
+        val path = attachmentPath(reference)
+        AttachmentFile(
+            id = Uuid.random().toString(),
+            name = path.fileName.toString(),
+            location = AttachmentLocation.Original(path.toUri().toASCIIString()),
+            mimeType = Files.probeContentType(path),
+            sizeBytes = Files.size(path),
+        )
+    }
+
     @Throwable(Exception::class, CancellationException::class)
     override suspend fun read(reference: String, maxBytes: Int): Pair<String, ByteArray> = withContext(ioDispatcher) {
-        val path = Path.of(reference)
-        require(path.isAbsolute && Files.isRegularFile(path))
+        val path = attachmentPath(reference)
         path.fileName.toString() to Files.newInputStream(path).source().buffer().use { it.readAttachmentBytes(maxBytes) }
+    }
+
+    private fun attachmentPath(reference: String): Path {
+        val path = if (reference.startsWith("file:", ignoreCase = true)) Path.of(URI(reference)) else Path.of(reference)
+        require(path.isAbsolute && Files.isRegularFile(path))
+        return path.normalize()
     }
 
     @Throwable(Exception::class, CancellationException::class)

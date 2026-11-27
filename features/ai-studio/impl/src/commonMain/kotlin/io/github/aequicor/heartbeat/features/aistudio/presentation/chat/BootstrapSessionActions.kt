@@ -18,6 +18,7 @@ internal suspend fun submitSessionBootstrap(
     val selection = bootstrap.picker.confirmed ?: return
     if (bootstrap.project != action.project || bootstrap.picker.step != null || picker == null) return
     if (bootstrap.operation != null || bootstrap.id in screen.value.importingAttachmentsFor) return
+    if (bootstrap.attachments.any { it.hasInvalidImageExtension() }) return
     screen.update {
         it.copy(sessionBootstrap = bootstrap.copy(operation = SessionBootstrapState.Operation.CreatingSession))
     }

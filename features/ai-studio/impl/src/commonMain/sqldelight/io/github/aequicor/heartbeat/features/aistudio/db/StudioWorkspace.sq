@@ -9,6 +9,9 @@ SELECT metadata FROM studio_workspace WHERE singleton = 1;
 upsertWorkspaceMetadata:
 INSERT OR REPLACE INTO studio_workspace(singleton, metadata) VALUES (1, :metadata);
 
+initializeWorkspaceMetadata:
+INSERT OR IGNORE INTO studio_workspace(singleton, metadata) VALUES (1, :metadata);
+
 selectWorkspaceSessions:
 SELECT session.id, session.project_id, project.alias, session.title, session.status,
        session.parent_session_id, session.is_expanded, session.workspace_summary, session.work_state,
@@ -23,6 +26,14 @@ SELECT session.workspace_payload, session.work_state, chat.engine_id, chat.model
        chat.context_used_tokens, chat.context_size_tokens
 FROM studio_session AS session LEFT JOIN chat ON chat.session_id = session.id
 WHERE session.id = :id;
+
+nextStoredWorkspacePayload:
+SELECT id, project_id, workspace_payload FROM studio_session
+WHERE (:after_id IS NULL OR id > :after_id) AND workspace_payload IS NOT NULL
+ORDER BY id LIMIT 1;
+
+retireStoredWorkspaceHistory:
+UPDATE studio_session SET workspace_payload = :payload WHERE id = :id;
 
 importWorkspaceSession:
 INSERT INTO studio_session(

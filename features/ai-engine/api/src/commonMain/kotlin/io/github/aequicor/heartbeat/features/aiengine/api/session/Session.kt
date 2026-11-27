@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 public interface Session {
     public val key: SessionKey
 
+    public val supportsEmbeddedResources: Boolean get() = false
+
     /** The current status and message window. A newly opened session shows its latest partition. */
     public val state: StateFlow<SessionState>
 

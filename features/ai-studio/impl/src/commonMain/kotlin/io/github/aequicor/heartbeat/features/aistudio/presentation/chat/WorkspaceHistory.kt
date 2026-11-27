@@ -1,8 +1,11 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatHistoryInteractor
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Access
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Delivery
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.DetailFormat
@@ -22,6 +25,8 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlin.Throws as Throwable
+import kotlin.coroutines.cancellation.CancellationException
 
 internal class WorkspaceHistory(
     private val metadata: StudioWorkspaceMetadata,
@@ -42,11 +47,12 @@ internal class WorkspaceHistory(
         return chat.withHistory(page)
     }
 
-    override suspend fun listFiles(sessionId: String): List<File> =
-        withContext(defaultDispatcher) { history.files(sessionId).getOrThrow().map(ChatAttachment::display) }
-
     override suspend fun openFile(attachmentId: String): File =
         withContext(defaultDispatcher) { history.file(attachmentId).getOrThrow().display() }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String) =
+        withContext(defaultDispatcher) { history.removeUnavailableAttachment(sessionId, snapshotId).getOrThrow() }
 
     override suspend fun readPartBody(partId: Long): String =
         withContext(defaultDispatcher) { history.partBody(partId).getOrThrow() }
@@ -60,11 +66,17 @@ private fun AuroraChat.withHistory(page: ChatHistoryEntry.Page): AuroraChat {
 
 internal fun ChatAttachment.display() = File(id, name, kind, content,
     date?.let { FileDate(it.year, it.month, it.day, it.time) }, storageId, size,
-    image?.let { ImageAttachment(it.mimeType, it.thumbnail) }, mimeType, base64Encoded)
+    image?.let { ImageAttachment(it.mimeType, it.thumbnail) }, mimeType, base64Encoded,
+    originalUri = source?.location?.originalUri,
+    managedCopyPath = (source?.location as? AttachmentLocation.ManagedCopy)?.relativePath,
+    sourceSizeBytes = source?.sizeBytes,
+    description = source?.description,
+    deferredReading = transferMode == AttachmentTransferMode.ResourceLink,
+)
 
 internal fun ChatHistoryEntry.Message.display(): Message = when (this) {
     is ChatHistoryEntry.User -> User(id, time, text, files.map(ChatAttachment::display), Delivery.valueOf(delivery.name),
-        error, answers, Scenario.valueOf(scenario.name), promptId, Access.valueOf(access.name), retryAllowed)
+        error, answers, Scenario.valueOf(scenario.name), promptId, Access.valueOf(access.name), retryAllowed, revisionId)
     is ChatHistoryEntry.Reply -> Reply(id, time, steps.map { step ->
         Step(step.id, step.title, step.details, StepStatus.valueOf(step.status.name), step.events.map { it.display() },
             step.result, step.activeTitle)

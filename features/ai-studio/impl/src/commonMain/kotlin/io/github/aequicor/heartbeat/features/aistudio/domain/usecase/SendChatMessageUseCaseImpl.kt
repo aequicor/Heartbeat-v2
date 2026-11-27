@@ -2,6 +2,13 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.usecase
 
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatConversationDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SentAttachmentMetadata
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SentMessageAttachment
+import kotlin.io.encoding.Base64
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
@@ -33,40 +40,111 @@ import kotlin.uuid.Uuid
 internal class SendChatMessageUseCaseImpl(
     private val conversations: ChatConversationDataSource,
     private val prepareChatContext: PrepareChatContextUseCase,
+    private val files: ChatAttachmentDataSource,
 ) : SendChatMessageUseCase {
 
     @Throwable(CancellationException::class)
     override suspend fun invoke(
         sessionId: String,
+        messageId: String,
         text: String,
         attachments: List<ChatAttachment>,
+        expectedDraftRevision: String,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runCatching {
         val prompt = text.trim()
         require(ChatPrompt.canSend(prompt, attachments.isNotEmpty(), hasActiveTurn = false))
-        val user = newMessage(prompt, attachments)
-        withContext(NonCancellable) { conversations.save(sessionId, listOf(user)) }
-        deliver(sessionId, user, started, update)
+        val conversation = if (attachments.isNotEmpty()) {
+            prepareChatContext(sessionId).getOrElse { failure ->
+                if (failure is CancellationException) throw failure
+                throw AttachmentTransferException("Не удалось открыть сессию агента для отправки вложений", failure)
+            }
+        } else null
+        val snapshots = if (conversation == null) emptyList() else attachments.map { prepareAttachment(it, conversation) }
+        val userFiles = attachments.mapIndexed { index, file ->
+            val resource = snapshots.getOrNull(index) as? SentMessageAttachment.Resource ?: return@mapIndexed file
+            val content = resource.content
+            file.copy(
+                content = when (content) {
+                    is SentMessageAttachment.Resource.Content.Text -> content.value
+                    is SentMessageAttachment.Resource.Content.Binary -> content.base64
+                },
+                size = resource.metadata.sizeBytes,
+                mimeType = resource.metadata.mimeType,
+                base64Encoded = content is SentMessageAttachment.Resource.Content.Binary,
+                image = file.image?.takeIf { it.mimeType == resource.metadata.mimeType },
+            )
+        }
+        currentCoroutineContext().ensureActive()
+        val user = withContext(NonCancellable) {
+            conversations.commitUserPrompt(
+                sessionId, newMessage(messageId, prompt, userFiles).copy(sentAttachments = snapshots), expectedDraftRevision,
+            )
+        } ?: return@runCatching
+        deliver(sessionId, user, started, update, conversation)
     }.rethrowCancellation()
 
     @Throwable(CancellationException::class)
     override suspend fun retry(
         sessionId: String,
         messageId: String,
+        expectedFailedRevisionId: Long,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runCatching {
-        val user = withContext(NonCancellable) { conversations.reserveRetry(sessionId, messageId) }
+        val user = withContext(NonCancellable) {
+            conversations.reserveRetry(sessionId, messageId, expectedFailedRevisionId)
+        }
             ?: throw ChatTurnException("Повторная отправка недоступна")
         deliver(sessionId, user, started, update)
     }.rethrowCancellation()
+
+    @Throwable(AttachmentTransferException::class, CancellationException::class)
+    private suspend fun prepareAttachment(
+        attachment: ChatAttachment,
+        conversation: ChatEngineConversationDataSource,
+    ): SentMessageAttachment {
+        val file = attachment.source ?: throw AttachmentTransferException("Не удалось найти источник «${attachment.name}»")
+        val uri = conversation.resolveAttachmentUri(file, attachment.transferMode)
+        val metadata = SentAttachmentMetadata(file.id, file.name, file.description, file.mimeType, file.sizeBytes)
+        return try {
+            if (attachment.transferMode == AttachmentTransferMode.ResourceLink) {
+                val current = files.inspect(files.reference(file.location))
+                return SentMessageAttachment.ResourceLink(
+                    metadata.copy(mimeType = current.mimeType ?: file.mimeType, sizeBytes = current.sizeBytes),
+                    uri,
+                )
+            }
+
+            val bytes = files.read(files.reference(file.location), ChatImage.MaxBytes).second
+            if (bytes.size > ChatImage.MaxBytes) {
+                throw AttachmentTransferException("Файл «${file.name}» превышает лимит встроенного ресурса")
+            }
+            val image = ChatImage.identify(bytes)
+            val text = if (image == null) {
+                runCatching { bytes.decodeToString(throwOnInvalidSequence = true) }
+                    .getOrNull()?.takeUnless { '\u0000' in it }
+            } else null
+            val content = if (text != null) SentMessageAttachment.Resource.Content.Text(text)
+            else SentMessageAttachment.Resource.Content.Binary(Base64.encode(bytes))
+            val mimeType = image?.mimeType ?: file.mimeType ?: if (text != null) "text/plain" else "application/octet-stream"
+            SentMessageAttachment.Resource(metadata.copy(mimeType = mimeType, sizeBytes = bytes.size.toLong()), uri, content)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AttachmentTransferException) {
+            throw failure
+        } catch (failure: Exception) {
+            throw AttachmentTransferException("Не удалось прочитать «${file.name}»", failure)
+        }
+    }
 
     private suspend fun deliver(
         sessionId: String,
         user: ChatHistoryEntry.User,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
+        preparedConversation: ChatEngineConversationDataSource? = null,
     ) {
         var turn = ChatTurn(user = user)
         val replyId = Uuid.random().toString()
@@ -80,7 +158,7 @@ internal class SendChatMessageUseCaseImpl(
         try {
             currentCoroutineContext().ensureActive()
             update(turn)
-            val conversation = prepareChatContext(sessionId).getOrThrow()
+            val conversation = preparedConversation ?: prepareChatContext(sessionId).getOrThrow()
             if (started(conversation)) {
                 dispatchStarted = true
                 coroutineScope {
@@ -101,7 +179,7 @@ internal class SendChatMessageUseCaseImpl(
                     }
 
                     val result = runCatching {
-                        conversation.send(user.text, user.files) { progress ->
+                        conversation.send(user.text, user.sentAttachments) { progress ->
                             checkpointLock.withLock {
                                 turn = turn.updated(replyId, progress)
                                 if (!turn.running) {
@@ -209,8 +287,8 @@ internal class SendChatMessageUseCaseImpl(
         }
     }
 
-    private fun newMessage(text: String, attachments: List<ChatAttachment>) = ChatHistoryEntry.User(
-        id = Uuid.random().toString(), time = Clock.System.now().toString().substringAfter('T').take(5),
+    private fun newMessage(id: String, text: String, attachments: List<ChatAttachment>) = ChatHistoryEntry.User(
+        id = id, time = Clock.System.now().toString().substringAfter('T').take(5),
         text = text, promptId = null, files = attachments, delivery = ChatHistoryEntry.Delivery.Sending,
         error = null, answers = false, scenario = ChatHistoryEntry.Scenario.Standard, access = ChatHistoryEntry.Access.Workspace,
         retryAllowed = false,
@@ -271,6 +349,7 @@ private fun ChatTurn.updated(replyId: String, progress: ChatEngineTurn): ChatTur
         ChatEngineTurn.Status.Rejected -> {
             val error = when (progress.rejection) {
                 ChatEngineTurn.Rejection.ImageUnsupported -> "Выбранная модель или подключение не поддерживает изображения"
+                ChatEngineTurn.Rejection.EmbeddedResourceUnsupported -> "Движок не поддерживает встроенные ресурсы"
                 null -> "Движок отклонил сообщение"
             }
             return interrupted(error, retryAllowed = true)

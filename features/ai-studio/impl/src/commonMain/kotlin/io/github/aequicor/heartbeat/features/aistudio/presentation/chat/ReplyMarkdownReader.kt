@@ -156,15 +156,21 @@ internal class ReplyMarkdownReader(
         val label = node.children.firstOrNull { it.type == Element.LINK_LABEL }
         val display = node.children.firstOrNull { it.type == Element.LINK_TEXT } ?: label
         val destination = if (node.type == Element.INLINE_LINK) {
-            node.children.firstOrNull { it.type == Element.LINK_DESTINATION }?.let(source::text)
+            node.children.firstOrNull { it.type == Element.LINK_DESTINATION || it.type == Element.AUTOLINK }
+                ?.let(source::text)
                 ?.let { LinkMap.normalizeDestination(it, true).toString() }.orEmpty()
         } else {
             val reference = label ?: display
             reference?.let { links.getLinkInfo(source.text(it))?.destination?.toString() }
                 ?: return listOf(ReplyInline(source.text(node)))
         }
-        return display?.children.orEmpty().drop(1).dropLast(1).flatMap(::inline)
-            .map { it.copy(url = destination.safeLink()) }
+        val runs = display?.children.orEmpty().drop(1).dropLast(1).flatMap(::inline)
+        val url = destination.safeLink()
+        if (destination.isAttachmentReference()) {
+            val labelText = runs.joinToString("") { it.text }
+            if (labelText.isNotBlank()) return listOf(ReplyInline(labelText, attachmentReference = true))
+        }
+        return runs.map { it.copy(url = url) }
     }
 }
 
@@ -188,6 +194,10 @@ private fun String.safeLink(): String? = takeIf {
     val scheme = substringBefore(':').lowercase()
     scheme in setOf("http", "https", "mailto") && ':' in this && none { char -> char.isISOControl() }
 }
+
+private fun String.isAttachmentReference(): Boolean =
+    (startsWith("file:", ignoreCase = true) || startsWith("content:", ignoreCase = true)) &&
+        substringAfter(':').isNotBlank() && none(Char::isISOControl)
 
 private fun List<ReplyInline>.lines(): List<List<ReplyInline>> = buildList {
     val current = mutableListOf<ReplyInline>()

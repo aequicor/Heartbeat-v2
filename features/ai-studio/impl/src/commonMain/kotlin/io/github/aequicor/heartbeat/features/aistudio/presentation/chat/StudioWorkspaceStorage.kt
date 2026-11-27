@@ -14,10 +14,10 @@ internal interface StudioWorkspaceStorage : StudioWorkspaceMetadata {
     suspend fun loadOlder(chat: AuroraChat): AuroraChat
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
-    suspend fun listFiles(sessionId: String): List<File>
+    suspend fun openFile(attachmentId: String): File
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
-    suspend fun openFile(attachmentId: String): File
+    suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String)
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun readPartBody(partId: Long): String

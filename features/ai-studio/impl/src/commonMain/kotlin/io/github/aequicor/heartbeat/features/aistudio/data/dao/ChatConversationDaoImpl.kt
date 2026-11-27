@@ -10,6 +10,8 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConfigRecor
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatConversationRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.SentAttachmentRecord
+import io.github.aequicor.heartbeat.features.aistudio.db.ChatDraftQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
 import kotlinx.coroutines.CoroutineDispatcher
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSecurityMode
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
@@ -119,12 +122,45 @@ internal class ChatConversationDaoImpl(
     }
 
     @Throwable(DaoException::class, CancellationException::class)
-    override suspend fun reserveRetry(sessionId: String, messageId: String): ChatEntryRecord? = withContext(ioDispatcher) {
+    override suspend fun commitUserPrompt(
+        sessionId: String,
+        message: ChatTurnMessageRecord,
+        expectedDraftRevision: String,
+    ): ChatEntryRecord? = withContext(ioDispatcher) {
+        writeLock.withLock {
+            accessStudioDatabase("Commit user prompt") {
+                check(message.role == "user" && message.status == "draft" && message.expectedRevisionId == null)
+                val history = ChatQueries(connection.driver)
+                val chat = history.chatForSession(sessionId).executeAsOne()
+                val owner = draftOwnership.claim()
+                history.transactionWithResult {
+                    val claimed = history.claimPromptSubmission(chat, message.id).value
+                    if (claimed == 0L || history.selectMessage(chat, message.id).executeAsOneOrNull() != null) {
+                        return@transactionWithResult null
+                    }
+                    val draftFiles = ChatDraftQueries(connection.driver).consumeDraft(
+                        sessionId, expectedDraftRevision, owner?.toString(), message,
+                    )
+                    val revision = history.writeTurnMessage(chat, message, owner)
+                    if (draftFiles.isNotEmpty()) history.deleteUnusedDraftFiles(draftFiles)
+                    val saved = history.selectMessage(chat, message.id).executeAsOne()
+                    history.readDelivery(revision, saved.position, saved.message_id, saved.presentation)
+                }
+            }
+        }
+    }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun reserveRetry(
+        sessionId: String,
+        messageId: String,
+        expectedFailedRevisionId: Long,
+    ): ChatEntryRecord? = withContext(ioDispatcher) {
         writeLock.withLock {
             accessStudioDatabase("Reserve prompt retry") {
                 val history = ChatQueries(connection.driver)
                 val chat = history.chatForSession(sessionId).executeAsOne()
-                val failed = history.failedUserMessage(chat, messageId).executeAsOneOrNull()
+                val failed = history.failedUserMessage(chat, messageId, expectedFailedRevisionId).executeAsOneOrNull()
                     ?: return@accessStudioDatabase null
                 val meta = Json.parseToJsonElement(failed.presentation).jsonObject
                 if (meta["retryAllowed"] != JsonPrimitive(true)) return@accessStudioDatabase null
@@ -135,29 +171,68 @@ internal class ChatConversationDaoImpl(
                 history.transactionWithResult {
                     val inserted = history.insertRetryDraft(
                         Clock.System.now().toEpochMilliseconds(), header, chat, failed.position, failed.revision_id,
+                        failed.presentation,
                     ).value
                     if (inserted != 1L) return@transactionWithResult null
                     val revision = history.lastInsertedId().executeAsOne()
                     history.copyPromptParts(revision, failed.revision_id)
-                    history.selectRevision(revision, chat, failed.position)
-                    val parts = history.selectParts(revision).executeAsList().map { part ->
-                        ChatEntryRecord.Part(
-                            part.id, null, part.kind, part.title, part.body, part.presentation,
-                            part.attachment_id?.let { history.fullAttachment(it, forRetry = true) }, deferred = false,
-                        )
-                    }
-                    ChatEntryRecord(failed.position, revision, failed.message_id, false, "user", header, parts)
+                    check(history.selectRetryRevision(revision, chat, failed.position, failed.revision_id).value == 1L)
+                    history.readDelivery(revision, failed.position, failed.message_id, header)
                 }
             }
         }
     }
 }
 
-private fun ChatQueries.writeTurnMessage(chatId: String, message: ChatTurnMessageRecord, owner: Uuid?) {
+private fun ChatQueries.readDelivery(revision: Long, position: Long, messageId: Long, header: String): ChatEntryRecord {
+    val parts = selectParts(revision).executeAsList().map { part ->
+        val snapshot = part.sent_attachment_id?.let { snapshotId ->
+            selectSentAttachment(snapshotId).executeAsOne().let {
+                SentAttachmentRecord(
+                    it.transfer_mode, it.uri, it.name, it.description, it.mime_type,
+                    it.size_bytes, it.content_text, it.content_blob,
+                )
+            }
+        }
+        check(part.kind != "attachment" || snapshot != null) { "Missing attachment snapshot at part ${part.id}" }
+        ChatEntryRecord.Part(
+            part.id, part.parent_part_id, part.kind, part.title, part.body, part.presentation,
+            part.sent_attachment_id?.let { fileHeader(it) }, deferred = false, snapshot = snapshot,
+        )
+    }
+    return ChatEntryRecord(position, revision, messageId, false, "user", header, parts)
+}
+
+private fun ChatDraftQueries.consumeDraft(
+    sessionId: String,
+    revision: String,
+    writer: String?,
+    message: ChatTurnMessageRecord,
+): List<String> {
+    val stored = selectDraft(sessionId).executeAsOneOrNull()
+    check(stored?.revision == revision) { "Черновик изменился до отправки" }
+    val files = selectDraftFiles(sessionId).executeAsList()
+    check(stored.body.isNotBlank() || files.isNotEmpty()) { "Черновик уже отправлен" }
+    val prompt = message.parts.firstOrNull { it.kind == "text" }?.body.orEmpty()
+    val submittedFileIds = message.parts.mapNotNull { part ->
+        part.attachment?.let { Json.parseToJsonElement(it.header).jsonObject.getValue("id").jsonPrimitive.content }
+    }
+    check(stored.body.trim() == prompt && files.map { it.file_id } == submittedFileIds) {
+        "Сообщение отличается от сохранённого черновика"
+    }
+    check(clearSubmittedDraft(sessionId, revision, writer).value == 1L)
+    deleteDraftFiles(sessionId)
+    return files.map { it.attachment_id }
+}
+
+private fun ChatQueries.writeTurnMessage(chatId: String, message: ChatTurnMessageRecord, owner: Uuid?): Long {
     val header = if (message.status == "draft" && owner != null) message.header.withDraftOwner(owner) else message.header
     // A write as the first statement lets SQLite wait for another writer before taking a read snapshot.
     insertFirstRevision(message.role, message.status, Clock.System.now().toEpochMilliseconds(), message.id, header, chatId)
     val previous = selectMessage(chatId, message.id).executeAsOneOrNull()
+    check(message.expectedRevisionId == null || previous?.revision_id == message.expectedRevisionId) {
+        "The prompt revision is no longer selected"
+    }
     val revision = if (previous == null) {
         lastInsertedId().executeAsOne().also { appendEntry(chatId, it) }
     } else {
@@ -165,26 +240,20 @@ private fun ChatQueries.writeTurnMessage(chatId: String, message: ChatTurnMessag
         updateDraft(header, message.status, previous.revision_id)
         previous.revision_id
     }
+    // Delivery updates only change the header. The reserved prompt parts stay immutable.
+    if (message.expectedRevisionId != null) return revision
+
     val remaining = ArrayDeque(selectParts(revision).executeAsList())
     val partIds = ArrayList<Long>(message.parts.size)
     for ((index, part) in message.parts.withIndex()) {
+        val snapshotId = part.attachment?.let { writeAttachmentSnapshot(it, part.snapshot) }
         partIds += syncPart(
             remaining, Message_part(
                 0, revision, part.parent?.let { partIds[it] }, index.toLong(), part.kind, part.title,
-                part.status, part.body, part.toolId, part.attachment?.let { recordAttachment(it) }, part.header,
+                part.status, part.body, part.toolId, part.header, snapshotId,
             ),
         )
     }
     if (remaining.isNotEmpty()) deletePartsFrom(revision, remaining.first().position)
-}
-
-private fun ChatQueries.recordAttachment(file: ChatTurnMessageRecord.Attachment): String {
-    val existing = file.existingId ?: findInlineAttachment(file.header, file.content).executeAsOneOrNull()
-    if (existing != null) return existing
-    val id = Uuid.random().toString()
-    insertInlineAttachment(
-        id, file.name, file.mimeType, file.size,
-        "sqlite:attachment/$id", file.header, file.content,
-    )
-    return id
+    return revision
 }

@@ -20,5 +20,5 @@ public data class SessionTurn(
         Failed,
     }
 
-    public enum class Failure { RateLimited, ImageUnsupported }
+    public enum class Failure { RateLimited, ImageUnsupported, EmbeddedResourceUnsupported }
 }

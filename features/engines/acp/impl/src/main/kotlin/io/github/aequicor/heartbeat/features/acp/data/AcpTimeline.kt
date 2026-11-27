@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.nio.file.Path
 
 @OptIn(UnstableApi::class)
 internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
@@ -61,14 +62,14 @@ internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
     fun toolCall(update: SessionUpdate.ToolCall) {
         updateTool(
             update.toolCallId.value, update.title, update.status?.name, update.content, update.kind,
-            update.rawInput, update.locations.takeIf { it.isNotEmpty() },
+            update.rawInput, update.locations.takeIf { it.isNotEmpty() }, update.rawOutput,
         )
     }
 
     fun toolCallUpdate(update: SessionUpdate.ToolCallUpdate): SessionTimelineItem.ToolCall =
         updateTool(
             update.toolCallId.value, update.title, update.status?.name, update.content, update.kind,
-            update.rawInput, update.locations,
+            update.rawInput, update.locations, update.rawOutput,
         )
 
     fun cancelTools() {
@@ -95,6 +96,7 @@ internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
         kind: ToolKind?,
         rawInput: JsonElement?,
         locations: List<ToolCallLocation>?,
+        rawOutput: JsonElement?,
     ): SessionTimelineItem.ToolCall {
         val id = "tool-$toolId"
         val index = items.indexOfFirst { it.id == id }
@@ -108,6 +110,9 @@ internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
         val hasInput = rawInput != null && rawInput != JsonNull
         val toolStatus = status?.let(ToolCallStatus::valueOf) ?: old?.status ?: ToolCallStatus.PENDING
         val reportedOutput = output?.map(ToolCallContent::toToolOutput) ?: old?.output.orEmpty()
+        val savedImage = if (toolTitle == "Image generation" && toolStatus == ToolCallStatus.COMPLETED &&
+            reportedOutput.none { it is ToolOutput.Content && it.value !is SessionContent.Text }
+        ) rawOutput.savedImage() else null
         if (hasInput) {
             rawInput.fileChange(toolTitle)?.let { fileChanges[id] = it }
         }
@@ -125,6 +130,7 @@ internal class AcpTimeline(private val dshShellOutput: Boolean = false) {
             confirmedDiff != null -> listOf(confirmedDiff)
             receipt != null && previousDiff != null && old?.status == ToolCallStatus.COMPLETED &&
                 receipt.path == previousDiff.path && receipt.scope == previousDiff.scope -> old.output
+            savedImage != null -> reportedOutput + ToolOutput.Content(savedImage)
             else -> reportedOutput
         }
         val tool = SessionTimelineItem.ToolCall(
@@ -179,6 +185,13 @@ private fun JsonElement?.stringField(name: String): String? =
 
 private fun JsonElement?.textField(name: String): String? =
     ((this as? JsonObject)?.get(name) as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+// Codex ACP v1 can report a saved image only in rawOutput when inline bytes are unavailable.
+private fun JsonElement?.savedImage(): SessionContent.Resource? {
+    val path = stringField("savedPath") ?: return null
+    if (!runCatching { Path.of(path).isAbsolute }.getOrDefault(false)) return null
+    return SessionContent.Resource(path, "image/png", null)
+}
 
 private fun JsonElement?.fileChange(title: String): FileChange? {
     if (stringField("file_path") == null) return null

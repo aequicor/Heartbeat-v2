@@ -247,6 +247,7 @@ internal class AcpAiEngine(
             key, currentKey, active.protocol, scope, replay,
             dshAgent = active.agent.agentInfo?.name == "deepseek-harness-acp",
             imagePrompts = active.agent.agentCapabilities.promptCapabilities.image,
+            embeddedContext = active.agent.agentCapabilities.promptCapabilities.embeddedContext,
         ) { status ->
             sessionStatuses.update { if (key in it) it + (key to status) else it }
         }

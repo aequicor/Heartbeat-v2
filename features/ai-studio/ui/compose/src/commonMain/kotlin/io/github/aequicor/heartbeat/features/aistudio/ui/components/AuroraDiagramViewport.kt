@@ -47,16 +47,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEvent
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.node.ModifierNodeElement
-import androidx.compose.ui.node.PointerInputModifierNode
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ScrollAxisRange
 import androidx.compose.ui.semantics.contentDescription
@@ -65,10 +59,8 @@ import androidx.compose.ui.semantics.scrollBy
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.verticalScrollAxisRange
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as Colors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as Layout
-import kotlin.math.pow
 
 @Composable
 internal fun AuroraDiagramViewport(
@@ -86,7 +78,7 @@ internal fun AuroraDiagramViewport(
         .scrollable(vertical, Orientation.Vertical)
         .pointerHoverIcon(PointerIcon.Hand)
     BoxWithConstraints(
-        Modifier.fillMaxSize().clipToBounds().then(DiagramWheelInput(onZoomAt)).then(gestures),
+        Modifier.fillMaxSize().clipToBounds().controlWheelZoom(onZoomAt).then(gestures),
         contentAlignment = Alignment.Center,
     ) {
         val density = LocalDensity.current
@@ -218,22 +210,4 @@ private fun Modifier.diagramScrollbarKeys(
         else -> return@onKeyEvent false
     }
     scrollDiagram(delta, current, onPan)
-}
-
-private data class DiagramWheelInput(val onZoom: (Float, Offset) -> Unit) : ModifierNodeElement<DiagramWheelNode>() {
-    override fun create() = DiagramWheelNode(onZoom)
-    override fun update(node: DiagramWheelNode) { node.onZoom = onZoom }
-}
-
-private class DiagramWheelNode(var onZoom: (Float, Offset) -> Unit) : Modifier.Node(), PointerInputModifierNode {
-    override fun onPointerEvent(pointerEvent: PointerEvent, pass: PointerEventPass, bounds: IntSize) {
-        if (pass != PointerEventPass.Initial || pointerEvent.type != PointerEventType.Scroll ||
-            !pointerEvent.keyboardModifiers.isCtrlPressed) return
-        val change = pointerEvent.changes.firstOrNull { !it.isConsumed && it.scrollDelta.y != 0f }
-        if (change != null) {
-            onZoom(1.25f.pow(-change.scrollDelta.y), change.position - Offset(bounds.width / 2f, bounds.height / 2f))
-            pointerEvent.changes.forEach { it.consume() }
-        }
-    }
-    override fun onCancelPointerInput() = Unit
 }

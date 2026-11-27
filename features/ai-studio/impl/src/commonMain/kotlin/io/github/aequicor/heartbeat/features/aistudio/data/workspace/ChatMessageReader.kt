@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.fileHeader
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.fullAttachment
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.selectHistoryParts
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.AgentArtifactPart
@@ -34,17 +36,19 @@ internal fun ChatQueries.readMessage(revision: Long, header: String, headersOnly
     }
 }
 
-internal fun storedFileHeader(id: String, size: Long, metadata: String?): File =
-    Json.decodeFromString<File>(checkNotNull(metadata)).copy(storedAttachmentId = id, storedSizeBytes = size)
-
-internal fun ChatQueries.readFile(id: String): File {
-    val file = selectAttachment(id).executeAsOne()
-    return Json.decodeFromString<File>(checkNotNull(file.presentation)).copy(content = checkNotNull(file.inline_text))
-}
-
 private fun ChatQueries.readAttachmentPart(part: Message_part, headersOnly: Boolean): File {
-    val id = checkNotNull(part.attachment_id)
-    return if (headersOnly) attachmentHeader(id, ::storedFileHeader).executeAsOne() else readFile(id)
+    val id = checkNotNull(part.sent_attachment_id)
+    val snapshot = if (headersOnly) fileHeader(id) else fullAttachment(id)
+    val file = Json.decodeFromString<File>(checkNotNull(snapshot.header))
+    return file.copy(
+        content = snapshot.content.orEmpty(),
+        storedAttachmentId = id.takeIf { snapshot.content == null },
+        storedSizeBytes = snapshot.size.takeIf { snapshot.content == null },
+        base64Encoded = snapshot.binarySnapshot || file.base64Encoded,
+        deferredReading = snapshot.transferMode == "resource_link",
+        originalUri = snapshot.originalUri,
+        managedCopyPath = snapshot.managedPath,
+    )
 }
 
 private fun ChatQueries.readStep(part: Message_part, parts: Map<Long?, List<Message_part>>, headersOnly: Boolean): Step {

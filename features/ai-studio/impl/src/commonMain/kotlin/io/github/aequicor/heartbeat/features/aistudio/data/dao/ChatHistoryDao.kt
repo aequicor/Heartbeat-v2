@@ -21,6 +21,9 @@ internal interface ChatHistoryDao {
     suspend fun file(id: String): ChatEntryRecord.Attachment
 
     @Throwable(DaoException::class, CancellationException::class)
+    suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String)
+
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun partBody(id: Long): String
 
     @Throwable(DaoException::class, CancellationException::class)

@@ -48,10 +48,25 @@ internal class ChatConversationDataSourceImpl(private val dao: ChatConversationD
     }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
-    override suspend fun reserveRetry(sessionId: String, messageId: String): ChatHistoryEntry.User? =
+    override suspend fun commitUserPrompt(
+        sessionId: String,
+        message: ChatHistoryEntry.User,
+        expectedDraftRevision: String,
+    ): ChatHistoryEntry.User? =
         accessStudioRepository {
-            dao.reserveRetry(sessionId, messageId)?.let {
+            dao.commitUserPrompt(sessionId, message.toTurnRecord(), expectedDraftRevision)?.let {
                 it.toDomain(keepAttachmentReference = true).message as ChatHistoryEntry.User
             }
         }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun reserveRetry(
+        sessionId: String,
+        messageId: String,
+        expectedFailedRevisionId: Long,
+    ): ChatHistoryEntry.User? = accessStudioRepository {
+        dao.reserveRetry(sessionId, messageId, expectedFailedRevisionId)?.let {
+            it.toDomain(keepAttachmentReference = true).message as ChatHistoryEntry.User
+        }
+    }
 }

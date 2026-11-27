@@ -1,11 +1,24 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import io.github.aequicor.heartbeat.designsystem.components.HbMenu
+import io.github.aequicor.heartbeat.designsystem.components.HbMenuAction
+import io.github.aequicor.heartbeat.designsystem.components.HbMenuPresentation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_upload_file
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_attachment_upload
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal expect fun rememberAttachmentFileLauncher(
@@ -35,14 +48,51 @@ internal fun AuroraAttachmentPickerButton(
             target = null
         },
     )
-    AuroraAttachButton(
-        touch,
-        onClick = {
-            target = draftId
-            open()
-        },
+    AuroraAttachmentUploadMenu(
+        draftId = draftId,
+        touch = touch,
         enabled = enabled && target == null,
-        demo = false,
         importing = importing,
-    )
+    ) {
+        target = draftId
+        open()
+    }
+}
+
+@Composable
+internal fun AuroraAttachmentUploadMenu(
+    draftId: String,
+    touch: Boolean,
+    enabled: Boolean,
+    importing: Boolean,
+    onUpload: () -> Unit,
+) {
+    var expanded by remember(draftId, enabled, importing) { mutableStateOf(false) }
+    HbMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        actions = listOf(
+            HbMenuAction(
+                label = stringResource(Res.string.chat_attachment_upload),
+                onClick = onUpload,
+                leadingIcon = {
+                    Image(
+                        painterResource(Res.drawable.attachment_upload_file),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+            ),
+        ),
+        presentation = if (touch) HbMenuPresentation.AuroraTouchMessage else HbMenuPresentation.AuroraAttachment,
+    ) { modifier ->
+        AuroraAttachButton(
+            touch = touch,
+            onClick = { expanded = true },
+            modifier = modifier,
+            enabled = enabled,
+            demo = false,
+            importing = importing,
+        )
+    }
 }

@@ -8,9 +8,22 @@ internal data class ChatEntryRecord(
     data class Part(
         val id: Long, val parent: Long?, val kind: String, val title: String?, val body: String?,
         val header: String?, val attachment: Attachment?, val deferred: Boolean,
+        val snapshot: SentAttachmentRecord? = null,
     )
 
-    data class Attachment(val id: String, val size: Long, val header: String?, val content: String?, val mimeType: String? = null)
+    data class Attachment(
+        val id: String,
+        val size: Long,
+        val header: String?,
+        val content: String?,
+        val mimeType: String? = null,
+        val transferMode: String? = null,
+        val uri: String? = null,
+        val binarySnapshot: Boolean = false,
+        val originalUri: String? = null,
+        val managedPath: String? = null,
+        val addedAt: String? = null,
+    )
 
     data class Revision(val role: String, val status: String, val hasAttachments: Boolean)
 }

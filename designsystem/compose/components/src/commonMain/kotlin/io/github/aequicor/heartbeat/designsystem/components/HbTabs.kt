@@ -23,6 +23,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -56,6 +57,9 @@ fun <T> HbTabs(
     modifier: Modifier = Modifier,
     tabLabel: (T) -> String = { it.toString() },
     enabled: Boolean = true,
+    selectedContentColor: Color = HbTheme.colors.text.primary,
+    unselectedContentColor: Color = HbTheme.colors.text.secondary,
+    indicatorColor: Color = HbTheme.colors.accent.foreground,
 ) {
     val focusRequesters = remember(tabs.size) { List(tabs.size) { FocusRequester() } }
     var focusedIndex by remember(tabs.size) { mutableStateOf(-1) }
@@ -89,6 +93,12 @@ fun <T> HbTabs(
                 enabled = enabled,
                 onClick = { onSelect(tab) },
                 onFocus = { focusedIndex = index },
+                contentColor = when {
+                    !enabled -> selectedContentColor.copy(alpha = HbEffects.DisabledContent)
+                    tab == selected -> selectedContentColor
+                    else -> unselectedContentColor
+                },
+                indicatorColor = indicatorColor,
                 modifier = Modifier.focusRequester(focusRequesters[index]),
             )
         }
@@ -102,15 +112,12 @@ private fun HbTab(
     enabled: Boolean,
     onClick: () -> Unit,
     onFocus: () -> Unit,
+    contentColor: Color,
+    indicatorColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val colors = HbTheme.colors
     var focused by remember { mutableStateOf(false) }
-    val contentColor = when {
-        !enabled -> colors.text.primary.copy(HbEffects.DisabledContent)
-        selected -> colors.text.primary
-        else -> colors.text.secondary
-    }
 
     Column(
         modifier = modifier
@@ -133,7 +140,7 @@ private fun HbTab(
                     val stroke = TAB_INDICATOR.toPx()
                     val y = size.height - stroke / 2f
                     drawLine(
-                        color = colors.accent.foreground,
+                        color = indicatorColor,
                         start = Offset(0f, y),
                         end = Offset(size.width, y),
                         strokeWidth = stroke,

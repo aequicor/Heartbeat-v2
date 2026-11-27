@@ -2,9 +2,13 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.toDomain
 
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatImage
 import kotlinx.serialization.json.Json
@@ -15,6 +19,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlin.coroutines.cancellation.CancellationException
 
 internal fun ChatEntryRecord.toDomain(keepAttachmentReference: Boolean = false): ChatHistoryEntry = decodeHistory {
@@ -36,6 +41,8 @@ internal fun ChatEntryRecord.toDomain(keepAttachmentReference: Boolean = false):
             meta.enumOrNull<ChatHistoryEntry.Scenario>("scenario") ?: ChatHistoryEntry.Scenario.Standard,
             meta.enumOrNull<ChatHistoryEntry.Access>("access") ?: ChatHistoryEntry.Access.Workspace,
             retryAllowed = meta["retryAllowed"]?.jsonPrimitive?.boolean ?: false,
+            revisionId = revision,
+            sentAttachments = roots.toDeliverySnapshots(),
         )
         "assistant" -> {
             val status = meta.enumOrNull<ChatHistoryEntry.ReplyStatus>("status") ?: ChatHistoryEntry.ReplyStatus.Working
@@ -55,6 +62,13 @@ internal fun ChatEntryRecord.toDomain(keepAttachmentReference: Boolean = false):
     }
     ChatHistoryEntry(position, revision, message, predatesEdit, content)
 }
+
+private fun List<ChatEntryRecord.Part>.toDeliverySnapshots() =
+    if (none { it.snapshot != null }) emptyList()
+    else filter { it.kind == "attachment" }.map { part ->
+        val file = checkNotNull(part.attachment).toDomain()
+        checkNotNull(part.snapshot) { "Missing snapshot at message part ${part.id}" }.toDomain(file.id)
+    }
 
 private fun List<ChatHistoryEntry.Step>.groupLegacyWork(working: Boolean): List<ChatHistoryEntry.Step> {
     if (none { it.isLegacyCall }) return this
@@ -162,19 +176,37 @@ internal fun ChatEntryRecord.Attachment.toDomain(keepReference: Boolean = false)
     }
     val hasReference = content == null || keepReference
     val imageMeta = meta["image"] as? JsonObject
-    val base64Encoded = (meta["base64Encoded"] as? JsonPrimitive)?.boolean == true
+    val base64Encoded = binarySnapshot || (meta["base64Encoded"] as? JsonPrimitive)?.boolean == true
     val mediaType = mimeType ?: (imageMeta?.get("mimeType") as? JsonPrimitive)?.contentOrNull
         ?: (meta["mimeType"] as? JsonPrimitive)?.contentOrNull
     val format = ChatImage.forMimeType(mediaType)
     val image = if (format != null && imageMeta != null) {
         ChatAttachment.Image(format.mimeType, (imageMeta["thumbnail"] as? JsonPrimitive)?.contentOrNull)
     } else null
+    val fileId = meta.getValue("id").jsonPrimitive.content
+    val name = meta.getValue("name").jsonPrimitive.content
+    val location = managedPath?.let { AttachmentLocation.ManagedCopy(it, originalUri) }
+        ?: originalUri?.let { AttachmentLocation.Original(it) }
     ChatAttachment(
-        meta.getValue("id").jsonPrimitive.content, meta.getValue("name").jsonPrimitive.content,
-        meta.getValue("kind").jsonPrimitive.content, content.orEmpty(), date,
+        fileId, name,
+        meta.getValue("kind").jsonPrimitive.content, content.orEmpty(), date ?: addedAt?.toAttachmentDate(),
         id.takeIf { hasReference }, size.takeIf { hasReference || image != null }, image,
-        mimeType = (meta["mimeType"] as? JsonPrimitive)?.contentOrNull,
+        mimeType = mediaType,
         base64Encoded = base64Encoded,
+        source = location?.let {
+            AttachmentFile(fileId, name, it, meta.string("description"),
+                mediaType, meta["sourceSizeBytes"]?.jsonPrimitive?.longOrNull)
+        },
+        transferMode = if (transferMode == "resource_link") {
+            AttachmentTransferMode.ResourceLink
+        } else AttachmentTransferMode.Resource,
+    )
+}
+
+private fun String.toAttachmentDate(): ChatAttachment.Date? {
+    if (length != 16) return null
+    return ChatAttachment.Date(
+        substring(0, 4).toInt(), substring(5, 7).toInt(), substring(8, 10).toInt(), substring(11),
     )
 }
 

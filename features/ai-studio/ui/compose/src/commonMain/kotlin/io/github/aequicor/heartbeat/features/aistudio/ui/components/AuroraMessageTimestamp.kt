@@ -3,7 +3,10 @@ package io.github.aequicor.heartbeat.features.aistudio.ui.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.FirstBaseline
@@ -25,12 +28,15 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
-private val ExternalTime = HorizontalAlignmentLine(::maxOf)
+@Suppress("CompositionLocalAllowlist", "NoNonPrivateGlobalVariables")
+internal val LocalAuroraExternalTimestamp = staticCompositionLocalOf<MutableState<Boolean>?> { null }
+
 private val TimestampTailBaseline = HorizontalAlignmentLine(::maxOf)
 private val TimestampTailTop = HorizontalAlignmentLine(::maxOf)
 private val TimestampTailRight = VerticalAlignmentLine(::maxOf)
-
-internal fun Placeable.needsExternalTimestamp(): Boolean = this[ExternalTime] != AlignmentLine.Unspecified
+private val AttachmentInfoStart = VerticalAlignmentLine(::minOf)
+private val AttachmentInfoEnd = VerticalAlignmentLine(::maxOf)
+private val AttachmentInfoBottom = HorizontalAlignmentLine(::maxOf)
 
 @Composable
 internal fun AuroraMessageTimestamp(
@@ -43,6 +49,12 @@ internal fun AuroraMessageTimestamp(
     content: @Composable ((TextLayoutResult) -> Unit) -> Unit,
 ) {
     val text = remember { MessageTextGeometry() }
+    val externalTimestamp = LocalAuroraExternalTimestamp.current
+    if (externalTimestamp != null) {
+        DisposableEffect(externalTimestamp) {
+            onDispose { externalTimestamp.value = false }
+        }
+    }
     Layout(
         contents = listOf(
             { Box { content(text::update) } },
@@ -62,15 +74,12 @@ internal fun AuroraMessageTimestamp(
         } else delivery?.width ?: 0
         val width = constraints.constrainWidth(maxOf(bodyWidth, footerWidth))
         val fittingStamp = stamp?.takeIf { it.width <= width }
-        // The message row uses this marker to place a wide stamp on its own opaque surface.
-        val alignment: Map<AlignmentLine, Int> = if (stamp != null && fittingStamp == null) {
-            mapOf(ExternalTime to 0)
-        } else {
-            mapOf()
-        }
+        // Reading an inherited alignment line here would force Compose to place descendants
+        // while LazyColumn is still measuring this row.
+        externalTimestamp?.value = stamp != null && fittingStamp == null
         placeMessageContent(
             width, body, delivery, fittingStamp, inlineAllowed, textLayout.takeIf { textSetsWidth },
-            alignment, bottomPadding?.roundToPx(),
+            bottomPadding?.roundToPx(),
         )
     }
 }
@@ -82,7 +91,6 @@ private fun MeasureScope.placeMessageContent(
     stamp: Placeable?,
     inlineAllowed: Boolean,
     inlineText: TextLayoutResult?,
-    alignment: Map<AlignmentLine, Int>,
     bottomPadding: Int?,
 ): MeasureResult {
     val gap = AuroraLayout.Space.roundToPx()
@@ -90,7 +98,9 @@ private fun MeasureScope.placeMessageContent(
     val stampX = width - (stamp?.width ?: 0)
     val stampInline = if (stamp != null && inlineAllowed) {
         val tail = body.timestampTail() ?: inlineText?.timestampTail(body[LastBaseline])
-        tail?.stampTop(stamp, stampX, ceil(AuroraLayout.Space.toPx()).toInt(), body.height)
+        val inlineGap = ceil(AuroraLayout.Space.toPx()).toInt()
+        if (tail != null) tail.stampTop(stamp, stampX, inlineGap, body.height)
+        else body.attachmentStampTop(stamp, stampX, inlineGap, rowGap)
     } else {
         null
     }
@@ -111,11 +121,29 @@ private fun MeasureScope.placeMessageContent(
     val footerBottom = maxOf(stamp?.let { stampY + it.height } ?: 0, delivery?.let { statusY + it.height } ?: 0)
     val bottom = bottomPadding ?: if (stampInline != null || footerBottom == 0) gap else rowGap
     val height = maxOf(body.height, footerBottom) + bottom
-    return layout(width, height, alignmentLines = alignment) {
+    return layout(width, height) {
         body.place(0, 0)
         delivery?.place(0, statusY)
         stamp?.place(stampX, stampY)
     }
+}
+
+internal fun Modifier.attachmentTimestampTail(): Modifier = layout { measurable, constraints ->
+    val info = measurable.measure(constraints)
+    val lines = mapOf(
+        AttachmentInfoStart to 0,
+        AttachmentInfoEnd to info.width,
+        AttachmentInfoBottom to info.height,
+    )
+    layout(info.width, info.height, alignmentLines = lines) { info.place(0, 0) }
+}
+
+private fun Placeable.attachmentStampTop(stamp: Placeable, stampX: Int, gap: Int, rowGap: Int): Int? {
+    val start = this[AttachmentInfoStart]
+    if (start == AlignmentLine.Unspecified || stampX < start) return null
+    val top = height - stamp.height
+    val clearsInfo = top >= this[AttachmentInfoBottom] + rowGap || stampX >= this[AttachmentInfoEnd] + gap
+    return top.takeIf { it >= 0 && clearsInfo }
 }
 
 @Composable

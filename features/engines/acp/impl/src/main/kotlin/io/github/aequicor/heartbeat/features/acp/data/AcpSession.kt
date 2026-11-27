@@ -53,8 +53,11 @@ internal class AcpSession(
     private val replay: Boolean,
     private val dshAgent: Boolean,
     private val imagePrompts: Boolean,
+    private val embeddedContext: Boolean,
     private val onStatus: (SessionStatus) -> Unit,
 ) : Session {
+
+    override val supportsEmbeddedResources: Boolean get() = embeddedContext
 
     private data class Permission(
         val request: PendingPermission,
@@ -222,6 +225,13 @@ internal class AcpSession(
         publish()
     }
 
+    private fun rejectPrompt(event: SessionEvent.SendPrompt, failure: SessionTurn.Failure, message: String) {
+        turn = event.turnId?.let { SessionTurn(it, SessionTurn.Status.Rejected, failure = failure) }
+        promptAccepted = false
+        status = SessionStatus.Failed(message)
+        publish()
+    }
+
     @Suppress("TooGenericExceptionCaught") // The session reports RPC and transport failures through its state.
     private fun sendPrompt(event: SessionEvent.SendPrompt) {
         if (status != SessionStatus.Idle && status !is SessionStatus.Failed) return
@@ -238,23 +248,21 @@ internal class AcpSession(
             publish()
             return
         }
-        val textBlocks = (listOf(event.text).filter(String::isNotBlank) + event.attachments).map { ContentBlock.Text(it) }
-        val content = textBlocks + event.promptFiles.map { file ->
-            when (file) {
-                is SessionEvent.PromptFile.Text -> ContentBlock.Text(file.content)
-                is SessionEvent.PromptFile.Image -> ContentBlock.Image(file.base64, file.mimeType)
+        when {
+            !imagePrompts && event.promptFiles.any { it is SessionEvent.PromptFile.Image } -> {
+                rejectPrompt(event, SessionTurn.Failure.ImageUnsupported, "Движок не поддерживает изображения в запросе")
+                return
+            }
+            !embeddedContext && event.promptFiles.any { it is SessionEvent.PromptFile.Resource } -> {
+                rejectPrompt(
+                    event, SessionTurn.Failure.EmbeddedResourceUnsupported,
+                    "Движок не поддерживает встроенные ресурсы в запросе",
+                )
+                return
             }
         }
+        val content = event.toAcpPromptContent()
         if (content.isEmpty()) return
-        if (!imagePrompts && event.promptFiles.any { it is SessionEvent.PromptFile.Image }) {
-            turn = event.turnId?.let {
-                SessionTurn(it, SessionTurn.Status.Rejected, failure = SessionTurn.Failure.ImageUnsupported)
-            }
-            promptAccepted = false
-            status = SessionStatus.Failed("Движок не поддерживает изображения в запросе")
-            publish()
-            return
-        }
         val generation = ++promptGeneration
         status = SessionStatus.Running
         promptAccepted = false

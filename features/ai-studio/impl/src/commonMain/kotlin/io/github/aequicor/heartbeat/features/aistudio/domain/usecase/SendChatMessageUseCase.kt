@@ -11,8 +11,10 @@ internal interface SendChatMessageUseCase {
     @Throwable(CancellationException::class)
     suspend operator fun invoke(
         sessionId: String,
+        messageId: String,
         text: String,
         attachments: List<ChatAttachment>,
+        expectedDraftRevision: String,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>
@@ -21,6 +23,7 @@ internal interface SendChatMessageUseCase {
     suspend fun retry(
         sessionId: String,
         messageId: String,
+        expectedFailedRevisionId: Long,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>

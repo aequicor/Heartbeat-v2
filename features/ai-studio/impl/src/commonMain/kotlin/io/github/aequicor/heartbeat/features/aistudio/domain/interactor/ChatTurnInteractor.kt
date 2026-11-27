@@ -12,8 +12,10 @@ internal interface ChatTurnInteractor {
     @Throwable(CancellationException::class)
     suspend fun send(
         sessionId: String,
+        messageId: String,
         text: String,
         attachments: List<ChatAttachment>,
+        expectedDraftRevision: String,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>
@@ -22,6 +24,7 @@ internal interface ChatTurnInteractor {
     suspend fun retry(
         sessionId: String,
         messageId: String,
+        expectedFailedRevisionId: Long,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>

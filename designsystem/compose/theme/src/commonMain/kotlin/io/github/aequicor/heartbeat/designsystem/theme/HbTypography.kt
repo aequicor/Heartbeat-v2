@@ -69,6 +69,9 @@ object HbTypography {
     val WorkspaceLabel: TextStyle
         @Composable get() = Detail.copy(fontSize = 10.sp, lineHeight = 12.sp)
 
+    val CompactFileMetadata: TextStyle
+        @Composable get() = Metadata.copy(fontSize = 11.sp, lineHeight = 14.sp)
+
     val Detail: TextStyle
         @Composable
         @ReadOnlyComposable

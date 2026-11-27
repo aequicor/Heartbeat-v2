@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.absolutePadding
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -33,9 +33,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
@@ -59,6 +61,7 @@ import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.components.HbAppName
 import io.github.aequicor.heartbeat.designsystem.components.HbBrandLogo
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
+import io.github.aequicor.heartbeat.designsystem.components.HbTabs
 import io.github.aequicor.heartbeat.designsystem.components.HbDesktopFocusIndication
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
@@ -152,7 +155,15 @@ internal fun AuroraFiles(
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxHeight().background(AuroraColors.DesktopCanvas)) {
+    var category by remember(state.chat?.id) { mutableStateOf(FileCategory.All) }
+    val groups = remember(state.fileGroups, category) {
+        if (category == FileCategory.All) state.fileGroups else state.fileGroups.mapNotNull { group ->
+            val files = group.files.filter { it.isMedia == (category == FileCategory.Media) }
+            group.copy(files = files).takeIf { files.isNotEmpty() }
+        }
+    }
+    val canvas = if (touch) AuroraColors.DesktopCanvas else AuroraColors.ViewerSurface
+    Column(modifier.fillMaxHeight().background(canvas)) {
         AuroraFilesHeader(state.fileSearchVisible, touch, onAction)
         if (state.fileSearchVisible) {
             val focus = remember { FocusRequester() }
@@ -164,13 +175,27 @@ internal fun AuroraFiles(
             }
             SideEffect(focus) { focus.requestFocus() }
         }
-        if (state.fileGroups.isEmpty()) {
-            AuroraText(if (state.fileSearch.isBlank()) "В диалоге пока нет файлов" else "Файлы не найдены",
-                Modifier.padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.Space),
-                color = AuroraColors.Muted,
+        if (!touch) {
+            HbTabs(
+                FileCategory.entries, category, { category = it },
+                modifier = Modifier.fillMaxWidth().fileHeaderDivider().padding(horizontal = AuroraLayout.Space),
+                tabLabel = FileCategory::label,
+                selectedContentColor = AuroraColors.DesktopInk,
+                unselectedContentColor = AuroraColors.Muted,
+                indicatorColor = AuroraColors.DesktopPrimaryAction,
             )
+        }
+        if (groups.isEmpty()) {
+            val empty = state.fileSearch.isBlank() && category == FileCategory.All
+            Box(Modifier.weight(1f)) {
+                AuroraText(
+                    if (empty) "В диалоге пока нет файлов" else "Файлы не найдены",
+                    Modifier.padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.Space),
+                    color = AuroraColors.Muted,
+                )
+            }
         } else {
-            AuroraFileList(state.fileGroups, onAction, Modifier.weight(1f))
+            AuroraFileList(groups, touch, state.chat?.id, state.attachmentLoadFailures, onAction, Modifier.weight(1f))
         }
     }
 }
@@ -178,6 +203,9 @@ internal fun AuroraFiles(
 @Composable
 private fun AuroraFileList(
     groups: List<FileGroup>,
+    touch: Boolean,
+    sessionId: String?,
+    attachmentLoadFailures: Set<String>,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -192,27 +220,55 @@ private fun AuroraFileList(
                 )
             }
             items(group.files, key = { "file:${it.id}" }) { file ->
-                AuroraFileListRow(file, { onAction(AiStudioAction.OpenFile(file.id)) })
+                val issue = attachmentFileIssue(file.originalUri, file.managedCopyPath, file.id in attachmentLoadFailures)
+                if (issue != null) {
+                    AuroraUnavailableFileRow(
+                        file.name, issue,
+                        Modifier.padding(horizontal = AuroraLayout.SmallGap)
+                            .padding(bottom = AuroraLayout.SmallGap),
+                        onRemove = sessionId?.takeIf { file.canRemove }?.let { id ->
+                            { onAction(AiStudioAction.RemoveUnavailableFile(id, file.id)) }
+                        },
+                    )
+                } else AuroraAttachmentFileMenu(file.id, touch, onAction) { trigger, openMenu ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        AuroraFileListRow(file, touch, { onAction(AiStudioAction.OpenFile(file.id)) }, trigger.weight(1f))
+                        if (!touch) {
+                            AuroraHeaderButton(
+                                "Действия файла ${file.name}", openMenu, Modifier.width(32.dp),
+                                contentPadding = PaddingValues(horizontal = 7.dp),
+                            ) {
+                                HbIcon(HbIconGlyph.More, tint = AuroraColors.Muted, size = 18.dp)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AuroraFileListRow(file: FileRow, onOpen: () -> Unit) {
+private fun AuroraFileListRow(file: FileRow, touch: Boolean, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val metadata = HbTypography.Metadata.copy(color = AuroraColors.DesktopWorkMuted)
+    val tile = if (!touch && file.image != null) 52.dp else AuroraLayout.FileTile
+    val height = if (touch) AuroraLayout.FileRow else if (file.image != null) 68.dp else 60.dp
     AuroraHeaderButton(
-        file.accessibilityLabel, onOpen, Modifier.fillMaxWidth(),
-        height = AuroraLayout.FileRow, radius = AuroraLayout.ControlGap,
+        file.accessibilityLabel, onOpen, modifier.fillMaxWidth(),
+        height = height, radius = AuroraLayout.ControlGap,
+        contentPadding = PaddingValues(start = if (touch) Dp.Hairline else AuroraLayout.Space),
     ) {
         Box(
-            Modifier.size(AuroraLayout.FileTile)
-                .background(AuroraColors.FileTypeSurface, RoundedCornerShape(AuroraLayout.ControlGap)),
+            Modifier.size(tile)
+                .background(
+                    if (touch) AuroraColors.FileTypeSurface else AuroraColors.FilePaneTile,
+                    RoundedCornerShape(AuroraLayout.ControlGap),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             val extension = file.extension
             AuroraAttachmentThumbnail(file.image, Modifier.fillMaxSize()) {
-                if (extension == null) {
+                if (!touch || extension == null) {
                     HbIcon(HbIconGlyph.Document, tint = AuroraColors.DesktopWorkMuted, size = AuroraLayout.Glyph)
                 } else {
                     BasicText(extension, style = metadata, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -232,34 +288,31 @@ private fun AuroraFileListRow(file: FileRow, onOpen: () -> Unit) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             BasicText(file.size, style = metadata)
-            file.date?.let { BasicText(it, style = metadata) }
+            if (touch) file.date?.let { BasicText(it, style = metadata) }
         }
     }
 }
 
 @Composable
 private fun AuroraFilesHeader(searchVisible: Boolean, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
-    val height = if (touch) AuroraLayout.FileViewerHeader else AuroraLayout.FilePaneHeader
+    val height = if (touch) AuroraLayout.FileViewerHeader else 52.dp
     val target = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget
     val glyph = if (touch) AuroraLayout.RequestGlyph else AuroraLayout.Glyph
     val titleStyle = HbTypography.PaneTitle.copy(color = AuroraColors.DesktopInk)
     Row(
         Modifier.fillMaxWidth().heightIn(min = height)
-            .then(if (touch) Modifier.fileHeaderDivider() else Modifier)
-            .padding(horizontal = AuroraLayout.Space),
+            .fileHeaderDivider()
+            .padding(start = if (touch) AuroraLayout.Space else 18.dp, end = AuroraLayout.Space),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap),
     ) {
-        AuroraHeaderButton(
-            if (touch) "Вернуться к диалогу" else "Свернуть панель файлов",
-            { onAction(AiStudioAction.ToggleFiles(false)) },
-            height = target, contentPadding = PaddingValues(horizontal = (target - glyph) / 2),
-        ) {
-            AiStudioIcon(
-                if (touch) AiStudioGlyph.Back else AiStudioGlyph.CollapseFiles,
-                Modifier.size(glyph),
-                if (touch) AuroraColors.FileBackInk else AuroraColors.ViewerCloseInk,
-            )
+        if (touch) {
+            AuroraHeaderButton(
+                "Вернуться к диалогу", { onAction(AiStudioAction.ToggleFiles(false)) },
+                height = target, contentPadding = PaddingValues(horizontal = (target - glyph) / 2),
+            ) {
+                AiStudioIcon(AiStudioGlyph.Back, Modifier.size(glyph), AuroraColors.FileBackInk)
+            }
         }
         BasicText("Файлы", Modifier.weight(1f), titleStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
         AuroraHeaderButton(
@@ -269,6 +322,14 @@ private fun AuroraFilesHeader(searchVisible: Boolean, touch: Boolean, onAction: 
         ) {
             HbIcon(if (searchVisible) HbIconGlyph.Close else HbIconGlyph.Search,
                 tint = AuroraColors.DesktopWorkMuted, size = glyph)
+        }
+        if (!touch) {
+            AuroraHeaderButton(
+                "Свернуть панель файлов", { onAction(AiStudioAction.ToggleFiles(false)) },
+                height = target, contentPadding = PaddingValues(horizontal = (target - glyph) / 2),
+            ) {
+                HbIcon(HbIconGlyph.Close, tint = AuroraColors.DesktopWorkMuted, size = glyph)
+            }
         }
     }
 }
@@ -310,12 +371,10 @@ internal fun AuroraViewer(
     file: File,
     touch: Boolean,
     previews: AuroraDiagramPreviews? = null,
+    onSaveEditedImage: ((ByteArray) -> Unit)? = null,
+    copyError: Boolean = false,
     onClose: () -> Unit,
 ) {
-    if (!touch && file.image != null) {
-        AuroraDesktopImageViewer(file, onClose)
-        return
-    }
     AuroraPanelDialog(onClose) {
         key(file.id) {
             CompositionLocalProvider(LocalDiagramPreviews provides previews) {
@@ -326,7 +385,10 @@ internal fun AuroraViewer(
                     val title = if (file.image == null) "${file.kind} · ${file.name}" else file.name
                     AuroraViewerHeader(title, touch, onClose)
                     if (file.image != null) {
-                        AuroraImagePreview(file, Modifier.weight(1f).fillMaxWidth())
+                        if (onSaveEditedImage != null) AuroraEditImageButton(file, onSaveEditedImage, "Сохранить копию")
+                        if (copyError) AuroraText("Не удалось сохранить копию изображения", color = AuroraColors.Error)
+                        AuroraImageDescription(file.description)
+                        AuroraImagePreview(file, Modifier.weight(1f).fillMaxWidth().padding(AuroraLayout.PaneGap))
                     } else {
                         AuroraTextPreview(file, touch, Modifier.weight(1f))
                     }
@@ -337,31 +399,14 @@ internal fun AuroraViewer(
 }
 
 @Composable
-private fun AuroraDesktopImageViewer(file: File, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        BoxWithConstraints(contentAlignment = Alignment.Center) {
-            val width = minOf(maxWidth * .74f, 1056.dp)
-            val height = minOf(maxHeight * .82f, 726.dp)
-            Column(
-                Modifier.size(width, height)
-                    .background(AuroraColors.ViewerSurface, RoundedCornerShape(AuroraLayout.MessageRadius)),
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.Space),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BasicText(
-                        file.name, Modifier.weight(1f), style = HbTypography.PaneTitle.copy(color = AuroraColors.DesktopInk),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    AuroraControl(onClose, touch = false, background = Color.Transparent, round = false) {
-                        AuroraText("Закрыть", small = true)
-                    }
-                }
-                AuroraImagePreview(file, Modifier.weight(1f).fillMaxWidth())
-            }
-        }
-    }
+internal fun AuroraImageDescription(description: String?) {
+    if (description.isNullOrBlank()) return
+    BasicText(
+        description,
+        Modifier.fillMaxWidth().heightIn(max = 96.dp).verticalScroll(rememberScrollState())
+            .padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.ControlGap),
+        HbTypography.Caption.copy(color = AuroraColors.DesktopInk),
+    )
 }
 
 @Composable
@@ -386,11 +431,11 @@ private fun AuroraTextPreview(file: File, touch: Boolean, modifier: Modifier) {
 
 @Composable
 @Suppress("InjectDispatcher") // Image decoding belongs to the viewer's lifetime.
-private fun AuroraImagePreview(file: File, modifier: Modifier) {
+internal fun AuroraImagePreview(file: File, modifier: Modifier) {
     val result by produceState<Result<ImageBitmap>?>(null, file.content) {
         value = withContext(Dispatchers.Default) { file.decodeAttachmentImage() }
     }
-    Box(modifier.padding(AuroraLayout.PaneGap), contentAlignment = Alignment.Center) {
+    Box(modifier, contentAlignment = Alignment.Center) {
         val image = result?.getOrNull()
         when {
             image != null -> Image(image, file.name, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)

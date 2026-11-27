@@ -72,7 +72,9 @@ fun HbMenu(
 ) {
     val triggerRequester = remember { FocusRequester() }
     val density = LocalDensity.current
-    val gap = with(density) { MENU_GAP.roundToPx() }
+    val gap = with(density) {
+        (if (presentation == HbMenuPresentation.AuroraFileActions) FILE_ACTIONS_GAP else MENU_GAP).roundToPx()
+    }
     val visual = rememberHbMenuVisual(expanded, motion)
     val isOpen by rememberUpdatedState(expanded)
     val focusable = motion?.hoverMenu != true
@@ -92,9 +94,10 @@ fun HbMenu(
 
         if (expanded || leaving) {
             Popup(
-                popupPositionProvider = remember(gap, alignEnd, pointerAnchor, replacesBadge, badgeSize, visual) {
+                popupPositionProvider = remember(gap, presentation, alignEnd, pointerAnchor, replacesBadge, badgeSize, visual) {
                     HbAnchoredPopupPositionProvider(
                         gap = if (pointerAnchor == null && !replacesBadge) gap else 0,
+                        preferAbove = presentation == HbMenuPresentation.AuroraAttachment,
                         alignEnd = alignEnd && pointerAnchor == null,
                         pointerAnchor = pointerAnchor,
                         overlapAnchor = replacesBadge,
@@ -130,7 +133,7 @@ fun HbMenu(
 /** Aurora menus share compact geometry. Desktop message actions have their own surface. */
 enum class HbMenuPresentation {
 
-    Standard, AuroraMessage, AuroraTouchMessage, AuroraDesktopMessageActions, AuroraSettings,
+    Standard, AuroraMessage, AuroraTouchMessage, AuroraDesktopMessageActions, AuroraSettings, AuroraAttachment, AuroraFileActions,
 }
 
 /** One entry of an [HbMenu]: an action or a decorative separator. */
@@ -318,3 +321,4 @@ fun rememberHbMenuPositionProvider(alignEnd: Boolean = false): PopupPositionProv
 }
 
 private val MENU_GAP = 4.dp
+private val FILE_ACTIONS_GAP = 8.dp

@@ -40,7 +40,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.aequicor.heartbeat.designsystem.foundation.HbMotionPreference
@@ -48,7 +50,10 @@ import io.github.aequicor.heartbeat.designsystem.foundation.HbMotions
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.prompt_reference_link
 import kotlinx.coroutines.flow.first
+import org.jetbrains.compose.resources.painterResource
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -408,11 +413,31 @@ internal fun AuroraReplyText(
     val code = if (text.hasStringAnnotations(InlineCodeAnnotation, 0, text.length)) {
         Modifier.drawInlineCode(layout)
     } else Modifier
-    BasicText(text, modifier.then(arrival).then(fade).then(code), style, softWrap = softWrap, maxLines = maxLines, overflow = overflow,
+    val promptLinks = if (text.hasStringAnnotations(PromptLinkAnnotation, 0, text.length)) {
+        remember(text) {
+            text.getStringAnnotations(PromptLinkAnnotation, 0, text.length).map { TextRange(it.start, it.end) }
+        }
+    } else emptyList()
+    val promptLinkStyle = if (promptLinks.isEmpty()) null else promptLinkSpanStyle()
+    val rendered = if (promptLinkStyle == null) text else remember(text, promptLinkStyle) {
+        buildAnnotatedString {
+            append(text)
+            promptLinks.forEach { addStyle(promptLinkStyle, it.start, it.end) }
+        }
+    }
+    val links = if (promptLinks.isEmpty()) Modifier else Modifier.promptLinkDecoration(
+        layoutProvider = { layout.value?.takeIf { it.layoutInput.text.text == rendered.text } },
+        links = promptLinks,
+        icon = painterResource(Res.drawable.prompt_reference_link),
+    )
+    BasicText(
+        rendered, modifier.then(arrival).then(fade).then(code).then(links), style,
+        softWrap = softWrap, maxLines = maxLines, overflow = overflow,
         onTextLayout = {
-        layout.value = it
-        onTextLayout(it)
-    })
+            layout.value = it
+            onTextLayout(it)
+        },
+    )
 }
 
 private fun Modifier.drawInlineCode(layout: State<TextLayoutResult?>): Modifier = drawWithCache {
