@@ -42,6 +42,7 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraBackdrop
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentDialog
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentPreviewWindow
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentModal
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDiagramPreviews
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.BindAuroraDiagramContext
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.LocalDiagramPreviews
@@ -52,7 +53,6 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraDeskto
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraFiles
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPaneSplitter
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraPanelDialog
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentViewerUsesWorkspaceOverlay
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.attachmentImageEditSource
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraWorkspace
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.auroraSidebarSurface
@@ -103,7 +103,7 @@ internal fun AiStudioScreen(
     val hiddenSemantics = Modifier.clearAndSetSemantics {
         hideFromAccessibility()
     }
-    val backgroundSemantics = if (viewer != null && attachmentViewerUsesWorkspaceOverlay) hiddenSemantics else Modifier
+    val backgroundSemantics = if (viewer != null) hiddenSemantics else Modifier
     val workspaceSemantics = if (touch && state.filesVisible) hiddenSemantics else backgroundSemantics
     val resizeCursor = if (touch) Modifier else Modifier.auroraHeldResizeCursor(paneResizePointerHeld)
     BoxWithConstraints(modifier.fillMaxSize().then(resizeCursor).background(canvas).imePadding()) {
@@ -165,7 +165,7 @@ internal fun AiStudioScreen(
                     }
                 }
                 if (state.filesVisible && !panes.filesAside) {
-                    AuroraPanelDialog({ onAction(AiStudioAction.ToggleFiles(false)) }) {
+                    AuroraAttachmentModal({ onAction(AiStudioAction.ToggleFiles(false)) }) {
                         val panelModifier = if (touch) backgroundSemantics.auroraTouchFilesFrame()
                         else Modifier.fillMaxSize().then(backgroundSemantics)
                         AuroraFiles(state, touch, onAction, panelModifier)

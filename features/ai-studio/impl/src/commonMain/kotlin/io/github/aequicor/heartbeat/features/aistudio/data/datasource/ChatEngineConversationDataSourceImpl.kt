@@ -58,7 +58,10 @@ internal class ChatEngineConversationDataSourceImpl(
             throw AttachmentTransferException("Не удалось открыть «${file.name}»", failure)
         }
         when (transferMode) {
-            AttachmentTransferMode.Resource -> if (!session.supportsEmbeddedResources) {
+            AttachmentTransferMode.Resource -> if (
+                !session.supportsEmbeddedResources &&
+                !(session.supportsImagePrompts && file.mimeType?.startsWith("image/", ignoreCase = true) == true)
+            ) {
                 throw AttachmentTransferException("Агент не поддерживает встроенные ресурсы")
             }
             AttachmentTransferMode.ResourceLink -> if (

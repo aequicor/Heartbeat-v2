@@ -11,6 +11,7 @@ import com.arkivanov.decompose.extensions.compose.subscribeAsState
 import io.github.aequicor.heartbeat.designsystem.components.HbText
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.navigation.compose.ComposeFeatureRenderer
+import io.github.aequicor.heartbeat.navigation.compose.ComposeWindowOverlayHost
 import io.github.aequicor.heartbeat.shell.ShellComponent
 import kotlinx.coroutines.launch
 
@@ -28,28 +29,30 @@ fun ShellScreen(
 
     val stack = component.childStack.subscribeAsState()
     val scope = rememberCoroutineScope()
-    Row(modifier.fillMaxSize()) {
-        WorkspaceRail(component.workspaces, stack.value.active.configuration.featureId) { route ->
-            val current = stack.value.active
-            if (current.configuration.featureId != route.featureId) {
-                val renderer = registry.find(current.configuration.featureId)
-                if (renderer == null) component.open(route)
-                else scope.launch {
-                    renderer.requestLeave(current.instance) {
-                        if (component.childStack.value.active.instance === current.instance) component.open(route)
+    ComposeWindowOverlayHost(modifier) {
+        Row(Modifier.fillMaxSize()) {
+            WorkspaceRail(component.workspaces, stack.value.active.configuration.featureId) { route ->
+                val current = stack.value.active
+                if (current.configuration.featureId != route.featureId) {
+                    val renderer = registry.find(current.configuration.featureId)
+                    if (renderer == null) component.open(route)
+                    else scope.launch {
+                        renderer.requestLeave(current.instance) {
+                            if (component.childStack.value.active.instance === current.instance) component.open(route)
+                        }
                     }
                 }
             }
-        }
-        Children(
-            stack = component.childStack,
-            modifier = Modifier.weight(1f),
-        ) { child ->
-            val renderer = registry.find(child.configuration.featureId)
-            if (renderer == null) {
-                MissingFeatureFallback(child.configuration.featureId)
-            } else {
-                renderer.Render(child.instance)
+            Children(
+                stack = component.childStack,
+                modifier = Modifier.weight(1f),
+            ) { child ->
+                val renderer = registry.find(child.configuration.featureId)
+                if (renderer == null) {
+                    MissingFeatureFallback(child.configuration.featureId)
+                } else {
+                    renderer.Render(child.instance)
+                }
             }
         }
     }

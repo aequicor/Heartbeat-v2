@@ -7,7 +7,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.SessionEvent.P
 import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.Yaml
 
-internal fun SessionEvent.SendPrompt.toAcpPromptContent(): List<ContentBlock> = buildList {
+internal fun SessionEvent.SendPrompt.toAcpPromptContent(imagePrompts: Boolean): List<ContentBlock> = buildList {
     val descriptions = promptFiles.mapIndexedNotNull { index, file ->
         val resource = file as? PromptFile.Resource ?: return@mapIndexedNotNull null
         val description = resource.description?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
@@ -27,21 +27,29 @@ internal fun SessionEvent.SendPrompt.toAcpPromptContent(): List<ContentBlock> = 
     }
     if (prompt.isNotBlank()) add(ContentBlock.Text(prompt))
     attachments.forEach { add(ContentBlock.Text(it)) }
-    promptFiles.forEach { add(it.toAcpBlock()) }
+    promptFiles.forEach { add(it.toAcpBlock(imagePrompts)) }
 }
 
-private fun PromptFile.toAcpBlock(): ContentBlock = when (this) {
+private fun PromptFile.toAcpBlock(imagePrompts: Boolean): ContentBlock = when (this) {
     is PromptFile.Text -> ContentBlock.Text(content)
     is PromptFile.Image -> ContentBlock.Image(base64, mimeType)
-    is PromptFile.Resource -> ContentBlock.Resource(
-        when (val payload = content) {
-            is PromptFile.Resource.Content.Text ->
-                EmbeddedResourceResource.TextResourceContents(text = payload.value, uri = uri, mimeType = mimeType)
+    is PromptFile.Resource -> {
+        val payload = content
+        val type = mimeType
+        if (imagePrompts && payload is PromptFile.Resource.Content.Binary && type?.startsWith("image/", ignoreCase = true) == true) {
+            ContentBlock.Image(payload.base64, type)
+        } else {
+            ContentBlock.Resource(
+                when (payload) {
+                    is PromptFile.Resource.Content.Text ->
+                        EmbeddedResourceResource.TextResourceContents(text = payload.value, uri = uri, mimeType = type)
 
-            is PromptFile.Resource.Content.Binary ->
-                EmbeddedResourceResource.BlobResourceContents(blob = payload.base64, uri = uri, mimeType = mimeType)
-        },
-    )
+                    is PromptFile.Resource.Content.Binary ->
+                        EmbeddedResourceResource.BlobResourceContents(blob = payload.base64, uri = uri, mimeType = type)
+                },
+            )
+        }
+    }
     is PromptFile.ResourceLink -> ContentBlock.ResourceLink(
         name = name,
         uri = uri,

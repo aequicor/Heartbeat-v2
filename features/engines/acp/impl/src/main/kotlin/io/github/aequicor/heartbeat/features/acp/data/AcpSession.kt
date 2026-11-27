@@ -59,6 +59,8 @@ internal class AcpSession(
 
     override val supportsEmbeddedResources: Boolean get() = embeddedContext
 
+    override val supportsImagePrompts: Boolean get() = imagePrompts
+
     private data class Permission(
         val request: PendingPermission,
         val answer: CompletableDeferred<RequestPermissionOutcome> = CompletableDeferred(),
@@ -248,12 +250,13 @@ internal class AcpSession(
             publish()
             return
         }
+        val content = event.toAcpPromptContent(imagePrompts)
         when {
-            !imagePrompts && event.promptFiles.any { it is SessionEvent.PromptFile.Image } -> {
+            !imagePrompts && content.any { it is ContentBlock.Image } -> {
                 rejectPrompt(event, SessionTurn.Failure.ImageUnsupported, "Движок не поддерживает изображения в запросе")
                 return
             }
-            !embeddedContext && event.promptFiles.any { it is SessionEvent.PromptFile.Resource } -> {
+            !embeddedContext && content.any { it is ContentBlock.Resource } -> {
                 rejectPrompt(
                     event, SessionTurn.Failure.EmbeddedResourceUnsupported,
                     "Движок не поддерживает встроенные ресурсы в запросе",
@@ -261,7 +264,6 @@ internal class AcpSession(
                 return
             }
         }
-        val content = event.toAcpPromptContent()
         if (content.isEmpty()) return
         val generation = ++promptGeneration
         status = SessionStatus.Running

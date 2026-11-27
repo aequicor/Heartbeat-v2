@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -62,8 +64,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as Colors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraImageEditor as Editor
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as Layout
@@ -71,6 +71,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing as Spacing
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ImageEditor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ImageEditor.Mark
+import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraAttachmentModal
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraControl
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.AuroraText
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
@@ -194,11 +195,11 @@ internal fun ImageEditorSaveForm(
     val state = document.description
     val index = selectedMark
     val mark = index?.let(state.marks::getOrNull)
-    Dialog(onDismissRequest = { if (mark == null) onCancel() else selectedMark = null }, properties = imageEditorDialogProperties()) {
+    AuroraAttachmentModal(onDismiss = { if (mark == null) onCancel() else selectedMark = null }) {
         Box(Modifier.fillMaxSize().padding(Layout.ContentInset).onGloballyPositioned { hostPosition = it.positionInRoot() }, contentAlignment = Alignment.Center) {
             Column(
                 Modifier.widthIn(max = Editor.FormWidth).fillMaxWidth().imageEditorFormSurface()
-                    .verticalScroll(rememberScrollState()).imageEditorFormPadding(),
+                    .pointerInput(Unit) { detectTapGestures { } }.verticalScroll(rememberScrollState()).imageEditorFormPadding(),
             ) {
                 ImageEditorFormHeader("Сохранить копию", onCancel)
                 Spacer(Modifier.height(Layout.SmallGap))
@@ -516,5 +517,3 @@ private fun ImageEditorTextInput(
         },
     )
 }
-
-internal expect fun imageEditorDialogProperties(): DialogProperties

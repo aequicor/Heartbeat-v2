@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -23,7 +22,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -45,7 +43,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as Colors
@@ -68,7 +65,6 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorTool
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorToolSettings
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorViewport
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.imageEditorDialogProperties
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.pixelCenter
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorPngQuality
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditorPreparedCopy
@@ -113,8 +109,7 @@ internal fun AuroraEditableImagePreview(
     }
     if (editing) {
         val close = { editing = false }
-        val shape = RoundedCornerShape(Layout.ChatSurfaceRadius)
-        Dialog(onDismissRequest = close, properties = imageEditorDialogProperties()) {
+        AuroraAttachmentLayer(close) {
             AuroraAttachmentImageEditor(
                 file = file,
                 onClose = close,
@@ -122,9 +117,6 @@ internal fun AuroraEditableImagePreview(
                     close()
                     onApply(it)
                 },
-                modifier = Modifier.padding(Layout.ContentInset)
-                    .sizeIn(maxWidth = Editor.DialogWidth, maxHeight = Editor.DialogHeight)
-                    .clip(shape).border(Layout.Stroke, Colors.Line, shape),
                 draft = true,
             )
         }
@@ -148,20 +140,22 @@ internal fun AuroraAttachmentImageEditor(
         }
     }
     val focus = remember { FocusRequester() }
-    LaunchedEffect(focus) { focus.requestFocus() }
     val surface = modifier.fillMaxSize().background(Colors.ViewerSurface)
     val image = decoded?.getOrNull()
     if (image != null) {
         AuroraImageEditor(file, image, draft, onClose, onApply, actionError, actions, focus, surface)
-    } else Column(surface.onKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-            onClose()
-            true
-        } else false
-    }.focusRequester(focus).focusable()) {
-        ImageEditorHeader(file, null, null, false, {}, {}, {}, onClose, editable = false, actions = actions)
-        Box(Modifier.fillMaxSize().background(Editor.Canvas), contentAlignment = Alignment.Center) {
-            AuroraText(if (decoded == null) "Загрузка изображения…" else "Не удалось открыть изображение")
+    } else {
+        LaunchedEffect(focus) { focus.requestFocus() }
+        Column(surface.onKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                onClose()
+                true
+            } else false
+        }.focusRequester(focus).focusable()) {
+            ImageEditorHeader(file, null, null, false, {}, {}, {}, onClose, editable = false, actions = actions)
+            Box(Modifier.fillMaxSize().background(Editor.Canvas), contentAlignment = Alignment.Center) {
+                AuroraText(if (decoded == null) "Загрузка изображения…" else "Не удалось открыть изображение")
+            }
         }
     }
 }
@@ -194,6 +188,9 @@ private fun AuroraImageEditor(
     val document = history.current
     val mark = newMark ?: markIndex?.let(document.description.marks::getOrNull)
     val textMeasurer = rememberTextMeasurer()
+    LaunchedEffect(focus, saving, mark != null, textPoint != null) {
+        if (!saving && mark == null && textPoint == null) focus.requestFocus()
+    }
 
     fun closeMark() {
         newMark = null
@@ -218,7 +215,11 @@ private fun AuroraImageEditor(
     val density = LocalDensity.current.density
     Box(modifier.onGloballyPositioned { editorOrigin = it.positionInRoot() }.onKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown || event.key != Key.Escape) return@onKeyEvent false
-        if (mark != null) closeMark() else onClose()
+        when {
+            mark != null -> closeMark()
+            textPoint != null -> textPoint = null
+            else -> onClose()
+        }
         true
     }) {
         Column(Modifier.fillMaxSize().focusRequester(focus).focusable()) {

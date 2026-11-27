@@ -7,6 +7,8 @@ public interface Session {
 
     public val supportsEmbeddedResources: Boolean get() = false
 
+    public val supportsImagePrompts: Boolean get() = false
+
     /** The current status and message window. A newly opened session shows its latest partition. */
     public val state: StateFlow<SessionState>
 

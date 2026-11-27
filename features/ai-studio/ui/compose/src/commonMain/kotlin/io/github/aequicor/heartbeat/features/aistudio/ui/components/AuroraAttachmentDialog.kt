@@ -33,7 +33,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -56,8 +55,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
@@ -149,16 +146,8 @@ private fun rememberDraftAttachmentOriginal(file: File, loader: DraftAttachmentI
 
 @Composable
 private fun AttachmentDetailsDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    val dismiss by rememberUpdatedState(onDismiss)
-    Dialog(onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.20f))
-                .pointerInput(Unit) { detectTapGestures { dismiss() } }
-                .padding(AuroraLayout.Space),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(Modifier.pointerInput(Unit) { detectTapGestures { } }) { content() }
-        }
+    AuroraAttachmentModal(onDismiss) {
+        Box(Modifier.padding(AuroraLayout.Space).pointerInput(Unit) { detectTapGestures { } }) { content() }
     }
 }
 

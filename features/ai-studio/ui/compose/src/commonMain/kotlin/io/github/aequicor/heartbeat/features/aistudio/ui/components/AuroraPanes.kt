@@ -402,7 +402,7 @@ internal fun AuroraViewer(
     copyError: Boolean = false,
     onClose: () -> Unit,
 ) {
-    AuroraPanelDialog(onClose) {
+    AuroraAttachmentLayer(onClose) {
         key(file.openId) {
             if (file.image != null) {
                 AuroraAttachmentImageEditor(

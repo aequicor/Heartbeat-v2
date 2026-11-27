@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,7 +54,6 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbSpacing as Spacing
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.ImageEditResult
-import io.github.aequicor.heartbeat.features.aistudio.ui.components.imageeditor.LocalImageEditorGestureTarget
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_close
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_more
@@ -63,7 +61,6 @@ import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_vi
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_viewer_wrap
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
-import javax.swing.JComponent
 
 @Composable
 internal fun AuroraDesktopAttachmentPreview(
@@ -74,20 +71,17 @@ internal fun AuroraDesktopAttachmentPreview(
     modifier: Modifier = Modifier,
     actionError: String? = null,
     onSaveEditedImage: ((ImageEditResult) -> Unit)? = null,
-    gestureTarget: JComponent? = null,
 ) {
     if (file.image != null) {
-        CompositionLocalProvider(LocalImageEditorGestureTarget provides gestureTarget) {
-            ContextMenuArea(items = { listOf(ContextMenuItem("Скопировать", onCopy)) }) {
-                AuroraAttachmentImageEditor(
-                    file = file,
-                    onClose = onClose,
-                    onApply = onSaveEditedImage,
-                    modifier = modifier,
-                    actionError = actionError,
-                    actions = { AttachmentPreviewActions(onCopy, onSave) },
-                )
-            }
+        ContextMenuArea(items = { listOf(ContextMenuItem("Скопировать", onCopy)) }) {
+            AuroraAttachmentImageEditor(
+                file = file,
+                onClose = onClose,
+                onApply = onSaveEditedImage,
+                modifier = modifier,
+                actionError = actionError,
+                actions = { AttachmentPreviewActions(onCopy, onSave) },
+            )
         }
         return
     }
