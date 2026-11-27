@@ -188,7 +188,11 @@ internal fun AuroraReferenceEditor(
                 }
                 AuroraComposerField(
                     field = renderedField,
-                    onEdit = ::edit,
+                    onEdit = { edited ->
+                        // On focus loss BasicTextField can collapse a selection in its last rendered
+                        // value after the deletion has already updated the draft.
+                        if (edited.text != renderedField.text || field.text == renderedField.text) edit(edited)
+                    },
                     onSend = onSend,
                     touch = touch,
                     canSend = canSend,
