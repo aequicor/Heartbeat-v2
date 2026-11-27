@@ -9,6 +9,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngi
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngineConversationDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.ApplyChatConfigurationUseCase
@@ -44,10 +45,11 @@ internal class ChatTurnInteractorImpl(
         text: String,
         attachments: List<ChatAttachment>,
         expectedDraftRevision: String,
+        messageBody: ChatMessageBody?,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runTurn(sessionId, cancellationRequested, update) { started, publish ->
-        sendMessage(sessionId, messageId, text, attachments, expectedDraftRevision, started, publish)
+        sendMessage(sessionId, messageId, text, attachments, expectedDraftRevision, messageBody, started, publish)
     }
 
     @Throwable(CancellationException::class)

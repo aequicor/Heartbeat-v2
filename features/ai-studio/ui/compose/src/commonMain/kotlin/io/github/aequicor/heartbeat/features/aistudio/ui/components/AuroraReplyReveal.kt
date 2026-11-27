@@ -430,8 +430,11 @@ internal fun AuroraReplyText(
         links = promptLinks,
         icon = painterResource(Res.drawable.prompt_reference_link),
     )
+    // Paint the reference above code and attachment backgrounds, behind the glyphs.
+    val source = modifier.then(arrival).then(fade).then(code).then(links)
+        .auroraReferenceText(text, LocalReplyRevealBlock.current + revealOffset) { layout.value }
     BasicText(
-        rendered, modifier.then(arrival).then(fade).then(code).then(links), style,
+        rendered, source, style,
         softWrap = softWrap, maxLines = maxLines, overflow = overflow,
         onTextLayout = {
             layout.value = it

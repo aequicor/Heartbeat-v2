@@ -49,17 +49,16 @@ internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
         shape,
         Shadow(AuroraLayout.ComposerContactRadius, AuroraColors.ComposerContactShadow,
             offset = DpOffset(Dp.Hairline, AuroraLayout.Stroke)),
-    ).auroraFloatingBlur(shape).background(AuroraColors.ComposerSurface, shape)
+    )
+    val background = Modifier.auroraFloatingBlur(shape).background(AuroraColors.ComposerSurface, shape)
         .background(AuroraColors.ComposerSheen, shape)
         .border(AuroraLayout.Stroke, AuroraColors.ComposerRim, shape)
-        .padding(AuroraLayout.FrameStroke + AuroraLayout.Stroke)
+    val surface = shell.then(background).padding(AuroraLayout.FrameStroke + AuroraLayout.Stroke)
     return if (keyboardFocus) {
-        shell.border(
+        surface.border(
             AuroraLayout.FrameStroke, AuroraColors.Primary, RoundedCornerShape(AuroraLayout.DesktopComposerInnerRadius),
         )
-    } else {
-        shell
-    }
+    } else surface
 }
 
 @Composable

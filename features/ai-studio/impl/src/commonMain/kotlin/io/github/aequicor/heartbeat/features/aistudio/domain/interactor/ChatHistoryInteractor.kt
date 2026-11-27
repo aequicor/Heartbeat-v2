@@ -8,6 +8,9 @@ import kotlin.coroutines.cancellation.CancellationException
 internal interface ChatHistoryInteractor {
 
     @Throwable(CancellationException::class)
+    suspend fun source(sessionId: String, displayId: String?, revisionId: Long? = null): Result<ChatHistoryEntry?>
+
+    @Throwable(CancellationException::class)
     suspend fun page(sessionId: String, before: Long? = null, anchor: String? = null): Result<ChatHistoryEntry.Page>
 
     @Throwable(CancellationException::class)

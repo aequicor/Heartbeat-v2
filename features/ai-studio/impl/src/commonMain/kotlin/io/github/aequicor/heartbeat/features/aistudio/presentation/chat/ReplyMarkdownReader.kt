@@ -121,19 +121,29 @@ internal class ReplyMarkdownReader(
             Element.CODE_SPAN -> listOf(inlineCode(node))
             Element.INLINE_LINK, Element.SHORT_REFERENCE_LINK, Element.FULL_REFERENCE_LINK -> link(node)
             Element.IMAGE -> imageText(node, text)
-            Element.AUTOLINK, GfmToken.GFM_AUTOLINK -> listOf(autolink(text))
+            Element.AUTOLINK, GfmToken.GFM_AUTOLINK -> listOf(autolink(text).let { link ->
+                val from = text.indexOf(link.text).coerceAtLeast(0) + node.startOffset
+                link.copy(originalRange = source.originalOffset(from) until source.originalOffset(from + link.text.length))
+            })
             Token.BLOCK_QUOTE, Token.HARD_LINE_BREAK -> listOf()
-            Token.HTML_TAG -> listOf(ReplyInline(text))
-            else -> listOf(ReplyInline(plainInlineText(text)))
+            Token.HTML_TAG -> listOf(ReplyInline(text, originalRange = node.originalRange()))
+            else -> listOf(ReplyInline(plainInlineText(text), originalRange = node.originalRange()))
         }
     }
 
+    private fun ASTNode.originalRange(): IntRange =
+        source.originalOffset(startOffset) until source.originalOffset(endOffset)
+
     private fun inlineCode(node: ASTNode): ReplyInline {
-        val code = node.children.drop(1).dropLast(1).joinToString("") { source.text(it) }.replace('\n', ' ')
-        val value = if (code.startsWith(' ') && code.endsWith(' ') && code.any { it != ' ' }) {
-            code.drop(1).dropLast(1)
-        } else code
-        return ReplyInline(value, code = true)
+        val children = node.children.drop(1).dropLast(1)
+        val code = children.joinToString("") { source.text(it) }.replace('\n', ' ')
+        val padding = if (code.startsWith(' ') && code.endsWith(' ') && code.any { it != ' ' }) 1 else 0
+        val value = code.drop(padding).dropLast(padding)
+        val range = if (children.isEmpty()) null else {
+            source.originalOffset(children.first().startOffset + padding) until
+                source.originalOffset(children.last().endOffset - padding)
+        }
+        return ReplyInline(value, code = true, originalRange = range)
     }
 
     private fun imageText(node: ASTNode, literal: String): List<ReplyInline> {
@@ -168,7 +178,7 @@ internal class ReplyMarkdownReader(
         val url = destination.safeLink()
         if (destination.isAttachmentReference()) {
             val labelText = runs.joinToString("") { it.text }
-            if (labelText.isNotBlank()) return listOf(ReplyInline(labelText, attachmentReference = true))
+            if (labelText.isNotBlank()) return listOf(ReplyInline(labelText, attachmentReference = true, originalRange = node.originalRange()))
         }
         return runs.map { it.copy(url = url) }
     }
@@ -202,12 +212,14 @@ private fun String.isAttachmentReference(): Boolean =
 private fun List<ReplyInline>.lines(): List<List<ReplyInline>> = buildList {
     val current = mutableListOf<ReplyInline>()
     for (run in this@lines) {
+        var offset = 0
         run.text.split('\n').forEachIndexed { index, part ->
             if (index > 0) {
                 add(current.trim())
                 current.clear()
             }
-            if (part.isNotEmpty()) current.add(run.copy(text = part))
+            if (part.isNotEmpty()) current.add(run.textSnippet(part, offset))
+            offset += part.length + 1
         }
     }
     add(current.trim())
@@ -225,6 +237,17 @@ private fun List<ReplyInline>.trim(): List<ReplyInline> {
             index == last - first -> run.text.trimEnd()
             else -> run.text
         }
-        run.copy(text = text)
+        run.textSnippet(text, run.text.indexOf(text).coerceAtLeast(0))
     }
+}
+
+private fun ReplyInline.textSnippet(value: String, offset: Int): ReplyInline {
+    if (value == text) return this
+    val range = originalRange?.takeIf { text.isNotEmpty() }?.let {
+        val length = it.last + 1 - it.first
+        val start = it.first + (offset.toLong() * length / text.length).toInt()
+        val end = it.first + ((offset + value.length).toLong() * length / text.length).toInt()
+        start until end
+    }
+    return copy(text = value, originalRange = range)
 }

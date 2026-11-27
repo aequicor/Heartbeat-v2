@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -30,11 +31,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -203,55 +210,89 @@ private fun AuroraChatViewport(
 
     TrackAuroraReading(chatId, state, list, tailFollow, onAction)
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val corridor = preferredWidth.coerceAtMost(maxWidth)
-        val gutter = (maxWidth - corridor) / 2f
-        val headerInset = (AuroraLayout.ContentInset - gutter).coerceAtLeast(Dp.Hairline)
-        val historyPadding = with(density) { auroraHistoryPadding(touch, topPx.toDp(), lowerPanelPx.toDp()) }
-        if (hasMessages && historyReady && topPx > 0 && lowerPanelPx > 0) {
-            val historyWithEdges = Modifier.align(Alignment.Center).fillMaxSize().auroraHistoryEdges(
-                topPx,
-                bottomHeightPx = if (!touch && awayFromTail) lowerPanelPx + bottomEdgePx else 0,
-                readingWidth = corridor,
+    val latestAction = rememberUpdatedState(onAction)
+    val referenceInteraction = remember(chatId) { AuroraReferenceInteraction(chatId) { latestAction.value(it) } }
+    CompositionLocalProvider(LocalAuroraReferenceInteraction provides referenceInteraction) {
+        BoxWithConstraints(Modifier.fillMaxSize().onPreviewKeyEvent {
+            if (it.type == KeyEventType.KeyDown && it.key == Key.Escape && referenceInteraction.hasAnySelection()) {
+                referenceInteraction.clearSelection()
+                true
+            } else false
+        }) {
+            val corridor = preferredWidth.coerceAtMost(maxWidth)
+            val gutter = (maxWidth - corridor) / 2f
+            val headerInset = (AuroraLayout.ContentInset - gutter).coerceAtLeast(Dp.Hairline)
+            val viewportWidth = maxWidth
+            val viewportHeight = maxHeight
+            AuroraChatLayers(panelHeight = { lowerPanelPx }, controls = {
+                AuroraPlaceLowerControls(list, touch, viewportWidth, corridor, awayFromTail && hasMessages, state.request != null,
+                    onStop = { onAction(AiStudioAction.CancelTurn) },
+                    onTail = tailFollow::returnToTail,
+                ) { inlineTail, inlineStop ->
+                    AuroraLowerControls(
+                        state, draft, list, inlineTail, touch, { action ->
+                            if (action == AiStudioAction.Send) tailFollow.followOnSend(sendFollowDistance)
+                            onAction(action)
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter).zIndex(1f)
+                            .auroraLowerLayout(touch, corridor),
+                        maxPanelHeight = viewportHeight * 0.76f, maxReferenceHeight = viewportHeight * 0.45f, inlineRequestStop = inlineStop,
+                        onTail = tailFollow::returnToTail,
+                        onPanelHeight = { next ->
+                            if (!touch) list.preserveReadingOnComposerResize(lowerPanelPx, next)
+                            lowerPanelPx = next
+                        },
+                    )
+                }
+            }) { panelHeight ->
+                val historyPadding = with(density) { auroraHistoryPadding(touch, topPx.toDp(), panelHeight.toDp()) }
+                if (hasMessages && historyReady && topPx > 0 && panelHeight > 0) {
+                    val historyWithEdges = Modifier.align(Alignment.Center).fillMaxSize().auroraHistoryEdges(
+                        topPx,
+                        bottomHeightPx = if (!touch && awayFromTail) panelHeight + bottomEdgePx else 0,
+                        readingWidth = corridor,
+                    )
+                    AuroraHistory(
+                        state, liveText, list, touch, onAction,
+                        historyPadding,
+                        historyWithEdges,
+                        readingWidth = corridor, viewportHeight = viewportHeight, tailFollow = tailFollow, preparedHistory = documents,
+                    )
+                    val trackPadding = auroraTrackPadding(touch, historyPadding, captionClearance, caption)
+                    AuroraChatScrollbar(list, touch, trackPadding, tailFollow::userScroll)
+                }
+                AuroraResizeHandles(touch, viewportWidth, corridor, gutter, historyPadding, startPaneSplitterOverlap, onWidthChange)
+            }
+            AuroraHeader(
+                state, touch, showNavigation, onHeaderAction,
+                Modifier.align(Alignment.TopCenter).zIndex(1f).widthIn(max = corridor)
+                    .onSizeChanged { topPx = it.height },
+                captionClearance = headerCaptionClearance(captionClearance, gutter + headerInset),
+                captionOnLeft = caption.leftInset > Dp.Hairline,
+                edgeInset = headerInset,
+                onDesktopTitleReady = onDesktopTitleReady,
             )
-            AuroraHistory(
-                state, liveText, list, touch, onAction,
-                historyPadding,
-                historyWithEdges,
-                readingWidth = corridor, viewportHeight = maxHeight, tailFollow = tailFollow, preparedHistory = documents,
-            )
-            val trackPadding = auroraTrackPadding(touch, historyPadding, captionClearance, caption)
-            AuroraChatScrollbar(list, touch, trackPadding, tailFollow::userScroll)
         }
-        AuroraHeader(
-            state, touch, showNavigation, onHeaderAction,
-            Modifier.align(Alignment.TopCenter).zIndex(1f).widthIn(max = corridor)
-                .onSizeChanged { topPx = it.height },
-            captionClearance = headerCaptionClearance(captionClearance, gutter + headerInset),
-            captionOnLeft = caption.leftInset > Dp.Hairline,
-            edgeInset = headerInset,
-            onDesktopTitleReady = onDesktopTitleReady,
-        )
-        AuroraPlaceLowerControls(list, touch, maxWidth, corridor, awayFromTail && hasMessages, state.request != null,
-            onStop = { onAction(AiStudioAction.CancelTurn) },
-            onTail = tailFollow::returnToTail,
-        ) { inlineTail, inlineStop ->
-            AuroraLowerControls(
-                state, draft, list, inlineTail, touch, { action ->
-                    if (action == AiStudioAction.Send) tailFollow.followOnSend(sendFollowDistance)
-                    onAction(action)
-                },
-                modifier = Modifier.align(Alignment.BottomCenter).zIndex(1f)
-                    .auroraLowerLayout(touch, corridor),
-                maxPanelHeight = maxHeight * 0.76f, inlineRequestStop = inlineStop,
-                onTail = tailFollow::returnToTail,
-                onPanelHeight = { next ->
-                    if (!touch) list.preserveReadingOnComposerResize(lowerPanelPx, next)
-                    lowerPanelPx = next
-                },
-            )
+    }
+}
+
+/** Measure the composer before the reverse list so its padding and reading anchor change in the same frame. */
+@Composable
+private fun AuroraChatLayers(
+    panelHeight: () -> Int,
+    controls: @Composable BoxScope.() -> Unit,
+    history: @Composable BoxScope.(Int) -> Unit,
+) {
+    SubcomposeLayout(Modifier.fillMaxSize()) { constraints ->
+        val panel = subcompose("controls") { Box(Modifier.fillMaxWidth(), content = controls) }
+            .single().measure(constraints.copy(minHeight = 0))
+        val measuredHeight = panelHeight()
+        val messages = subcompose("history") { Box(Modifier.fillMaxSize()) { history(measuredHeight) } }
+            .single().measure(constraints)
+        layout(messages.width, messages.height) {
+            messages.placeRelative(0, 0)
+            panel.placeRelative(0, messages.height - panel.height)
         }
-        AuroraResizeHandles(touch, maxWidth, corridor, gutter, historyPadding, startPaneSplitterOverlap, onWidthChange)
     }
 }
 

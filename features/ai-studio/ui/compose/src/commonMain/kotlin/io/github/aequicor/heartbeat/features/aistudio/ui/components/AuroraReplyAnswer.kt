@@ -55,6 +55,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.LiveText
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
@@ -337,9 +339,11 @@ private fun AuroraReplyBlocks(
     if (frame.preparing) {
         AuroraPreparingReply(width, preparingHeight)
     } else if (frame.text.isNotEmpty()) {
-        AuroraAnswerDocument(
-            frame, touch, selection, onTextLayout, width, preparingHeight, archiveReveal,
-        )
+        AuroraReferenceRegion(AuroraReferenceSelection(reply.id, Kind.FinalResult), frame.text, selection) {
+            AuroraAnswerDocument(
+                frame, touch, selection, onTextLayout, width, preparingHeight, archiveReveal,
+            )
+        }
     }
 }
 
@@ -353,7 +357,15 @@ internal fun AuroraArtifactRows(
 ) {
     if (files.isEmpty()) return
     Column(modifier.width(IntrinsicSize.Max), verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
-        for (file in files) key(file.id) { AuroraArtifactRow(file, replyId, touch, onAction) }
+        for (file in files) key(file.id) {
+            val region = LocalAuroraReferenceRegion.current
+            val source = (region?.source ?: AuroraReferenceSelection(replyId, Kind.Attachment)).copy(
+                kind = Kind.Attachment, attachmentId = file.openId,
+            )
+            AuroraReferenceRegion(source, file.name, objectSelectable = true) {
+                AuroraArtifactRow(file, replyId, touch, onAction)
+            }
+        }
     }
 }
 

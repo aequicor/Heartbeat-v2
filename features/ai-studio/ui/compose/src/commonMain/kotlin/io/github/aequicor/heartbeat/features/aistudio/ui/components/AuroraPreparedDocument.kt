@@ -174,22 +174,25 @@ private val safeLinkPrefixes = listOf("https://", "http://", "mailto:")
 
 private fun AnnotatedString.Builder.appendReplySpans(spans: List<ReplyInline>, monospace: FontFamily) {
     for (span in spans) {
+        val start = length
         if (span.attachmentReference) {
             appendPromptLinkLabel(span.text)
+            span.originalRange?.let { addReferenceOffsets(it.first, it.last + 1, start, length) }
             continue
         }
         val emphasis = span.bold || span.italic || span.strike
         if (!emphasis && !span.code && span.url == null) {
             append(span.text)
+            span.originalRange?.let { addReferenceOffsets(it.first, it.last + 1, start, length) }
             continue
         }
         val url = span.url?.takeIf { candidate ->
             !candidate.any(Char::isISOControl) && safeLinkPrefixes.any { candidate.startsWith(it, ignoreCase = true) }
         }
-        val start = length
         withStyle(span.textStyle(monospace)) {
             if (url == null) append(span.text) else withLink(linkForSpan(url, span.strike)) { append(span.text) }
         }
+        span.originalRange?.let { addReferenceOffsets(it.first, it.last + 1, start, length) }
         if (span.code && start < length) addStringAnnotation(InlineCodeAnnotation, "", start, length)
     }
 }

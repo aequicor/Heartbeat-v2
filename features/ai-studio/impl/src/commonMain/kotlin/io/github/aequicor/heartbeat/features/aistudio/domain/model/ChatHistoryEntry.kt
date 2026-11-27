@@ -40,6 +40,7 @@ internal data class ChatHistoryEntry(
         val retryAllowed: Boolean = true,
         val revisionId: Long? = null,
         val sentAttachments: List<SentMessageAttachment> = emptyList(),
+        val messageBody: ChatMessageBody? = null,
     ) : Message
 
     data class Reply(

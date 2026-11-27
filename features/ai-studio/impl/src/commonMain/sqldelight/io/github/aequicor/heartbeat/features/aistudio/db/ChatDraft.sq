@@ -1,7 +1,8 @@
 CREATE TABLE chat_draft (
     session_id TEXT NOT NULL PRIMARY KEY REFERENCES studio_session(id) ON DELETE CASCADE,
     revision TEXT NOT NULL CHECK (length(revision) > 0),
-    body TEXT NOT NULL
+    body TEXT NOT NULL,
+    message_body TEXT
 );
 
 CREATE TABLE draft_attachment (
@@ -16,16 +17,16 @@ CREATE TABLE draft_attachment (
 CREATE INDEX draft_attachment_file ON draft_attachment(attachment_id);
 
 selectDraft:
-SELECT revision, body FROM chat_draft WHERE session_id = :session_id;
+SELECT revision, body, message_body FROM chat_draft WHERE session_id = :session_id;
 
 insertDraft:
 INSERT OR IGNORE INTO chat_draft(session_id, revision, body) VALUES (:session_id, :revision, :body);
 
 updateDraft:
-UPDATE chat_draft SET revision = :revision, body = :body WHERE session_id = :session_id;
+UPDATE chat_draft SET revision = :revision, body = :body, message_body = :message_body WHERE session_id = :session_id;
 
 clearSubmittedDraft:
-UPDATE chat_draft SET body = ''
+UPDATE chat_draft SET body = '', message_body = NULL
 WHERE session_id = :session_id AND revision = :revision
     AND EXISTS (
         SELECT 1 FROM studio_session WHERE id = :session_id AND status = 'ACTIVE'

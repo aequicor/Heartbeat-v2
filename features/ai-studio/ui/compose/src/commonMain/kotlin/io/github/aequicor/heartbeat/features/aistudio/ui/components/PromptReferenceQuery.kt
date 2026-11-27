@@ -27,11 +27,11 @@ internal fun TextFieldValue.promptReferenceQuery(): PromptReferenceQuery? {
     val at = start - 1
     if (at < 0 || text[at] != '@') return null
     val before = text.getOrNull(at - 1)
-    if (before != null && !before.isWhitespace() && before !in "([{") return null
+    if (before != null && !before.isWhitespace() && before != QuoteCharacter && before !in "([{") return null
     var end = caret
     while (end < text.length && text[end].isQueryCharacter()) end++
     // A reference can be selected in the middle of a partially typed name.
     return PromptReferenceQuery(at, end, text.substring(start, caret))
 }
 
-private fun Char.isQueryCharacter(): Boolean = !isWhitespace() && this !in "@[](){}<>,;!?"
+private fun Char.isQueryCharacter(): Boolean = !isWhitespace() && this != QuoteCharacter && this !in "@[](){}<>,;!?"

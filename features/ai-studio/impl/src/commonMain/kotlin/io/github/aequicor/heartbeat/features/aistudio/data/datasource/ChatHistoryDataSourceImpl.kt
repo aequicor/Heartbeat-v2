@@ -25,6 +25,36 @@ internal class ChatHistoryDataSourceImpl(
 ) : ChatHistoryDataSource {
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun source(sessionId: String, displayId: String?, revisionId: Long?): ChatHistoryEntry? =
+        accessStudioRepository {
+            val record = dao.source(sessionId, displayId, revisionId) ?: return@accessStudioRepository null
+            val entry = record.toDomain(keepAttachmentReference = true)
+            val links = record.parts.mapNotNull { it.attachment }
+                .filter { it.transferMode == "resource_link" && it.uri != null }
+                .associateBy { it.id }
+            suspend fun hydrate(attachment: ChatAttachment): ChatAttachment {
+                val link = links[attachment.storageId]?.uri ?: return attachment
+                return try {
+                    readLinkedAttachment(attachment, link)
+                } catch (_: StudioRepositoryException) {
+                    // Keep the missing attachment so the sender can surface the error before committing the draft.
+                    attachment
+                }
+            }
+            val message = when (val original = entry.message) {
+                is ChatHistoryEntry.User -> original.copy(files = original.files.map { hydrate(it) })
+                is ChatHistoryEntry.Reply -> original.copy(
+                    result = original.result?.let { hydrate(it) },
+                    artifacts = original.artifacts.map { hydrate(it) },
+                    steps = original.steps.map { step ->
+                        step.copy(events = step.events.map { it.copy(files = it.files.map { file -> hydrate(file) }) })
+                    },
+                )
+            }
+            entry.copy(message = message)
+        }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun page(sessionId: String, before: Long?, limit: Int) =
         accessStudioRepository { dao.page(sessionId, before, limit, interruptionLabels).map(ChatEntryRecord::toDomain) }
 

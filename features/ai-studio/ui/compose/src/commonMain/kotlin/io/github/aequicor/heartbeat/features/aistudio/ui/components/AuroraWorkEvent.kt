@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,6 +76,8 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.DetailFormat
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ToolOperation
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEvent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.WorkEventKind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.commandCodeDetails
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.diffCodeDetails
@@ -98,6 +101,7 @@ internal fun AuroraWorkEvent(
     entrance: AuroraWorkEventEntrance? = null,
     next: AuroraWorkEventEntrance? = null,
     reveal: Boolean = false,
+    reference: AuroraReferenceSelection? = null,
     fileContent: @Composable () -> Unit = {},
     onClick: () -> Unit,
 ) {
@@ -142,13 +146,15 @@ internal fun AuroraWorkEvent(
         val admission = if (ready) Modifier else Modifier.clearAndSetSemantics {}
         val arrival = if (opacity == null) Modifier else Modifier.graphicsLayer { alpha = opacity.value }
         val header: @Composable () -> Unit = {
-            AuroraWorkEventHeader(
-                event, expanded, current, touch, motion, titleInset, titleCenter, ready, onClick,
-                admission.then(arrival).zIndex(1f).heightIn(min = target).onSizeChanged {
-                    headerHeight = it.height
-                    transition?.recordHeight(expanded, it.height)
-                },
-            )
+            AuroraReferenceRegion(reference?.takeUnless { thinking }, event.summary, objectSelectable = true) {
+                AuroraWorkEventHeader(
+                    event, expanded, current, touch, motion, titleInset, titleCenter, ready, onClick,
+                    admission.then(arrival).zIndex(1f).heightIn(min = target).onSizeChanged {
+                        headerHeight = it.height
+                        transition?.recordHeight(expanded, it.height)
+                    },
+                )
+            }
         }
         if (reveal) AuroraWorkReveal(animateInitial = entrance != null, ready = ready, content = header)
         else header()
@@ -162,7 +168,9 @@ internal fun AuroraWorkEvent(
             val panelWidth = if (thinking) Modifier.widthIn(min = ExpandedThinkingMinWidth * HbTheme.textScale) else Modifier
             val panel = if (touch) fade.then(panelWidth) else fade.padding(end = AuroraLayout.Space)
                 .then(panelWidth).clip(shape).background(AuroraColors.WorkAccess)
-            val body: @Composable () -> Unit = { AuroraWorkDetailsBody(event, touch, panel, fileContent) }
+            val body: @Composable () -> Unit = {
+                AuroraWorkDetailsBody(event, touch, panel, reference, fileContent)
+            }
             if (reveal) {
                 AuroraWorkReveal(
                     animateInitial = !wasExpanded,
@@ -397,7 +405,13 @@ private fun Modifier.workIconOutline(glyph: HbIconGlyph): Modifier = layout { me
 }
 
 @Composable
-private fun AuroraWorkDetailsBody(event: WorkEvent, touch: Boolean, modifier: Modifier, fileContent: @Composable () -> Unit) {
+private fun AuroraWorkDetailsBody(
+    event: WorkEvent,
+    touch: Boolean,
+    modifier: Modifier,
+    reference: AuroraReferenceSelection?,
+    fileContent: @Composable () -> Unit,
+) {
     val desktopTool = !touch && event.kind != WorkEventKind.Thinking
     val verticalInset = if (touch) AuroraLayout.ContentInset else AuroraLayout.Space
     val label = event.detailLabel
@@ -409,65 +423,68 @@ private fun AuroraWorkDetailsBody(event: WorkEvent, touch: Boolean, modifier: Mo
             drawLine(AuroraColors.WorkDivider, Offset(0f, y), Offset(size.width, y), stroke)
         }
     } else Modifier
-    Column(
-        modifier = modifier.fillMaxWidth().then(divider).padding(
-            start = if (touch) AuroraLayout.WorkTextInset else AuroraLayout.Space,
-            top = if (desktopTool) AuroraLayout.SmallGap else verticalInset,
-            bottom = verticalInset,
-        ),
-    ) {
-        if (event.isCommand && event.command != null ||
-            (event.detailsFormat == DetailFormat.Code || event.detailsFormat == DetailFormat.Diff) && event.details.isNotBlank()
+    val source = reference?.copy(kind = if (event.kind == WorkEventKind.Thinking) Kind.Reasoning else Kind.ToolResult)
+    AuroraReferenceRegion(source, event.details.ifBlank { event.command.orEmpty() }, selection, modifier) {
+        Column(
+            modifier = Modifier.fillMaxWidth().then(divider).padding(
+                start = if (touch) AuroraLayout.WorkTextInset else AuroraLayout.Space,
+                top = if (desktopTool) AuroraLayout.SmallGap else verticalInset,
+                bottom = verticalInset,
+            ),
         ) {
-            AuroraWorkCode(event, touch)
-            fileContent()
-            return@Column
-        }
-        if (desktopTool) {
-            Box(
-                Modifier.fillMaxWidth().padding(end = AuroraLayout.SmallGap)
-                    .heightIn(min = AuroraLayout.DesktopWorkCopyTarget),
-                contentAlignment = Alignment.CenterStart,
+            if (event.isCommand && event.command != null ||
+                (event.detailsFormat == DetailFormat.Code || event.detailsFormat == DetailFormat.Diff) && event.details.isNotBlank()
             ) {
-                AuroraWorkCopy(event.details, Modifier.align(Alignment.TopEnd))
-                if (label != null) {
-                    SelectionContainer(
-                        Modifier.padding(end = AuroraLayout.DesktopWorkCopyTarget + AuroraLayout.Space),
-                    ) {
-                        AuroraWorkText(label, AuroraWorkRole.Metadata, color = AuroraColors.DesktopWorkMuted)
+                AuroraWorkCode(event, touch, selection)
+                fileContent()
+                return@Column
+            }
+            if (desktopTool) {
+                Box(
+                    Modifier.fillMaxWidth().padding(end = AuroraLayout.SmallGap)
+                        .heightIn(min = AuroraLayout.DesktopWorkCopyTarget),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    AuroraWorkCopy(event.details, Modifier.align(Alignment.TopEnd))
+                    if (label != null) {
+                        SelectionContainer(
+                            Modifier.padding(end = AuroraLayout.DesktopWorkCopyTarget + AuroraLayout.Space),
+                        ) {
+                            AuroraWorkText(label, AuroraWorkRole.Metadata, color = AuroraColors.DesktopWorkMuted)
+                        }
                     }
                 }
             }
-        }
-        SelectionContainer(
-            state = selection,
-            modifier = Modifier.fillMaxWidth().padding(end = if (touch) AuroraLayout.ContentInset else AuroraLayout.Space),
-        ) {
-            Column {
-                if (!desktopTool && label != null) {
-                    AuroraWorkText(
-                        label, AuroraWorkRole.Action,
-                        Modifier.padding(bottom = AuroraLayout.Space),
-                        color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopInk,
-                    )
-                }
-                event.command?.let { command ->
-                    AuroraReplyText(
-                        command, WorkDetailWidth.padding(bottom = AuroraLayout.SmallGap),
-                        HbTypography.Code.copy(color = if (touch) AuroraColors.WorkInk else AuroraColors.DesktopInk),
-                    )
-                }
-                if (event.details.isNotBlank() || event.files.isEmpty()) {
-                    AuroraWorkDetailContent(event, touch, selection)
+            SelectionContainer(
+                state = selection,
+                modifier = Modifier.fillMaxWidth().padding(end = if (touch) AuroraLayout.ContentInset else AuroraLayout.Space),
+            ) {
+                Column {
+                    if (!desktopTool && label != null) {
+                        AuroraWorkText(
+                            label, AuroraWorkRole.Action,
+                            Modifier.padding(bottom = AuroraLayout.Space),
+                            color = if (touch) AuroraColors.WorkMuted else AuroraColors.DesktopInk,
+                        )
+                    }
+                    event.command?.let { command ->
+                        AuroraReplyText(
+                            command, WorkDetailWidth.padding(bottom = AuroraLayout.SmallGap),
+                            HbTypography.Code.copy(color = if (touch) AuroraColors.WorkInk else AuroraColors.DesktopInk),
+                        )
+                    }
+                    if (event.details.isNotBlank() || event.files.isEmpty()) {
+                        AuroraWorkDetailContent(event, touch, selection)
+                    }
                 }
             }
+            fileContent()
         }
-        fileContent()
     }
 }
 
 @Composable
-private fun AuroraWorkCode(event: WorkEvent, touch: Boolean) {
+private fun AuroraWorkCode(event: WorkEvent, touch: Boolean, selection: SelectionState) {
     val diff = event.detailsFormat == DetailFormat.Diff
     val command = event.command.takeIf { event.isCommand }
     var wrap by rememberSaveable(event.id) { mutableStateOf(false) }
@@ -502,7 +519,7 @@ private fun AuroraWorkCode(event: WorkEvent, touch: Boolean) {
     if (code == null) {
         AuroraWorkText("Подготавливаем код…", AuroraWorkRole.Detail, WorkDetailWidth)
     } else {
-        SelectionContainer(WorkMarkdownIntrinsicSize.padding(end = AuroraLayout.Space)) {
+        SelectionContainer(state = selection, modifier = WorkMarkdownIntrinsicSize.padding(end = AuroraLayout.Space)) {
             if (diff || command != null) {
                 BoxWithConstraints {
                     AuroraCodeViewport(

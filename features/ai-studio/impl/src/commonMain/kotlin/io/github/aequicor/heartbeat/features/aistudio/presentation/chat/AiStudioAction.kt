@@ -8,6 +8,29 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 
 public sealed interface AiStudioAction {
     public data class EditDraft(val chatId: String, val text: String) : AiStudioAction
+    public sealed interface MessageReference : AiStudioAction {
+
+        public val chatId: String
+
+        public data class Reply(override val chatId: String, val source: AuroraReferenceSelection) : MessageReference
+        public data class Quote(
+            override val chatId: String,
+            val sources: List<AuroraReferenceSelection>,
+            val textIndex: Int,
+            val offset: Int,
+        ) : MessageReference
+
+        public data class EditText(override val chatId: String, val index: Int, val value: String) : MessageReference
+        public data class DeleteQuote(override val chatId: String, val index: Int) : MessageReference
+        public data class EditContent(
+            override val chatId: String,
+            val parts: List<AuroraDraftReferences.Part>,
+        ) : MessageReference
+        public data class DeleteReply(override val chatId: String) : MessageReference
+        public data class Jump(override val chatId: String, val reference: AuroraMessageReference) : MessageReference
+        public data class DismissUnavailable(override val chatId: String) : MessageReference
+    }
+
     public data class ReadAt(val chatId: String, val anchor: Anchor) : AiStudioAction
     public data class LoadOlderMessages(val chatId: String, val before: Long) : AiStudioAction
     public data class OpenChat(val id: String) : AiStudioAction

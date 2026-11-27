@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.SessionWorkState
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Anchor
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Chat
@@ -54,11 +55,16 @@ internal data class AuroraChat(
     @Transient val olderBefore: Long? = null,
     @Transient val draftRevision: String? = null,
     @Transient val loadedDraftRevision: String? = null,
+    @Transient val messageBody: ChatMessageBody? = null,
 ) {
 
-    fun editDraft(text: String = draft, files: List<File> = attachments): AuroraChat =
-        if (text == draft && files == attachments) this
-        else copy(draft = text, attachments = files, draftRevision = Uuid.random().toString())
+    fun editDraft(
+        text: String = draft,
+        files: List<File> = attachments,
+        body: ChatMessageBody? = messageBody.takeIf { text == draft },
+    ): AuroraChat =
+        if (text == draft && files == attachments && body == messageBody) this
+        else copy(draft = text, attachments = files, messageBody = body, draftRevision = Uuid.random().toString())
 
     fun recover(): AuroraChat {
         val history = messages.map { message ->

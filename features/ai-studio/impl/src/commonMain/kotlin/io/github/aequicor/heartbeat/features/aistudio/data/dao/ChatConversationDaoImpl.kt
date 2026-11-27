@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.dao
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.ChatMessageBodyPart
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.decodeChatMessageBody
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.Named
 import io.github.aequicor.heartbeat.core.database.DatabaseConnection
@@ -212,12 +214,18 @@ private fun ChatDraftQueries.consumeDraft(
     val stored = selectDraft(sessionId).executeAsOneOrNull()
     check(stored?.revision == revision) { "Черновик изменился до отправки" }
     val files = selectDraftFiles(sessionId).executeAsList()
-    check(stored.body.isNotBlank() || files.isNotEmpty()) { "Черновик уже отправлен" }
-    val prompt = message.parts.firstOrNull { it.kind == "text" }?.body.orEmpty()
+    val messageBody = message.parts.firstOrNull { it.kind == "text" && it.title == ChatMessageBodyPart }?.body
+    val storedBody = decodeChatMessageBody(stored.message_body)
+    check(stored.body.isNotBlank() || storedBody?.hasQuotes == true || files.isNotEmpty()) { "Черновик уже отправлен" }
+    val prompt = message.parts.firstOrNull { it.kind == "text" && it.title == null }?.body.orEmpty()
     val submittedFileIds = message.parts.mapNotNull { part ->
         part.attachment?.let { Json.parseToJsonElement(it.header).jsonObject.getValue("id").jsonPrimitive.content }
     }
-    check(stored.body.trim() == prompt && files.map { it.file_id } == submittedFileIds) {
+    check(
+        stored.body.trim() == prompt &&
+            storedBody == decodeChatMessageBody(messageBody) &&
+            files.map { it.file_id } == submittedFileIds,
+    ) {
         "Сообщение отличается от сохранённого черновика"
     }
     check(clearSubmittedDraft(sessionId, revision, writer).value == 1L)

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -52,6 +53,8 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraL
 import io.github.aequicor.heartbeat.designsystem.theme.HbTheme
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
@@ -274,15 +277,19 @@ private fun AuroraWorkStage(
             )
         } else if (expanded && step.details.isNotBlank()) {
             val connector = if (laterPhase && !touch) Modifier.timelineLine(axis) else Modifier
-            SelectionContainer(modifier = connector) {
-                AuroraWorkText(
-                    step.details, AuroraWorkRole.Detail, Modifier.padding(start = workContentInset(touch)),
-                )
+            val selection = rememberSelectionState()
+            AuroraReferenceRegion(AuroraReferenceSelection(replyId, Kind.Reasoning, step.id), step.details, selection, connector) {
+                SelectionContainer(state = selection) {
+                    AuroraReplyText(
+                        step.details, Modifier.padding(start = workContentInset(touch)),
+                        HbTypography.Detail.copy(color = AuroraColors.WorkInk),
+                    )
+                }
             }
         }
         if (!current) AuroraStageResult(
             step.result, step.resultContent, laterPhase, showEvents, axis, touch,
-            reveal = entrance != null, animateOnEntry = entrance?.results?.contains(step.id) == false,
+            reveal = entrance != null, animateOnEntry = entrance?.results?.contains(step.id) == false, stepId = step.id,
         )
     }
 }
@@ -290,7 +297,7 @@ private fun AuroraWorkStage(
 @Composable
 private fun AuroraStageResult(
     result: String?, content: ReplyHistoryContent?, laterPhase: Boolean, showEvents: Boolean, axis: Dp, touch: Boolean,
-    reveal: Boolean, animateOnEntry: Boolean,
+    reveal: Boolean, animateOnEntry: Boolean, stepId: String,
 ) {
     if (result != null) {
         val connector = if (laterPhase) Modifier.timelineLine(axis) else Modifier
@@ -300,7 +307,7 @@ private fun AuroraStageResult(
                 start = workContentInset(touch),
                 top = if (showEvents) AuroraLayout.ContentInset else Dp.Hairline,
             ),
-            reveal = reveal, animateOnEntry = animateOnEntry,
+            reveal = reveal, animateOnEntry = animateOnEntry, stepId = stepId,
         )
     }
     if (laterPhase) {
@@ -349,6 +356,7 @@ private fun AuroraStageEvents(
                     entrance = entrance,
                     next = arrivals.getOrNull(index + 1),
                     reveal = reveal,
+                    reference = AuroraReferenceSelection(replyId, Kind.ToolCall, step.id, event.id),
                     fileContent = {
                         AuroraArtifactRows(
                             event.files, replyId, touch, onAction,

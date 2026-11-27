@@ -1,0 +1,1 @@
+ALTER TABLE chat_draft ADD COLUMN message_body TEXT;

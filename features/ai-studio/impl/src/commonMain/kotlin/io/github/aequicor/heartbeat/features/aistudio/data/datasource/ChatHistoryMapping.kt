@@ -1,6 +1,8 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.reasoningPreview
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.ChatMessageBodyPart
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.decodeChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.toDomain
 
@@ -43,6 +45,7 @@ internal fun ChatEntryRecord.toDomain(keepAttachmentReference: Boolean = false):
             retryAllowed = meta["retryAllowed"]?.jsonPrimitive?.boolean ?: false,
             revisionId = revision,
             sentAttachments = roots.toDeliverySnapshots(),
+            messageBody = decodeChatMessageBody(text(ChatMessageBodyPart)),
         )
         "assistant" -> {
             val status = meta.enumOrNull<ChatHistoryEntry.ReplyStatus>("status") ?: ChatHistoryEntry.ReplyStatus.Working

@@ -38,6 +38,7 @@ import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraC
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
 import io.github.aequicor.heartbeat.designsystem.theme.HbTypography
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioAction
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
 import io.github.aequicor.heartbeat.features.aistudio.ui.resources.attachment_message_file
@@ -53,6 +54,20 @@ internal fun AuroraMessageAttachment(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
     measureTimestampTail: Boolean = false,
+) {
+    val source = LocalAuroraReferenceRow.current?.source?.copy(kind = Kind.Attachment, attachmentId = file.openId)
+    AuroraReferenceRegion(source, file.name, objectSelectable = true) {
+        AuroraMessageAttachmentContent(file, onAction, onOpen, modifier, measureTimestampTail)
+    }
+}
+
+@Composable
+private fun AuroraMessageAttachmentContent(
+    file: File,
+    onAction: (AiStudioAction) -> Unit,
+    onOpen: () -> Unit,
+    modifier: Modifier,
+    measureTimestampTail: Boolean,
 ) {
     val issue = messageAttachmentSourceIssue(file)
     val folders = LocalAttachmentFolderOpener.current?.takeIf { it.isAvailable && file.canDeferReading && issue == null }

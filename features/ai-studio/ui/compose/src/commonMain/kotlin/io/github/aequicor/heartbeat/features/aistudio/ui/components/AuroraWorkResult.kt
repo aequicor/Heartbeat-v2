@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyHistoryContent
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 
 @Composable
 internal fun AuroraWorkResult(
@@ -18,17 +19,21 @@ internal fun AuroraWorkResult(
     color: Color = AuroraColors.WorkInk,
     reveal: Boolean = false,
     animateOnEntry: Boolean = false,
+    stepId: String? = null,
 ) {
     val selection = rememberSelectionState()
     val markdown = content?.takeUnless { it.plain }
     val width = if (markdown == null) Modifier else WorkMarkdownIntrinsicSize
-    SelectionContainer(state = selection, modifier = modifier) {
-        val body: @Composable () -> Unit = {
-            Column {
-                AuroraMarkdownContent(text, markdown, selection,
-                    auroraMessageStyle().copy(color = color), touch, width)
+    val source = LocalAuroraReferenceRow.current?.source?.copy(kind = Kind.InterimResult, stepId = stepId)
+    AuroraReferenceRegion(source, text, selection, modifier) {
+        SelectionContainer(state = selection) {
+            val body: @Composable () -> Unit = {
+                Column {
+                    AuroraMarkdownContent(text, markdown, selection,
+                        auroraMessageStyle().copy(color = color), touch, width)
+                }
             }
+            if (reveal) AuroraWorkReveal(animateOnEntry, content = body) else body()
         }
-        if (reveal) AuroraWorkReveal(animateOnEntry, content = body) else body()
     }
 }

@@ -66,6 +66,8 @@ public data class AiStudioScreenState(
     val artifactToSave: File? = null,
     val fileToCopy: File? = null,
     val submittingDrafts: Set<String> = emptySet(),
+    val referenceJump: AuroraReferenceJump? = null,
+    val referenceUnavailable: Boolean = false,
 ) {
 
     public fun isPromptBlockedBySecurityMode(chat: Chat): Boolean =
@@ -143,7 +145,11 @@ public data class AiStudioScreenState(
         }
     }
 
-    public data class Draft(val chatId: String? = null, val text: String = "")
+    public data class Draft(
+        val chatId: String? = null,
+        val text: String = "",
+        val references: AuroraDraftReferences? = null,
+    )
 
     public data class PromptReferences(
         val draftId: String,
@@ -228,6 +234,7 @@ public data class AiStudioScreenState(
         val code: Boolean = false,
         val url: String? = null,
         val attachmentReference: Boolean = false,
+        val originalRange: IntRange? = null,
     )
 
     public enum class ReplyAlignment { Left, Center, Right }
@@ -388,7 +395,12 @@ public data class AiStudioScreenState(
         val access: Access = Access.Workspace,
         val retryAllowed: Boolean = true,
         @Transient val revisionId: Long? = null,
-    ) : Message
+        @Transient val references: AuroraDraftReferences? = null,
+    ) : Message {
+
+        @Transient
+        public val markdownContent: ReplyHistoryContent = ReplyHistoryContent(text)
+    }
 
     @Serializable
     public enum class Delivery { Sending, Sent, Failed }
@@ -407,6 +419,7 @@ public data class AiStudioScreenState(
         val retryAllowed: Boolean = true,
         val failure: ReplyFailure? = null,
         val artifacts: List<File> = listOf(),
+        @Transient val revisionId: Long? = null,
     ) : Message {
         @Transient
         public val interimContent: ReplyHistoryContent? = interim?.let { ReplyHistoryContent(it) }

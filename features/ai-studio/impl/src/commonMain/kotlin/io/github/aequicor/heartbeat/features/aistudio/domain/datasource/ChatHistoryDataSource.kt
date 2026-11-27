@@ -9,6 +9,9 @@ import kotlin.coroutines.cancellation.CancellationException
 internal interface ChatHistoryDataSource {
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun source(sessionId: String, displayId: String?, revisionId: Long?): ChatHistoryEntry?
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun page(sessionId: String, before: Long?, limit: Int): List<ChatHistoryEntry>
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)

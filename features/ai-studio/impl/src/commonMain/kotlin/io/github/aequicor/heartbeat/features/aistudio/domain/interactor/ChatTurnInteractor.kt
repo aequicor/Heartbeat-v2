@@ -2,6 +2,7 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.interactor
 
 import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireAnswer
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatConfiguration
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatTurn
 import kotlin.Throws as Throwable
@@ -16,6 +17,7 @@ internal interface ChatTurnInteractor {
         text: String,
         attachments: List<ChatAttachment>,
         expectedDraftRevision: String,
+        messageBody: ChatMessageBody? = null,
         cancellationRequested: () -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit>

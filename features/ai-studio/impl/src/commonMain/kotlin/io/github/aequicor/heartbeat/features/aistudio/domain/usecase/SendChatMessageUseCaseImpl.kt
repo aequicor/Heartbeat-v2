@@ -13,6 +13,7 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatEngi
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.ChatTurnException
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatEngineTurn
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatPrompt
@@ -50,17 +51,21 @@ internal class SendChatMessageUseCaseImpl(
         text: String,
         attachments: List<ChatAttachment>,
         expectedDraftRevision: String,
+        messageBody: ChatMessageBody?,
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
     ): Result<Unit> = runCatching {
         val prompt = text.trim()
-        require(ChatPrompt.canSend(prompt, attachments.isNotEmpty(), hasActiveTurn = false))
-        val conversation = if (attachments.isNotEmpty()) {
+        require(messageBody?.canSend(attachments.isNotEmpty(), hasActiveTurn = false)
+            ?: ChatPrompt.canSend(prompt, attachments.isNotEmpty(), hasActiveTurn = false))
+        val conversation = if (attachments.isNotEmpty() || messageBody?.hasReferenceAttachments() == true) {
             prepareChatContext(sessionId).getOrElse { failure ->
                 if (failure is CancellationException) throw failure
                 throw AttachmentTransferException("Не удалось открыть сессию агента для отправки вложений", failure)
             }
         } else null
+        val referenceAttachments = if (conversation == null) emptyList()
+        else messageBody?.referenceAttachments(files, conversation).orEmpty()
         val snapshots = if (conversation == null) emptyList() else attachments.map { prepareAttachment(it, conversation) }
         val userFiles = attachments.mapIndexed { index, file ->
             val resource = snapshots.getOrNull(index) as? SentMessageAttachment.Resource ?: return@mapIndexed file
@@ -79,10 +84,12 @@ internal class SendChatMessageUseCaseImpl(
         currentCoroutineContext().ensureActive()
         val user = withContext(NonCancellable) {
             conversations.commitUserPrompt(
-                sessionId, newMessage(messageId, prompt, userFiles).copy(sentAttachments = snapshots), expectedDraftRevision,
+                sessionId,
+                newMessage(messageId, prompt, userFiles).copy(sentAttachments = snapshots, messageBody = messageBody),
+                expectedDraftRevision,
             )
         } ?: return@runCatching
-        deliver(sessionId, user, started, update, conversation)
+        deliver(sessionId, user, started, update, conversation, referenceAttachments)
     }.rethrowCancellation()
 
     @Throwable(CancellationException::class)
@@ -145,6 +152,7 @@ internal class SendChatMessageUseCaseImpl(
         started: suspend (ChatEngineConversationDataSource) -> Boolean,
         update: suspend (ChatTurn) -> Unit,
         preparedConversation: ChatEngineConversationDataSource? = null,
+        preparedReferences: List<SentMessageAttachment>? = null,
     ) {
         var turn = ChatTurn(user = user)
         val replyId = Uuid.random().toString()
@@ -159,6 +167,10 @@ internal class SendChatMessageUseCaseImpl(
             currentCoroutineContext().ensureActive()
             update(turn)
             val conversation = preparedConversation ?: prepareChatContext(sessionId).getOrThrow()
+            val context = user.messageBody
+            val prompt = context?.withReferenceContext() ?: user.text
+            val attachments = user.sentAttachments +
+                (preparedReferences ?: context?.referenceAttachments(files, conversation).orEmpty())
             if (started(conversation)) {
                 dispatchStarted = true
                 coroutineScope {
@@ -179,7 +191,7 @@ internal class SendChatMessageUseCaseImpl(
                     }
 
                     val result = runCatching {
-                        conversation.send(user.text, user.sentAttachments) { progress ->
+                        conversation.send(prompt, attachments) { progress ->
                             checkpointLock.withLock {
                                 turn = turn.updated(replyId, progress)
                                 if (!turn.running) {

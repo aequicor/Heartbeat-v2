@@ -47,6 +47,9 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.MeasureScope
@@ -64,6 +67,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import io.github.aequicor.heartbeat.designsystem.components.HbFocusIndication
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.components.HbMenu
@@ -79,6 +83,11 @@ import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudio
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.Reply
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.ReplyStatus
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.User
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.Res
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_reference_copy
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_reference_quote
+import io.github.aequicor.heartbeat.features.aistudio.ui.resources.chat_reference_reply
 import kotlin.math.roundToInt
 
 @Composable
@@ -95,22 +104,52 @@ internal fun AuroraMessageMenu(
     workAction: HbMenuAction? = null,
     content: @Composable (hoverOverMenu: Boolean) -> Unit,
 ) {
-    val actions = auroraMessageActions(message, touch, onAction, liveText) + listOfNotNull(workAction)
     val user = message is User
     val hitArea = remember { MessageMenuHitArea() }
     val menu = remember { MessageMenuState() }
     val expanded = menu.expanded
     val onContextMenu by rememberUpdatedState(onAction)
-    val hasContext = !touch && (actions.isNotEmpty() || workMenu != null)
+    val references = LocalAuroraReferenceInteraction.current
+    val referenceRow = LocalAuroraReferenceRow.current
+    val replyAction = if (message is User && message.delivery == Delivery.Sent) {
+        references?.replyAction(AuroraReferenceSelection(message.id, AuroraReferenceSelection.Kind.Message,
+            revisionId = message.revisionId))
+    } else null
+    val actions = listOfNotNull(replyAction) + auroraMessageActions(message, touch, onAction, liveText) +
+        listOfNotNull(workAction)
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
+    val hasContext = !touch && (actions.isNotEmpty() || workMenu != null || referenceRow != null)
     val hasFileMenu = !touch && when (message) {
         is User -> message.files.isNotEmpty()
         is Reply -> message.result != null || message.artifacts.isNotEmpty() ||
             message.steps.any { step -> step.events.any { it.files.isNotEmpty() } }
     }
-    val openContext = remember(hitArea, menu, workMenu, hasContext) {
+    val openContext = remember(hitArea, menu, workMenu, hasContext, referenceRow, references, clipboard, message, liveText) {
         if (hasContext) { root: Offset ->
             val anchor = hitArea.anchorAt(root - hitArea.rootOrigin)
-            menu.showAtPointer(anchor, listOfNotNull(workMenu?.actionAt(root, onContextMenu)))
+            val region = referenceRow?.regionAt(root)
+            val selected = referenceRow?.selected(region)
+            val origin = region?.source ?: referenceRow?.source
+            val referenceActions = if (references != null && origin != null) buildList<HbMenuAction> {
+                add(references.replyAction(origin))
+                if (references.hasSelection(selected)) {
+                    add(HbMenuAction("Цитировать", { references.quote(selected, region?.selection ?: selection) },
+                        leadingIcon = { AuroraReferenceIcon(Res.drawable.chat_reference_quote) }))
+                    add(HbMenuAction("Копировать выделенное", {
+                        clipboard.setText(AnnotatedString(selected?.selectedText ?: references.copiedSelection()))
+                    }, leadingIcon = { AuroraReferenceIcon(Res.drawable.chat_reference_copy) }))
+                } else {
+                    val text = region?.rawText?.takeIf(String::isNotBlank) ?: when (message) {
+                        is User -> message.text
+                        is Reply -> liveText?.value?.textFor(message.id) ?: message.text.ifBlank { message.interim.orEmpty() }
+                    }
+                    add(HbMenuAction("Копировать текст", { clipboard.setText(AnnotatedString(text.referencePreviewText())) },
+                        enabled = text.isNotEmpty(), leadingIcon = { AuroraReferenceIcon(Res.drawable.chat_reference_copy) }))
+                }
+            } else null
+            menu.showAtPointer(anchor, referenceActions ?: listOfNotNull(workMenu?.actionAt(root, onContextMenu)),
+                exclusive = referenceActions != null)
         } else null
     }
     SideEffect { workMenu?.openAt = openContext }
@@ -135,7 +174,7 @@ internal fun AuroraMessageMenu(
             }
         },
         menu = {
-            val menuActions = menu.contextActions + actions
+            val menuActions = menu.contextActions + if (menu.exclusive) emptyList() else actions
             if (menuActions.isNotEmpty()) {
                 HbMenu(
                     expanded, menu.close, menuActions,
@@ -145,6 +184,10 @@ internal fun AuroraMessageMenu(
                     alignEnd = user,
                     restoreTriggerFocus = !touchAtEdge && menu.pointerAnchor == null,
                     pointerAnchor = menu.pointerAnchor,
+                    popupWidth = 224.dp.takeIf { menu.exclusive },
+                    popupBackground = if (menu.exclusive) {
+                        { shape -> Modifier.background(AuroraColors.AgentMessage, shape) }
+                    } else null,
                     motion = HbMenuMotion(
                         replaceTrigger = menu.pointerAnchor == null,
                         hoverMenu = menu.openedByHover,
@@ -169,9 +212,14 @@ internal fun AuroraMessageMenu(
         modifier = modifier.onGloballyPositioned { hitArea.rootOrigin = it.positionInRoot() }
             .trackMessageMenuPointer(
                 hitArea, openContext, menu.openOnHover.takeIf { !touch && actions.isNotEmpty() }, hasFileMenu,
+                references.takeUnless { touch }, referenceRow.takeUnless { touch },
             ),
     )
 }
+
+private fun AuroraReferenceInteraction.replyAction(source: AuroraReferenceSelection): HbMenuAction =
+    HbMenuAction("Ответить", { reply(source.replySource()) },
+        leadingIcon = { AuroraReferenceIcon(Res.drawable.chat_reference_reply) })
 
 private class MessageMenuState {
     var expanded by mutableStateOf(false)
@@ -179,6 +227,8 @@ private class MessageMenuState {
     var pointerAnchor by mutableStateOf<IntOffset?>(null)
         private set
     var openedByHover by mutableStateOf(false)
+        private set
+    var exclusive by mutableStateOf(false)
         private set
     var contextActions by mutableStateOf(emptyList<HbMenuAction>())
         private set
@@ -191,9 +241,13 @@ private class MessageMenuState {
         else if (expanded && openedByHover && enteredHoverMenu) close()
     }
 
-    fun showAtPointer(anchor: IntOffset, actions: List<HbMenuAction>) = show(anchor, context = actions)
+    fun showAtPointer(anchor: IntOffset, actions: List<HbMenuAction>, exclusive: Boolean) =
+        show(anchor, context = actions, exclusive = exclusive)
 
-    private fun show(anchor: IntOffset?, byHover: Boolean = false, context: List<HbMenuAction> = emptyList()) {
+    private fun show(
+        anchor: IntOffset?, byHover: Boolean = false, context: List<HbMenuAction> = emptyList(), exclusive: Boolean = false,
+    ) {
+        this.exclusive = exclusive
         pointerAnchor = anchor
         openedByHover = byHover
         contextActions = context
@@ -418,8 +472,12 @@ private fun Modifier.trackMessageMenuPointer(
     onContextMenu: ((Offset) -> Unit)?,
     onBadgeEnter: (() -> Unit)?,
     hasFileMenu: Boolean,
-): Modifier = pointerInput(hitArea, onContextMenu, onBadgeEnter, hasFileMenu) {
+    references: AuroraReferenceInteraction?,
+    referenceRow: AuroraReferenceRow?,
+): Modifier = pointerInput(hitArea, onContextMenu, onBadgeEnter, hasFileMenu, references, referenceRow) {
     awaitPointerEventScope {
+        var referenceStart: Pair<AuroraReferenceRow.Region, Int?>? = null
+        var accumulate = false
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             val mouse = event.changes.firstOrNull { it.type == PointerType.Mouse } ?: continue
@@ -430,17 +488,51 @@ private fun Modifier.trackMessageMenuPointer(
                     if (enteredBadge && hitArea.opensOnBadgeEnter && !mouse.pressed) onBadgeEnter?.invoke()
                 }
                 PointerEventType.Scroll -> hitArea.move(mouse.position)
-                PointerEventType.Press -> if (onContextMenu != null && event.buttons.isSecondaryPressed &&
-                    hitArea.containsMessage(mouse.position)
-                ) {
-                    hitArea.attachmentMenuHandled = false
-                    if (hasFileMenu) {
-                        // A file inside the bubble can handle the same press during the main pass.
-                        awaitPointerEvent(PointerEventPass.Final)
+                PointerEventType.Press -> {
+                    val root = hitArea.rootOrigin + mouse.position
+                    val region = referenceRow?.regionAt(root)
+                    if (event.buttons.isPrimaryPressed && region != null && references != null) {
+                        accumulate = event.keyboardModifiers.isMetaPressed || event.keyboardModifiers.isCtrlPressed
+                        referenceRow?.regions?.forEach { it.range = null }
+                        referenceStart = region to region.offsetAt(root, end = false)
+                        if (accumulate && region.objectSelectable) {
+                            references.toggleObject(region.source, region.rawText)
+                            mouse.consume()
+                            referenceStart = null
+                        }
                     }
-                    if (!hitArea.attachmentMenuHandled) {
-                        mouse.consume()
-                        onContextMenu(hitArea.rootOrigin + mouse.position)
+                    if (onContextMenu != null && event.buttons.isSecondaryPressed && hitArea.containsMessage(mouse.position)) {
+                        hitArea.attachmentMenuHandled = false
+                        if (hasFileMenu && (referenceRow == null || region?.source?.kind == AuroraReferenceSelection.Kind.Attachment)
+                            && references?.hasSelection(referenceRow?.selected(region)) != true
+                        ) {
+                            // The attachment retains its file actions when there is no active selection.
+                            awaitPointerEvent(PointerEventPass.Final)
+                        }
+                        if (!hitArea.attachmentMenuHandled) {
+                            mouse.consume()
+                            onContextMenu(root)
+                        }
+                    }
+                }
+                PointerEventType.Release -> {
+                    val start = referenceStart
+                    referenceStart = null
+                    if (start != null && referenceRow != null && references != null) {
+                        val (region, first) = start
+                        val last = region.offsetAt(hitArea.rootOrigin + mouse.position, end = true)
+                        if (first != null && last != null && first != last) {
+                            region.range = AuroraReferenceSelection.Range(minOf(first, last), maxOf(first, last))
+                        }
+                        // The Foundation SelectionContainer commits the last selected texts in the main pass.
+                        awaitPointerEvent(PointerEventPass.Final)
+                        val selected = referenceRow.selected(region)
+                        if (selected != null) {
+                            if (accumulate) references.rememberSelection(selected, region.selection)
+                            else references.trackSelection(region.selection ?: referenceRow.selection)
+                        } else if (accumulate && region.range != null) {
+                            references.rememberSelection(region.source.copy(range = region.range), region.selection)
+                        }
                     }
                 }
                 else -> Unit

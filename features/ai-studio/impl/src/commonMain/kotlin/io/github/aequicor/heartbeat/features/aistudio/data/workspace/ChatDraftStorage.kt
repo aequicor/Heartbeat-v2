@@ -1,7 +1,9 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.encodeChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatDraftQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AiStudioScreenState.File
 import kotlinx.serialization.json.Json
 import kotlin.uuid.Uuid
@@ -12,9 +14,10 @@ internal fun ChatDraftQueries.replaceDraft(
     revision: String,
     text: String,
     files: List<File>,
+    body: ChatMessageBody? = null,
 ) {
     insertDraft(sessionId, revision, text)
-    updateDraft(revision, text, sessionId)
+    updateDraft(revision, text, encodeChatMessageBody(body), sessionId)
     val previous = selectDraftFiles(sessionId).executeAsList()
     if (previous.map { decodeDraftFile(it.presentation, it.transfer_mode, it.original_uri, it.managed_path) } == files) return
 

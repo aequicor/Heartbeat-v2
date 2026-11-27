@@ -12,6 +12,10 @@ import kotlin.coroutines.cancellation.CancellationException
 internal class ChatHistoryInteractorImpl(private val history: ChatHistoryDataSource) : ChatHistoryInteractor {
 
     @Throwable(CancellationException::class)
+    override suspend fun source(sessionId: String, displayId: String?, revisionId: Long?): Result<ChatHistoryEntry?> =
+        runCatching { history.source(sessionId, displayId, revisionId) }.rethrowCancellation()
+
+    @Throwable(CancellationException::class)
     override suspend fun page(sessionId: String, before: Long?, anchor: String?): Result<ChatHistoryEntry.Page> = runCatching {
         val target = anchor?.let { history.position(sessionId, it) }
         val entries = mutableListOf<ChatHistoryEntry>()

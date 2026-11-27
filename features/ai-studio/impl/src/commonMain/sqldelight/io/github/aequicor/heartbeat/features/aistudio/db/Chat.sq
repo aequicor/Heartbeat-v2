@@ -253,6 +253,24 @@ FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id
 WHERE e.chat_id = :chat_id AND (:before_position IS NULL OR e.position < :before_position)
 ORDER BY e.position DESC LIMIT :page_size;
 
+selectReferenceSource:
+WITH RECURSIVE lineage(position, predates_edit, revision_id) AS (
+    SELECT e.position, e.predates_edit, e.revision_id
+    FROM chat_entry e
+    JOIN message_revision r ON r.revision_id = e.revision_id
+    WHERE e.chat_id = :chat_id AND (:display_id IS NULL OR r.display_id = :display_id)
+    AND (:expected_revision IS NULL OR e.message_id = (
+        SELECT message_id FROM message_revision WHERE revision_id = :expected_revision
+    ))
+    UNION ALL
+    SELECT lineage.position, lineage.predates_edit, r.parent_revision_id
+    FROM lineage JOIN message_revision r ON r.revision_id = lineage.revision_id
+    WHERE :expected_revision IS NOT NULL AND r.parent_revision_id IS NOT NULL
+)
+SELECT lineage.position, lineage.predates_edit, r.*
+FROM lineage JOIN message_revision r ON r.revision_id = lineage.revision_id
+WHERE r.status != 'draft' AND (:expected_revision IS NULL OR r.revision_id = :expected_revision);
+
 selectMessage:
 SELECT e.position, e.message_id, e.revision_id, r.status, r.presentation
 FROM chat_entry e JOIN message_revision r ON r.revision_id = e.revision_id

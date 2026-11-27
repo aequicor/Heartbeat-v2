@@ -1,5 +1,7 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.ChatMessageBodyPart
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.encodeChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord.Part
 import io.github.aequicor.heartbeat.features.aistudio.data.model.toRecord
@@ -47,6 +49,7 @@ private fun ChatHistoryEntry.Message.parts(): List<Part> = buildList {
     if (text.isNotEmpty()) add(Part("text", body = text))
     when (this@parts) {
         is ChatHistoryEntry.User -> {
+            encodeChatMessageBody(messageBody)?.let { add(Part("text", body = it, title = ChatMessageBodyPart)) }
             check(sentAttachments.isEmpty() || sentAttachments.size == files.size)
             files.forEachIndexed { index, file ->
                 val snapshot = sentAttachments.getOrNull(index)

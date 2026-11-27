@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.data.workspace
 
+import io.github.aequicor.heartbeat.features.aistudio.data.dto.decodeChatMessageBody
 import app.cash.sqldelight.coroutines.asFlow
 
 import dev.zacsweers.metro.Inject
@@ -198,6 +199,7 @@ internal class StudioWorkspacePersistence(
             draft = draft?.body.orEmpty(),
             attachments = if (draft == null) emptyList() else drafts.readDraftFiles(sessionId),
             draftRevision = draft?.revision, loadedDraftRevision = draft?.revision,
+            messageBody = decodeChatMessageBody(draft?.message_body),
         )
     }
 
@@ -323,10 +325,10 @@ private fun ChatDraftQueries.saveDraft(history: ChatQueries, chat: AuroraChat, p
     val storedRevision = selectDraft(id).executeAsOneOrNull()?.revision
     if (revision == storedRevision) return
     check(storedRevision == previousRevision) { "Черновик изменился в другом окне" }
-    replaceDraft(history, id, revision, chat.draft, chat.attachments)
+    replaceDraft(history, id, revision, chat.draft, chat.attachments, chat.messageBody)
 }
 
-private fun AuroraChat.withoutDraft() = copy(draft = "", attachments = emptyList())
+private fun AuroraChat.withoutDraft() = copy(draft = "", attachments = emptyList(), messageBody = null)
 
 private fun legacyWorkspaceSessionId(id: String): String {
     // Keep the target directory stable if an import stops after writing its files.

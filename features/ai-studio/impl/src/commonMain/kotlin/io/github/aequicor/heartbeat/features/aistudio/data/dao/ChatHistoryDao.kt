@@ -9,6 +9,9 @@ import kotlin.coroutines.cancellation.CancellationException
 internal interface ChatHistoryDao {
 
     @Throwable(DaoException::class, CancellationException::class)
+    suspend fun source(sessionId: String, displayId: String?, revisionId: Long?): ChatEntryRecord?
+
+    @Throwable(DaoException::class, CancellationException::class)
     suspend fun page(sessionId: String, before: Long?, limit: Int, interruption: ChatInterruptionLabels): List<ChatEntryRecord>
 
     @Throwable(DaoException::class, CancellationException::class)

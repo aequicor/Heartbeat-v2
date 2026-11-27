@@ -11,6 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
+import io.github.aequicor.heartbeat.features.aistudio.data.model.SentAttachmentRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
 import io.github.aequicor.heartbeat.features.aistudio.db.Message_part
 import kotlin.Throws as Throwable
@@ -46,6 +47,30 @@ internal class ChatHistoryDaoImpl(
                 ChatEntryRecord(row.position, row.revision_id, row.message_id, row.predates_edit != 0L,
                     row.role, row.presentation, parts)
             }
+        }
+    }
+
+    @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun source(sessionId: String, displayId: String?, revisionId: Long?): ChatEntryRecord? = read {
+        transactionWithResult {
+            val chatId = chatForSession(sessionId).executeAsOne()
+            val row = selectReferenceSource(chatId, displayId, revisionId).executeAsOneOrNull()
+                ?: return@transactionWithResult null
+            val parts = selectParts(row.revision_id).executeAsList().map { part ->
+                val snapshot = part.sent_attachment_id
+                ChatEntryRecord.Part(
+                    part.id, part.parent_part_id, part.kind, part.title, part.body, part.presentation,
+                    snapshot?.let { fullAttachment(it) }, deferred = false,
+                    snapshot = if (row.role == "user") snapshot?.let { id ->
+                        selectSentAttachment(id).executeAsOne().let {
+                            SentAttachmentRecord(it.transfer_mode, it.uri, it.name, it.description, it.mime_type,
+                                it.size_bytes, it.content_text, it.content_blob)
+                        }
+                    } else null,
+                )
+            }
+            ChatEntryRecord(row.position, row.revision_id, row.message_id, row.predates_edit != 0L,
+                row.role, row.presentation, parts)
         }
     }
 

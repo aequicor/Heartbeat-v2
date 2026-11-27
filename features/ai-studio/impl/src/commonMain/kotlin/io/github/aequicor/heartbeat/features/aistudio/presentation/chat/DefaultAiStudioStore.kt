@@ -5,6 +5,9 @@ package io.github.aequicor.heartbeat.features.aistudio.presentation.chat
 import io.github.aequicor.heartbeat.features.aistudio.EditedImageKindPrefix
 import io.github.aequicor.heartbeat.features.aistudio.editedPngKind
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatSourceSnapshot
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.EditedImageCopySaveException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
 import io.github.aequicor.heartbeat.features.aistudio.domain.usecase.SaveEditedImageCopyUseCase
@@ -224,8 +227,21 @@ internal class DefaultAiStudioStore(
         when (action) {
             is AiStudioAction.EditDraft -> {
                 // Keep text feedback immediate. Only a small editor snapshot is touched on this path.
-                editor.update { if (it.chatId == action.chatId) it.copy(text = action.text) else it }
-                saveRequests.trySend(Unit)
+                editReferenceDraft(action.chatId) {
+                    if (it.references == null) it.copy(text = action.text)
+                    else if (!it.references.hasQuotes) {
+                        it.withBody(it.body().copy(content = listOf(ChatMessageBody.Node.Text(action.text))))
+                    } else it
+                }
+            }
+            is AiStudioAction.MessageReference.EditText -> editReferenceDraft(action.chatId) {
+                it.withBody(it.body().editText(action.index, action.value))
+            }
+            is AiStudioAction.MessageReference.DeleteQuote -> editReferenceDraft(action.chatId) {
+                it.withBody(it.body().removeQuote(action.index))
+            }
+            is AiStudioAction.MessageReference.EditContent -> editReferenceDraft(action.chatId) {
+                it.withEditedContent(action.parts)
             }
             AiStudioAction.Send -> screen.value.chat?.id?.let(::submitChatDraft)
             is AiStudioAction.SearchPromptReferences -> promptReferenceSearch?.request(action)
@@ -250,6 +266,7 @@ internal class DefaultAiStudioStore(
             is AiStudioAction.SearchPromptReferences,
             AiStudioAction.CancelTurn, is AiStudioAction.CancelChatTurn, is AiStudioAction.AnswerPermission,
             -> Unit
+            is AiStudioAction.MessageReference -> handleMessageReference(action)
             is AiStudioAction.ReadAt -> readAt(action)
             is AiStudioAction.LoadOlderMessages -> if (screen.value.chat?.id == action.chatId &&
                 selected.olderBefore == action.before
@@ -448,7 +465,7 @@ internal class DefaultAiStudioStore(
 
     private suspend fun showChat(target: AuroraChat) {
         val id = target.summary.id
-        val before = editor.getAndUpdate { Draft(id, target.draft) }
+        val before = editor.getAndUpdate { Draft(id, target.draft, target.messageBody?.displayReferences()) }
         rememberDraft(before)
         val messages = history(target)
         val visibleMessages = withPendingSubmission(id, messages)
@@ -472,6 +489,8 @@ internal class DefaultAiStudioStore(
                 messages = visibleMessages,
                 olderMessagesBefore = target.olderBefore,
                 live = live,
+                referenceJump = null,
+                referenceUnavailable = false,
                 request = remoteTurns?.request(id) ?: turn?.request,
                 activity = remoteTurns?.activity(id) ?: turn?.activity ?: Activity.Idle,
                 restoreAnchor = target.anchor,
@@ -1055,6 +1074,106 @@ internal class DefaultAiStudioStore(
         save()
     }
 
+    private fun editReferenceDraft(chatId: String, edit: (Draft) -> Draft) {
+        editor.update { if (it.chatId == chatId) edit(it) else it }
+        saveRequests.trySend(Unit)
+    }
+
+    private suspend fun handleMessageReference(action: AiStudioAction.MessageReference) {
+        val chatId = action.chatId
+        if (screen.value.chat?.id != chatId) return
+        when (action) {
+            is AiStudioAction.MessageReference.EditText, is AiStudioAction.MessageReference.DeleteQuote,
+            is AiStudioAction.MessageReference.EditContent -> Unit
+            is AiStudioAction.MessageReference.DeleteReply ->
+                editReferenceDraft(chatId) { it.withBody(it.body().copy(reply = null)) }
+            is AiStudioAction.MessageReference.Reply -> {
+                val snapshot = readReferenceSnapshots(chatId, listOf(action.source))?.singleOrNull() ?: return
+                editReferenceDraft(chatId) { it.withBody(it.body().copy(reply = snapshot)) }
+            }
+            is AiStudioAction.MessageReference.Quote -> {
+                val quotes = readReferenceSnapshots(chatId, action.sources)?.map { ChatMessageBody.Node.Quote(it) } ?: return
+                editReferenceDraft(chatId) { it.withBody(it.body().insertQuotes(action.textIndex, action.offset, quotes)) }
+            }
+            is AiStudioAction.MessageReference.Jump -> jumpToReference(chatId, action.reference)
+            is AiStudioAction.MessageReference.DismissUnavailable -> screen.update { it.copy(referenceUnavailable = false) }
+        }
+    }
+
+    private suspend fun readReferenceSnapshots(
+        chatId: String,
+        selections: List<AuroraReferenceSelection>,
+    ): List<ChatSourceSnapshot>? {
+        val storage = persistence
+        val merged = selections.mergeReferenceSelections()
+        val selectors = merged.map { it.messageId to it.revisionId }.distinct()
+        val messages = mutableMapOf<Pair<String, Long?>, ChatHistoryEntry?>()
+        for ((id, revision) in selectors) {
+            messages[id to revision] = if (storage == null) findMessage(id)?.asReferenceEntry()
+            else screen.readStored { storage.referenceSource(chatId, id, revision) }
+        }
+        val agent = selected.summary.configuration?.engine?.name
+        val snapshots = withContext(defaultDispatcher) {
+            merged.mapNotNull { selection -> messages[selection.messageId to selection.revisionId]?.snapshot(selection, agent) }
+        }
+        if (snapshots.size == merged.size) {
+            screen.update { it.copy(referenceUnavailable = false) }
+            return snapshots
+        }
+        screen.update { it.copy(referenceUnavailable = true) }
+        return null
+    }
+
+    private suspend fun jumpToReference(chatId: String, reference: AuroraMessageReference) {
+        val storage = persistence
+        val snapshot = reference.snapshot
+        val origin = snapshot.source
+        val entry = if (storage == null) {
+            screen.value.messages.firstOrNull { it.id.hashCode().toLong() == origin.messageId }?.asReferenceEntry()
+        } else {
+            screen.readStored { storage.referenceSource(chatId, null, origin.revisionId) }
+                ?.takeIf { it.messageId == origin.messageId }
+        }
+        val source = entry?.message?.id
+        if (entry == null || source == null) {
+            screen.update { it.copy(referenceUnavailable = true) }
+            return
+        }
+        if (storage != null && screen.value.messages.none { it.id == source }) {
+            val loaded = screen.readStored { storage.loadThrough(selected, source) } ?: return
+            updateChat(chatId) { loaded }
+            screen.update { it.copy(messages = withPendingSubmission(chatId, history(loaded)), olderMessagesBefore = loaded.olderBefore) }
+        }
+        val target = snapshot.target(source)
+        if (storage != null) {
+            val current = screen.value.messages.firstOrNull { it.id == source }
+            val revision = when (current) {
+                is User -> current.revisionId
+                is Reply -> current.revisionId
+                null -> null
+            }
+            if (revision != entry.revisionId && current != null) {
+                val historical = entry.display()
+                screen.update { state -> state.copy(messages = state.messages.map { if (it === current) historical else it }) }
+            }
+        }
+        if (target.stepId != null) {
+            screen.update { it.copy(expandedWork = it.expandedWork + source, expandedSteps = it.expandedSteps + "$source/${target.stepId}") }
+            if (target.eventId != null) {
+                screen.setWorkExpanded(
+                    selected, AiStudioAction.SetWorkExpanded(source, expanded = true, stepId = target.stepId, eventId = target.eventId),
+                    storage, expandedReplies,
+                )
+            }
+        }
+        screen.update {
+            it.copy(
+                referenceUnavailable = false,
+                referenceJump = AuroraReferenceJump((it.referenceJump?.sequence ?: 0) + 1, target),
+            )
+        }
+    }
+
     private fun submitChatDraft(chatId: String) {
         val draft = editor.value
         if (draft.chatId == chatId) enqueue { send(draft) }
@@ -1069,18 +1188,20 @@ internal class DefaultAiStudioStore(
         if (hasPendingAttachmentWork(chatId)) return
         if (chat.attachments.any { it.hasInvalidImageExtension() }) return
         if (screen.value.isPromptBlockedBySecurityMode(chat.summary)) return
-        if (draft.chatId != chatId || !ChatPrompt.canSend(text, chat.attachments.isNotEmpty(), activeTurn)) return
+        if (draft.chatId != chatId || !draft.body().canSend(chat.attachments.isNotEmpty(), activeTurn)) return
         val remote = remoteTurns
         if (remote != null) {
             sendToEngine(remote, draft, text, chat)
             return
         }
-        val summary = summaryForPrompt(chat, text) ?: return
-        editor.compareAndSet(draft, draft.copy(text = ""))
-        updateChat(chatId) { it.editDraft(files = emptyList()).copy(summary = summary) }
+        val titleSource = text.ifBlank { draft.references?.nodes.orEmpty()
+            .filterIsInstance<AuroraDraftReferences.Part.Quote>().firstOrNull()?.reference?.preview.orEmpty() }
+        val summary = summaryForPrompt(chat, titleSource) ?: return
+        editor.compareAndSet(draft, Draft(chatId))
+        updateChat(chatId) { it.editDraft(text = "", files = emptyList(), body = null).copy(summary = summary) }
         val user = User(
             nextId(), MockTime, text, chat.attachments, Delivery.Sending,
-            scenario = chat.summary.scenario, access = chat.summary.access,
+            scenario = chat.summary.scenario, access = chat.summary.access, references = draft.references,
         )
         newTurn(user).sendPrompt()
     }
@@ -1097,6 +1218,7 @@ internal class DefaultAiStudioStore(
             scenario = chat.summary.scenario,
             access = chat.summary.access,
             retryAllowed = false,
+            references = draft.references,
         )
         pendingSubmissions[id] = pending
         screen.update {
@@ -1134,7 +1256,7 @@ internal class DefaultAiStudioStore(
                 return
             }
             val submission = RemoteChatTurns.Submission.New(
-                pending.id, text, submitted.attachments, checkNotNull(submitted.draftRevision),
+                pending.id, text, submitted.attachments, checkNotNull(submitted.draftRevision), draft.references?.body,
             ) { consumeSubmittedDraft(draft, submitted) }
             startEngineTurn(remote, id, submission)
         } finally {
@@ -1197,17 +1319,19 @@ internal class DefaultAiStudioStore(
         rememberDraft(editor.value)
         val submittedFiles = submittedChat.attachments.toSet()
         updateChat(id) { chat ->
-            val text = if (chat.draft == draft.text) "" else chat.draft
+            val sameBody = chat.draft == draft.text && chat.messageBody == draft.references?.body
+            val text = if (sameBody) "" else chat.draft
+            val body = chat.messageBody.takeUnless { sameBody }
             val files = chat.attachments - submittedFiles
             val remaining = if (chat.draftRevision == submittedChat.draftRevision) {
                 // SQLite has already consumed this revision.
-                chat.copy(draft = text, attachments = files)
+                chat.copy(draft = text, attachments = files, messageBody = body)
             } else {
-                chat.editDraft(text, files)
+                chat.editDraft(text, files, body)
             }
             remaining.copy(persistedThroughDomain = true)
         }
-        editor.compareAndSet(draft, draft.copy(text = ""))
+        editor.compareAndSet(draft, Draft(id))
         finishDraftSubmission(id)
         save()
     }
@@ -1486,7 +1610,10 @@ internal class DefaultAiStudioStore(
     private fun rememberDraft(draft: Draft) {
         val id = draft.chatId ?: return
         val previous = workspace.chats.firstOrNull { it.summary.id == id } ?: return
-        if (previous.draft != draft.text) updateChat(id) { it.editDraft(text = draft.text) }
+        val body = draft.references?.body
+        if (previous.draft != draft.text || previous.messageBody != body) {
+            updateChat(id) { it.editDraft(text = draft.text, body = body) }
+        }
     }
 
     private fun save() {

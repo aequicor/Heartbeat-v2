@@ -22,13 +22,18 @@ internal class PromptLinkTransformation(
     val rendered = buildAnnotatedString {
         var start = 0
         for (match in LocalPromptLink.findIn(source)) {
+            val partStart = length
             append(source, start, match.range.first)
+            addReferenceOffsets(start, match.range.first, partStart, length)
             val first = length
             withStyle(style) { appendPromptLinkLabel(match.label) }
             start = match.range.last + 1
             segments += Link(TextRange(match.range.first, start), TextRange(first, length))
+            addReferenceOffsets(match.range.first, start, first, length)
         }
+        val last = length
         append(source, start, source.length)
+        addReferenceOffsets(start, source.length, last, length)
     }
 
     val displayText: String get() = rendered.text

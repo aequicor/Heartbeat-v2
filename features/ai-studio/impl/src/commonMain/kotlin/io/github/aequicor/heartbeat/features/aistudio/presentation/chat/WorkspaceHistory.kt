@@ -41,6 +41,20 @@ internal class WorkspaceHistory(
         return saved.copy(messages = emptyList(), historyAtLoad = emptyList()).withHistory(page)
     }
 
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun referenceSource(sessionId: String, displayId: String?, revisionId: Long?): ChatHistoryEntry? =
+        withContext(defaultDispatcher) { history.source(sessionId, displayId, revisionId).getOrThrow() }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun loadThrough(chat: AuroraChat, displayId: String): AuroraChat {
+        if (chat.messages.any { it.id == displayId }) return chat
+        val cursor = chat.olderBefore ?: return chat
+        val page = withContext(defaultDispatcher) {
+            history.page(chat.summary.id, before = cursor, anchor = displayId).getOrThrow()
+        }
+        return chat.withHistory(page)
+    }
+
     override suspend fun loadOlder(chat: AuroraChat): AuroraChat {
         val cursor = chat.olderBefore ?: return chat
         val page = withContext(defaultDispatcher) { history.page(chat.summary.id, cursor) }.getOrThrow()
@@ -59,9 +73,14 @@ internal class WorkspaceHistory(
 }
 
 private fun AuroraChat.withHistory(page: ChatHistoryEntry.Page): AuroraChat {
-    val displayed = page.entries.map { it.recoveredMessage.display() }
+    val displayed = page.entries.map(ChatHistoryEntry::display)
     // A workspace metadata save must not commit a display status for a draft another process can still own.
     return copy(messages = messages + displayed, historyAtLoad = historyAtLoad + displayed, olderBefore = page.before)
+}
+
+internal fun ChatHistoryEntry.display(): Message = when (val message = recoveredMessage.display()) {
+    is User -> message.copy(revisionId = revisionId)
+    is Reply -> message.copy(revisionId = revisionId)
 }
 
 internal fun ChatAttachment.display() = File(id, name, kind, content,
@@ -76,7 +95,7 @@ internal fun ChatAttachment.display() = File(id, name, kind, content,
 
 internal fun ChatHistoryEntry.Message.display(): Message = when (this) {
     is ChatHistoryEntry.User -> User(id, time, text, files.map(ChatAttachment::display), Delivery.valueOf(delivery.name),
-        error, answers, Scenario.valueOf(scenario.name), promptId, Access.valueOf(access.name), retryAllowed, revisionId)
+        error, answers, Scenario.valueOf(scenario.name), promptId, Access.valueOf(access.name), retryAllowed, revisionId, messageBody?.displayReferences())
     is ChatHistoryEntry.Reply -> Reply(id, time, steps.map { step ->
         Step(step.id, step.title, step.details, StepStatus.valueOf(step.status.name), step.events.map { it.display() },
             step.result, step.activeTitle)

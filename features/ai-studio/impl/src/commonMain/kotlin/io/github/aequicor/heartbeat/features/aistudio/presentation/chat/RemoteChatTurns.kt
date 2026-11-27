@@ -4,6 +4,7 @@ import io.github.aequicor.heartbeat.features.aiengine.api.session.QuestionnaireA
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.interactor.ChatTurnInteractor
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatMessageBody
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
@@ -79,7 +80,7 @@ internal class RemoteChatTurns(
                         when (submission) {
                             is Submission.New -> turns.send(
                                 chatId, submission.messageId, submission.prompt,
-                                submission.files.map(File::forTurn), submission.expectedDraftRevision, shouldCancel, onUpdate,
+                                submission.files.map(File::forTurn), submission.expectedDraftRevision, submission.messageBody, shouldCancel, onUpdate,
                             )
                             is Submission.Retry -> turns.retry(
                                 chatId, submission.messageId, submission.expectedFailedRevisionId, shouldCancel, onUpdate,
@@ -236,6 +237,7 @@ internal class RemoteChatTurns(
             val prompt: String,
             val files: List<File>,
             val expectedDraftRevision: String,
+            val messageBody: ChatMessageBody? = null,
             val onCommitted: () -> Unit,
         ) : Submission
         data class Retry(val messageId: String, val expectedFailedRevisionId: Long) : Submission

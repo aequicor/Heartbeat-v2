@@ -27,6 +27,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraDraftReferences.Part
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection
+import io.github.aequicor.heartbeat.features.aistudio.presentation.chat.AuroraReferenceSelection.Kind
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -136,7 +139,23 @@ internal fun AuroraHistory(
         }
     }
     val completedDocuments = preparedHistory ?: remember(list) { AuroraCompletedDocuments() }
-    CompositionLocalProvider(LocalAuroraCompletedDocuments provides completedDocuments) {
+    val jump = state.referenceJump
+    val highlight = remember(list, jump) { jump?.let(::AuroraReferenceHighlight) }
+    val reducedMotion = HbTheme.motion == HbMotionPreference.Reduced
+    LaunchedEffect(highlight) {
+        if (jump == null || highlight == null) return@LaunchedEffect
+        val index = if (jump.target.messageId == live?.id) 0 else {
+            history.indexOfFirst { it.id == jump.target.messageId }.takeIf { it >= 0 }?.plus(prepend)
+        } ?: return@LaunchedEffect
+        highlight.show(reducedMotion) {
+            tail.userScroll()
+            list.scrollToItem(index)
+        }
+    }
+    CompositionLocalProvider(
+        LocalAuroraCompletedDocuments provides completedDocuments,
+        LocalAuroraReferenceHighlight provides highlight,
+    ) {
         LazyColumn(
             modifier = modifier.nestedScroll(reflow).onGloballyPositioned {
                 readingBottom.floatValue =
@@ -284,24 +303,39 @@ private fun AuroraMessageRow(
     val extraWidth = if (!touch && readingWidth.value.isFinite()) {
         (readingWidth - AuroraLayout.Header).coerceAtLeast(Dp.Hairline)
     } else Dp.Hairline
-    AuroraMessageMenu(
-        message, touch, onMenuAction, readingWidth, AuroraLayout.Transcript + extraWidth,
-        selection, modifier.zIndex(if (workAccessVisible) 1f else 0f), liveText,
-        workMenu = workMenu, workAction = workAction,
-    ) { hoverOverMenu ->
-        when (message) {
-            is User -> AuroraUserBubble(message, touch, onAction, selection, extraWidth)
-            is Reply -> if (message.showArchivedAnswer(liveText)) {
-                AuroraArchivedAnswer(message, touch, onAction, selection, reflow, extraWidth)
-                if (workAccessVisible) SideEffect { workAccessVisible = false }
-            } else AuroraAgentMessage(
-                message, message.id in expandedWork, expandedSteps, expandedEvents, touch, onAction,
-                liveText = liveText, selection = selection, hoverOverMenu = hoverOverMenu,
-                reflow = reflow,
-                onWorkAccessVisibility = { workAccessVisible = it },
-                workMenu = workMenu,
-                extraWidth = extraWidth,
-            )
+    val revision = when (message) {
+        is User -> message.revisionId
+        is Reply -> message.revisionId
+    }
+    val referenceSource = AuroraReferenceSelection(message.id, Kind.Message, revisionId = revision)
+    val rawText = when (message) {
+        is User -> message.references?.originalText ?: message.text
+        is Reply -> message.text
+    }
+    val row = remember(referenceSource, selection) { AuroraReferenceRow(referenceSource, selection) }
+    val interactive = LocalAuroraReferenceInteraction.current != null && !touch
+    CompositionLocalProvider(LocalAuroraReferenceRow provides row.takeIf { interactive }) {
+        AuroraMessageMenu(
+            message, touch, onMenuAction, readingWidth, AuroraLayout.Transcript + extraWidth,
+            selection, modifier.zIndex(if (workAccessVisible) 1f else 0f), liveText,
+            workMenu = workMenu, workAction = workAction,
+        ) { hoverOverMenu ->
+            AuroraReferenceRegion(referenceSource, rawText, selection) {
+                when (message) {
+                    is User -> AuroraUserBubble(message, touch, onAction, selection, extraWidth)
+                    is Reply -> if (message.showArchivedAnswer(liveText)) {
+                        AuroraArchivedAnswer(message, touch, onAction, selection, reflow, extraWidth)
+                        if (workAccessVisible) SideEffect { workAccessVisible = false }
+                    } else AuroraAgentMessage(
+                        message, message.id in expandedWork, expandedSteps, expandedEvents, touch, onAction,
+                        liveText = liveText, selection = selection, hoverOverMenu = hoverOverMenu,
+                        reflow = reflow,
+                        onWorkAccessVisibility = { workAccessVisible = it },
+                        workMenu = workMenu,
+                        extraWidth = extraWidth,
+                    )
+                }
+            }
         }
     }
 }
@@ -342,7 +376,9 @@ internal fun AuroraUserBubble(
     } else {
         Modifier.background(AuroraColors.User, RoundedCornerShape(AuroraLayout.MessageRadius))
     }
-    val textPresent = user.text.isNotEmpty()
+    val references = user.references
+    val referenceInteraction = LocalAuroraReferenceInteraction.current
+    val textPresent = user.text.isNotEmpty() || references?.hasQuotes == true
     val attachmentLayout = !touch && user.files.isNotEmpty()
     val inlineTime = user.delivery == Delivery.Sent && (textPresent || user.files.isNotEmpty())
     val width = if (!touch && user.files.isEmpty()) AuroraLayout.DesktopMessageBubble else AuroraLayout.UserBubble
@@ -367,7 +403,7 @@ internal fun AuroraUserBubble(
     AuroraMessageTimestamp(
         user.time,
         inlineAllowed = inlineTime,
-        textSetsWidth = user.files.isEmpty() && textPresent,
+        textSetsWidth = user.files.isEmpty() && textPresent && references == null && user.markdownContent.plain,
         modifier = Modifier.widthIn(max = width + extraWidth).then(surface).padding(
             start = horizontalInset, end = horizontalInset, top = top,
         ),
@@ -395,12 +431,31 @@ internal fun AuroraUserBubble(
                     }
                 }
             }
-            if (textPresent) SelectionContainer(state = selection) {
-                AuroraTimestampParagraph(
-                    remember(user.text) { PromptLinkTransformation(user.text).rendered },
-                    Modifier,
-                    auroraMessageStyle(),
-                    onTextLayout,
+            references?.reply?.let { source ->
+                AuroraReplyReference(source, onOpen = { referenceInteraction?.jump(source) })
+            }
+            if (references?.hasQuotes == true) SelectionContainer(state = selection) {
+                val lastVisiblePart = references.nodes.indexOfLast { it !is Part.Text || it.value.isNotEmpty() }
+                Column(verticalArrangement = Arrangement.spacedBy(AuroraLayout.SmallGap)) {
+                    references.nodes.forEachIndexed { index, part ->
+                        when (part) {
+                            is Part.Text -> if (part.value.isNotEmpty()) {
+                                CompositionLocalProvider(LocalAuroraReferenceSourceOffset provides part.sourceOffset) {
+                                    AuroraUserMarkdown(
+                                        part.value, part.markdownContent, touch,
+                                        measureTimestampTail = inlineTime && index == lastVisiblePart,
+                                    )
+                                }
+                            }
+                            is Part.Quote -> AuroraQuoteReference(
+                                part.reference, touch, onOpen = { referenceInteraction?.jump(part.reference) },
+                            )
+                        }
+                    }
+                }
+            } else if (textPresent) SelectionContainer(state = selection) {
+                AuroraUserMarkdown(
+                    user.text, user.markdownContent, touch, measureTimestampTail = inlineTime, onTextLayout = onTextLayout,
                 )
             }
         }
