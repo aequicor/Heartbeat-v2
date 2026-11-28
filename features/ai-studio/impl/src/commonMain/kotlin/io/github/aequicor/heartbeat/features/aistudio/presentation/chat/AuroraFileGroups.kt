@@ -46,6 +46,7 @@ private fun File.toRow(date: FileDate?): FileRow {
     return FileRow(
         openId, name, extension, metadata, dateLabel, image, media, originalUri, managedCopyPath,
         canRemove = storedAttachmentId != null,
+        usesSavedContent = storedAttachmentId != null && !deferredReading,
     )
 }
 

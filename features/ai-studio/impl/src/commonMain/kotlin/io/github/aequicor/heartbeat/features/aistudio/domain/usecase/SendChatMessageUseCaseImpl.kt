@@ -2,6 +2,9 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.usecase
 
 import dev.zacsweers.metro.Inject
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatConversationDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatHistoryDataSource
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
 import io.github.aequicor.heartbeat.features.aistudio.domain.datasource.ChatAttachmentDataSource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.AttachmentTransferException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentTransferMode
@@ -42,6 +45,7 @@ internal class SendChatMessageUseCaseImpl(
     private val conversations: ChatConversationDataSource,
     private val prepareChatContext: PrepareChatContextUseCase,
     private val files: ChatAttachmentDataSource,
+    private val history: ChatHistoryDataSource,
 ) : SendChatMessageUseCase {
 
     @Throwable(CancellationException::class)
@@ -66,7 +70,7 @@ internal class SendChatMessageUseCaseImpl(
         } else null
         val referenceAttachments = if (conversation == null) emptyList()
         else messageBody?.referenceAttachments(files, conversation).orEmpty()
-        val snapshots = if (conversation == null) emptyList() else attachments.map { prepareAttachment(it, conversation) }
+        val snapshots = if (conversation == null) emptyList() else attachments.map { prepareAttachment(sessionId, it, conversation) }
         val userFiles = attachments.mapIndexed { index, file ->
             val resource = snapshots.getOrNull(index) as? SentMessageAttachment.Resource ?: return@mapIndexed file
             val content = resource.content
@@ -109,14 +113,46 @@ internal class SendChatMessageUseCaseImpl(
 
     @Throwable(AttachmentTransferException::class, CancellationException::class)
     private suspend fun prepareAttachment(
+        sessionId: String,
         attachment: ChatAttachment,
         conversation: ChatEngineConversationDataSource,
     ): SentMessageAttachment {
+        val snapshot = attachment.storageId?.let { id ->
+            history.catalogAttachment(sessionId, id)
+                ?: throw AttachmentTransferException("Вложение «${attachment.name}» недоступно в каталоге")
+        }
+        if (snapshot is SentMessageAttachment.Resource) {
+            val meta = snapshot.metadata
+            val source = AttachmentFile(
+                meta.fileId, meta.name, AttachmentLocation.Original(snapshot.uri),
+                meta.description, meta.mimeType, meta.sizeBytes,
+            )
+            conversation.resolveAttachmentUri(source, AttachmentTransferMode.Resource)
+            return snapshot.copy(metadata = meta.copy(fileId = attachment.id))
+        }
+        if (snapshot is SentMessageAttachment.ResourceLink && !snapshot.uri.startsWith("edited-image:")) {
+            val meta = snapshot.metadata
+            val source = AttachmentFile(
+                meta.fileId, meta.name, AttachmentLocation.Original(snapshot.uri),
+                meta.description, meta.mimeType, meta.sizeBytes,
+            )
+            val uri = conversation.resolveAttachmentUri(source, AttachmentTransferMode.ResourceLink)
+            try {
+                files.inspect(uri)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                throw AttachmentTransferException("Не удалось открыть «${attachment.name}»", failure)
+            }
+            return snapshot.copy(metadata = meta.copy(fileId = attachment.id))
+        }
+
         val file = attachment.source ?: throw AttachmentTransferException("Не удалось найти источник «${attachment.name}»")
-        val uri = conversation.resolveAttachmentUri(file, attachment.transferMode)
+        val transferMode = if (snapshot == null) attachment.transferMode else AttachmentTransferMode.Resource
+        val uri = conversation.resolveAttachmentUri(file, transferMode)
         val metadata = SentAttachmentMetadata(file.id, file.name, file.description, file.mimeType, file.sizeBytes)
         return try {
-            if (attachment.transferMode == AttachmentTransferMode.ResourceLink) {
+            if (transferMode == AttachmentTransferMode.ResourceLink) {
                 val current = files.inspect(files.reference(file.location))
                 return SentMessageAttachment.ResourceLink(
                     metadata.copy(mimeType = current.mimeType ?: file.mimeType, sizeBytes = current.sizeBytes),

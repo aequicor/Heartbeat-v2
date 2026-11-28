@@ -135,6 +135,8 @@ public sealed interface AiStudioAction {
     public data class SubmitAnswers(val requestId: String) : AiStudioAction
     public data class DeclineQuestionnaire(val requestId: String) : AiStudioAction
     public data class AnswerPermission(val requestId: String, val allow: Boolean, val chatId: String? = null) : AiStudioAction
+    public data class AttachCatalogFile(val draftId: String, val id: String) : AiStudioAction
+
     public data class OpenFile(val id: String) : AiStudioAction
     public data class SearchPromptReferences(val draftId: String, val projectId: String?, val query: String?) : AiStudioAction
     public data class RemoveUnavailableFile(val sessionId: String, val id: String) : AiStudioAction

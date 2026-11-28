@@ -14,6 +14,8 @@ import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedRe
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedSendError
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.InterruptedToolSummary
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
+import io.github.aequicor.heartbeat.features.aistudio.data.model.toDomain
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SentMessageAttachment
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
@@ -69,6 +71,14 @@ internal class ChatHistoryDataSourceImpl(
     override suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String): Unit = accessStudioRepository {
         dao.removeUnavailableAttachment(sessionId, snapshotId)
     }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun catalogAttachment(sessionId: String, snapshotId: String): SentMessageAttachment? =
+        accessStudioRepository {
+            dao.catalogAttachment(sessionId, snapshotId)?.let { (header, snapshot) ->
+                snapshot.toDomain(header.toDomain().id)
+            }
+        }
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun file(id: String) = accessStudioRepository {

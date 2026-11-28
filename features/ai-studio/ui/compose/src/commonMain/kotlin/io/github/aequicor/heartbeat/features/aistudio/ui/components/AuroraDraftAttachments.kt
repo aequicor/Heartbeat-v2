@@ -80,9 +80,11 @@ private fun DraftAttachment(file: File, touch: Boolean, onEdit: () -> Unit, onAc
     Box(width.heightIn(min = Layout.DraftAttachmentHeight).background(surface, shape)) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = Layout.DraftAttachmentHeight).clip(shape)
-                .pointerHoverIcon(PointerIcon.Hand)
-                .semantics { contentDescription = "Редактировать ${file.name}" }
-                .clickable(role = Role.Button, onClick = onEdit).padding(
+                .then(
+                    if (file.isCatalogSelection) Modifier else Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        .semantics { contentDescription = "Редактировать ${file.name}" }
+                        .clickable(role = Role.Button, onClick = onEdit),
+                ).padding(
                 start = if (image != null) Layout.ControlGap else Layout.DraftAttachmentFileInset,
                 end = if (touch) target else Layout.DraftAttachmentRemoveSpace,
             ),

@@ -36,7 +36,7 @@ internal fun attachmentFileIssue(originalUri: String?, managedCopyPath: String?,
 
 @Composable
 internal fun messageAttachmentSourceIssue(file: File): AttachmentFileIssue? {
-    if (file.openId in LocalRemovedAttachmentLinks.current) return AttachmentFileIssue.RemovedFromSession
+    if (file.openId in LocalRemovedAttachmentLinks.current) return AttachmentFileIssue.RemovedFromCatalog
     return attachmentFileIssue(file.originalUri, file.managedCopyPath, file.openId in LocalAttachmentLoadFailures.current)
 }
 

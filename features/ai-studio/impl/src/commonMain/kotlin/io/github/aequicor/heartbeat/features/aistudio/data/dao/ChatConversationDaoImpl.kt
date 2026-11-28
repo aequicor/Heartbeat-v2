@@ -141,7 +141,7 @@ internal class ChatConversationDaoImpl(
                         return@transactionWithResult null
                     }
                     val draftFiles = ChatDraftQueries(connection.driver).consumeDraft(
-                        sessionId, expectedDraftRevision, owner?.toString(), message,
+                        history, sessionId, expectedDraftRevision, owner?.toString(), message,
                     )
                     val revision = history.writeTurnMessage(chat, message, owner)
                     if (draftFiles.isNotEmpty()) history.deleteUnusedDraftFiles(draftFiles)
@@ -206,6 +206,7 @@ private fun ChatQueries.readDelivery(revision: Long, position: Long, messageId: 
 }
 
 private fun ChatDraftQueries.consumeDraft(
+    history: ChatQueries,
     sessionId: String,
     revision: String,
     writer: String?,
@@ -218,15 +219,18 @@ private fun ChatDraftQueries.consumeDraft(
     val storedBody = decodeChatMessageBody(stored.message_body)
     check(stored.body.isNotBlank() || storedBody?.hasQuotes == true || files.isNotEmpty()) { "Черновик уже отправлен" }
     val prompt = message.parts.firstOrNull { it.kind == "text" && it.title == null }?.body.orEmpty()
-    val submittedFileIds = message.parts.mapNotNull { part ->
-        part.attachment?.let { Json.parseToJsonElement(it.header).jsonObject.getValue("id").jsonPrimitive.content }
-    }
+    val submittedFiles = message.parts.mapNotNull { it.attachment }
+    val submittedFileIds = submittedFiles.map { Json.parseToJsonElement(it.header).jsonObject.getValue("id").jsonPrimitive.content }
     check(
         stored.body.trim() == prompt &&
             storedBody == decodeChatMessageBody(messageBody) &&
-            files.map { it.file_id } == submittedFileIds,
+            files.map { it.file_id } == submittedFileIds &&
+            files.map { it.snapshot_id } == submittedFiles.map { it.existingId },
     ) {
         "Сообщение отличается от сохранённого черновика"
+    }
+    check(files.mapNotNull { it.snapshot_id }.all { history.catalogContainsAttachment(sessionId, it).executeAsOne() }) {
+        "Вложение недоступно в каталоге"
     }
     check(clearSubmittedDraft(sessionId, revision, writer).value == 1L)
     deleteDraftFiles(sessionId)

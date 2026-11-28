@@ -166,25 +166,53 @@ CREATE TABLE session_attachment (
 
 CREATE INDEX session_attachment_snapshot ON session_attachment(snapshot_id);
 
+CREATE TABLE project_attachment (
+    project_id TEXT NOT NULL REFERENCES studio_project(id) ON DELETE CASCADE
+        CHECK (project_id <> '00000000-0000-0000-0000-000000000000'),
+    snapshot_id TEXT NOT NULL REFERENCES sent_attachment(id) ON DELETE CASCADE,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (project_id, snapshot_id)
+);
+
+CREATE INDEX project_attachment_snapshot ON project_attachment(snapshot_id);
+
 CREATE TRIGGER register_inserted_attachment AFTER INSERT ON message_part
 WHEN new.sent_attachment_id IS NOT NULL
 BEGIN
     INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
-    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+    SELECT e.chat_id, new.sent_attachment_id FROM chat_entry e
+    JOIN chat c ON c.id = e.chat_id JOIN studio_session owner ON owner.id = c.session_id
+    WHERE e.revision_id = new.revision_id AND owner.project_id = '00000000-0000-0000-0000-000000000000';
+    INSERT OR IGNORE INTO project_attachment(project_id, snapshot_id, added_at)
+    SELECT owner.project_id, new.sent_attachment_id, r.created_at FROM chat_entry e
+    JOIN chat c ON c.id = e.chat_id JOIN studio_session owner ON owner.id = c.session_id
+    JOIN message_revision r ON r.revision_id = e.revision_id
+    WHERE e.revision_id = new.revision_id AND owner.project_id <> '00000000-0000-0000-0000-000000000000';
 END;
 
 CREATE TRIGGER register_changed_attachment AFTER UPDATE OF sent_attachment_id ON message_part
 WHEN new.sent_attachment_id IS NOT NULL AND new.sent_attachment_id IS NOT old.sent_attachment_id
 BEGIN
     INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
-    SELECT chat_id, new.sent_attachment_id FROM chat_entry WHERE revision_id = new.revision_id;
+    SELECT e.chat_id, new.sent_attachment_id FROM chat_entry e
+    JOIN chat c ON c.id = e.chat_id JOIN studio_session owner ON owner.id = c.session_id
+    WHERE e.revision_id = new.revision_id AND owner.project_id = '00000000-0000-0000-0000-000000000000';
+    INSERT OR IGNORE INTO project_attachment(project_id, snapshot_id, added_at)
+    SELECT owner.project_id, new.sent_attachment_id, r.created_at FROM chat_entry e
+    JOIN chat c ON c.id = e.chat_id JOIN studio_session owner ON owner.id = c.session_id
+    JOIN message_revision r ON r.revision_id = e.revision_id
+    WHERE e.revision_id = new.revision_id AND owner.project_id <> '00000000-0000-0000-0000-000000000000';
 END;
 
 CREATE TRIGGER register_entry_attachments AFTER INSERT ON chat_entry
 BEGIN
     INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
     SELECT new.chat_id, sent_attachment_id FROM message_part
-    WHERE revision_id = new.revision_id AND sent_attachment_id IS NOT NULL;
+    WHERE revision_id = new.revision_id AND sent_attachment_id IS NOT NULL
+      AND EXISTS (
+          SELECT 1 FROM chat c JOIN studio_session owner ON owner.id = c.session_id
+          WHERE c.id = new.chat_id AND owner.project_id = '00000000-0000-0000-0000-000000000000'
+      );
 END;
 
 CREATE TRIGGER register_new_revision_attachments AFTER UPDATE OF revision_id ON chat_entry
@@ -193,6 +221,20 @@ BEGIN
     INSERT OR IGNORE INTO session_attachment(chat_id, snapshot_id)
     SELECT new.chat_id, p.sent_attachment_id FROM message_part p
     WHERE p.revision_id = new.revision_id AND p.sent_attachment_id IS NOT NULL
+      AND EXISTS (
+          SELECT 1 FROM chat c JOIN studio_session owner ON owner.id = c.session_id
+          WHERE c.id = new.chat_id AND owner.project_id = '00000000-0000-0000-0000-000000000000'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM message_part previous
+          WHERE previous.revision_id = old.revision_id AND previous.sent_attachment_id = p.sent_attachment_id
+      );
+    INSERT OR IGNORE INTO project_attachment(project_id, snapshot_id, added_at)
+    SELECT owner.project_id, p.sent_attachment_id, r.created_at FROM message_part p
+    JOIN message_revision r ON r.revision_id = p.revision_id
+    JOIN chat c ON c.id = new.chat_id JOIN studio_session owner ON owner.id = c.session_id
+    WHERE p.revision_id = new.revision_id AND p.sent_attachment_id IS NOT NULL
+      AND owner.project_id <> '00000000-0000-0000-0000-000000000000'
       AND NOT EXISTS (
           SELECT 1 FROM message_part previous
           WHERE previous.revision_id = old.revision_id AND previous.sent_attachment_id = p.sent_attachment_id
@@ -422,6 +464,45 @@ SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
        s.content_text, s.content_blob
 FROM sent_attachment s JOIN attachment a ON a.id = s.attachment_id WHERE s.id = :id;
 
+catalogProjectForChat:
+SELECT owner.project_id
+FROM chat c JOIN studio_session owner ON owner.id = c.session_id
+WHERE c.id = :chat_id AND owner.project_id <> '00000000-0000-0000-0000-000000000000';
+
+catalogContainsAttachment:
+SELECT EXISTS (
+    SELECT 1 FROM chat c JOIN studio_session owner ON owner.id = c.session_id
+    JOIN project_attachment member ON member.project_id = owner.project_id
+    WHERE c.session_id = :session_id AND member.snapshot_id = :snapshot_id
+    UNION ALL
+    SELECT 1 FROM chat c JOIN studio_session owner ON owner.id = c.session_id
+    JOIN session_attachment member ON member.chat_id = c.id
+    JOIN sent_attachment snapshot ON snapshot.id = member.snapshot_id
+    WHERE c.session_id = :session_id AND member.snapshot_id = :snapshot_id
+      AND owner.project_id = '00000000-0000-0000-0000-000000000000'
+      AND (snapshot.uri = 'edited-image:' || snapshot.attachment_id OR EXISTS (
+          SELECT 1 FROM chat_entry e JOIN message_part p ON p.revision_id = e.revision_id
+          WHERE e.chat_id = c.id AND p.sent_attachment_id = member.snapshot_id
+      ))
+);
+
+projectFileHeaders:
+SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
+       coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path,
+       coalesce(strftime('%Y-%m-%d %H:%M', nullif(catalog.added_at, 0) / 1000, 'unixepoch', 'localtime'), '') AS added_at
+FROM project_attachment catalog
+JOIN sent_attachment s ON s.id = catalog.snapshot_id
+JOIN attachment a ON a.id = s.attachment_id
+WHERE catalog.project_id = :project_id
+ORDER BY catalog.added_at DESC, catalog.rowid DESC;
+
+registerProjectImageCopy:
+INSERT OR IGNORE INTO project_attachment(project_id, snapshot_id, added_at)
+VALUES (:project_id, :snapshot_id, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+
+removeProjectCatalogAttachment:
+DELETE FROM project_attachment WHERE project_id = :project_id AND snapshot_id = :snapshot_id;
+
 chatFileHeaders:
 SELECT s.id, coalesce(s.size_bytes, a.size_bytes) AS size_bytes, a.presentation,
        coalesce(s.mime_type, a.mime_type) AS mime_type, s.transfer_mode, s.uri, a.original_uri, a.managed_path,
@@ -513,6 +594,8 @@ DELETE FROM message_revision WHERE revision_id NOT IN (SELECT id FROM retained);
 deleteUnreferencedSentAttachments:
 DELETE FROM sent_attachment
 WHERE NOT EXISTS (SELECT 1 FROM message_part WHERE sent_attachment_id = sent_attachment.id)
+  AND NOT EXISTS (SELECT 1 FROM project_attachment WHERE snapshot_id = sent_attachment.id)
+  AND NOT EXISTS (SELECT 1 FROM draft_attachment WHERE snapshot_id = sent_attachment.id)
   AND NOT EXISTS (
       SELECT 1 FROM session_attachment
       WHERE snapshot_id = sent_attachment.id

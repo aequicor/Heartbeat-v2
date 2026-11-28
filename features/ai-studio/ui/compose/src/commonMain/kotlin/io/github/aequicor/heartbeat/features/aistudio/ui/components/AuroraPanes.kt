@@ -180,7 +180,8 @@ internal fun AuroraFiles(
     val pendingEdits = state.editedImageCopyDrafts[sessionId].orEmpty()
     val canvas = if (touch) AuroraColors.DesktopCanvas else AuroraColors.ViewerSurface
     Column(modifier.fillMaxHeight().background(canvas)) {
-        AuroraFilesHeader(state.fileSearchVisible, touch, onAction)
+        val projectCatalog = state.chat?.isUngrouped == false
+        AuroraFilesHeader(projectCatalog, state.fileSearchVisible, touch, onAction)
         if (state.fileSearchVisible) {
             val focus = remember { FocusRequester() }
             Box(Modifier.fillMaxWidth().padding(horizontal = AuroraLayout.Space, vertical = AuroraLayout.ControlGap)) {
@@ -205,7 +206,7 @@ internal fun AuroraFiles(
             val empty = state.fileSearch.isBlank() && category == FileCategory.All
             Box(Modifier.weight(1f)) {
                 AuroraText(
-                    if (empty) "В диалоге пока нет файлов" else "Файлы не найдены",
+                    if (empty) "В каталоге пока нет файлов" else "Файлы не найдены",
                     Modifier.padding(horizontal = AuroraLayout.PaneGap, vertical = AuroraLayout.Space),
                     color = AuroraColors.Muted,
                 )
@@ -246,7 +247,11 @@ private fun AuroraFileList(
                 )
             }
             items(group.files, key = { "file:${it.id}" }) { file ->
-                val issue = attachmentFileIssue(file.originalUri, file.managedCopyPath, file.id in attachmentLoadFailures)
+                val issue = attachmentFileIssue(
+                    file.originalUri.takeUnless { file.usesSavedContent },
+                    file.managedCopyPath.takeUnless { file.usesSavedContent },
+                    file.id in attachmentLoadFailures,
+                )
                 if (issue != null) {
                     AuroraUnavailableFileRow(
                         file.name, issue,
@@ -256,10 +261,15 @@ private fun AuroraFileList(
                             { onAction(AiStudioAction.RemoveUnavailableFile(id, file.id)) }
                         },
                     )
-                } else AuroraAttachmentFileMenu(file.id, touch, onAction) { trigger, openMenu ->
+                } else AuroraAttachmentFileMenu(
+                    file.id, touch, onAction,
+                    onAttach = sessionId?.takeIf { file.canRemove }?.let { id ->
+                        { onAction(AiStudioAction.AttachCatalogFile(id, file.id)) }
+                    },
+                ) { trigger, openMenu ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         AuroraFileListRow(file, touch, { onAction(AiStudioAction.OpenFile(file.id)) }, trigger.weight(1f))
-                        if (!touch) {
+                        if (!touch || sessionId != null && file.canRemove) {
                             AuroraHeaderButton(
                                 "Действия файла ${file.name}", openMenu, Modifier.width(32.dp),
                                 contentPadding = PaddingValues(horizontal = 7.dp),
@@ -320,7 +330,7 @@ private fun AuroraFileListRow(file: FileRow, touch: Boolean, onOpen: () -> Unit,
 }
 
 @Composable
-private fun AuroraFilesHeader(searchVisible: Boolean, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
+private fun AuroraFilesHeader(projectCatalog: Boolean, searchVisible: Boolean, touch: Boolean, onAction: (AiStudioAction) -> Unit) {
     val height = if (touch) AuroraLayout.FileViewerHeader else 52.dp
     val target = if (touch) AuroraLayout.TouchTarget else AuroraLayout.DesktopTarget
     val glyph = if (touch) AuroraLayout.RequestGlyph else AuroraLayout.Glyph
@@ -340,7 +350,10 @@ private fun AuroraFilesHeader(searchVisible: Boolean, touch: Boolean, onAction: 
                 AiStudioIcon(AiStudioGlyph.Back, Modifier.size(glyph), AuroraColors.FileBackInk)
             }
         }
-        BasicText("Файлы", Modifier.weight(1f), titleStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicText(
+            if (projectCatalog) "Вложения проекта" else "Вложения сессии",
+            Modifier.weight(1f), titleStyle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
         AuroraHeaderButton(
             if (searchVisible) "Закрыть поиск файлов" else "Поиск файлов",
             { onAction(AiStudioAction.ShowFileSearch(!searchVisible)) },

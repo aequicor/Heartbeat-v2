@@ -115,7 +115,7 @@ internal class DefaultAiStudioStore(
     }
     private val remoteTurns = turnInteractor?.let { RemoteChatTurns(it, scope, defaultDispatcher, ::enqueue) }
     private val promptReferenceSearch = findPromptReferences?.let {
-        PromptReferenceSearch(it, attachmentReferences, screen, scope, defaultDispatcher)
+        PromptReferenceSearch(it, attachmentReferences, persistence, screen, scope, defaultDispatcher)
     }
     private val editor = MutableStateFlow(Draft())
     private val stream = MutableStateFlow(LiveText())
@@ -317,6 +317,14 @@ internal class DefaultAiStudioStore(
                 updateBootstrapProject(screen, sessionBootstrap, defaultDispatcher, action)
                 val bootstrap = screen.value.sessionBootstrap
                 if (bootstrap != null && bootstrap.project != project) {
+                    screen.update { state ->
+                        state.copy(
+                            sessionBootstrap = state.sessionBootstrap?.copy(
+                                attachments = bootstrap.attachments.filter { it.catalogSnapshotId == null },
+                            ),
+                            promptReferences = null,
+                        )
+                    }
                     enginePicker?.start(bootstrap) { picker ->
                         screen.update { state ->
                             val current = state.sessionBootstrap
@@ -382,6 +390,7 @@ internal class DefaultAiStudioStore(
             }
             is AiStudioAction.ShowFileSearch -> screen.update { workspaceFiles.setSearchVisible(it, action.visible) }
             is AiStudioAction.SearchFiles -> screen.update { workspaceFiles.search(it, action.text) }
+            is AiStudioAction.AttachCatalogFile -> attachCatalogFile(action)
             is AiStudioAction.OpenFile -> openViewer(workspaceFiles.find(action.id))
             is AiStudioAction.RemoveUnavailableFile -> persistence?.let {
                 workspaceFiles.removeUnavailable(screen, it, action.sessionId, action.id)
@@ -644,7 +653,7 @@ internal class DefaultAiStudioStore(
                 ),
             )
         }
-        if (moved.isNotEmpty() && snapshots.saveNow(workspace).isSuccess) {
+        if ((moved.isNotEmpty() || placed.any { it.catalogSnapshotId != null }) && snapshots.saveNow(workspace).isSuccess) {
             moved.forEach { (before, _) -> discardAttachmentCopy(before) }
         }
         val remote = remoteTurns
@@ -664,6 +673,7 @@ internal class DefaultAiStudioStore(
     }
 
     private suspend fun placeAttachmentInSession(file: File, projectId: String, sessionId: String): File {
+        if (file.catalogSnapshotId != null) return file
         val useCase = importAttachment ?: return file
         val location = file.attachmentLocation() as? AttachmentLocation.ManagedCopy ?: return file
         val target = AttachmentCopyTarget(projectId, sessionId, isDraft = false, generatedImage = location.originalUri == null)
@@ -752,7 +762,12 @@ internal class DefaultAiStudioStore(
         if (clearedChat) {
             requestRender(null)
             screen.update { current ->
-                withProjectsSessions(AiStudioScreenState(loading = false, storageError = current.storageError))
+                withProjectsSessions(AiStudioScreenState(
+                    loading = false,
+                    storageError = current.storageError,
+                    fileChoices = current.fileChoices,
+                    allowsFileImport = current.allowsFileImport,
+                ))
             }
         }
     }
@@ -906,6 +921,7 @@ internal class DefaultAiStudioStore(
         if (!hasAttachmentDraft(action.draftId)) return
         val files = bootstrap?.attachments ?: selected.attachments
         val file = files.firstOrNull { it.id == action.fileId } ?: return
+        if (file.catalogSnapshotId != null) return
         val details = file.withAttachmentDetails(action.name, action.description, action.deferredReading) ?: return
         val updated = if (action.editedImage != null) {
             importEditedImage(action.draftId, details, action.editedImage, pngCopyName(details.name), action.editedThumbnail) ?: return
@@ -1060,11 +1076,38 @@ internal class DefaultAiStudioStore(
     }
 
     private fun discardAttachmentCopy(file: File) {
+        if (file.catalogSnapshotId != null) return
         val useCase = importAttachment ?: return
         val location = file.attachmentLocation() as? AttachmentLocation.ManagedCopy ?: return
         scope.launch {
             withContext(defaultDispatcher) { useCase.discard(location) }
         }
+    }
+
+    private suspend fun attachCatalogFile(action: AiStudioAction.AttachCatalogFile) {
+        val storage = persistence ?: return
+        val state = screen.value
+        val bootstrap = state.sessionBootstrap
+        val project = bootstrap?.takeIf { it.id == action.draftId }?.project as? SessionBootstrapState.Project.Existing
+        val session = state.chat?.takeIf { bootstrap == null && it.id == action.draftId }
+        val files = screen.readStored {
+            when {
+                project != null -> storage.listProjectFiles(project.id)
+                session != null -> storage.listFiles(session.id)
+                else -> emptyList()
+            }
+        } ?: return
+        val file = files.firstOrNull { it.storedAttachmentId == action.id } ?: run {
+            reportAttachmentError(action.draftId, "Вложение недоступно в каталоге")
+            return
+        }
+        val current = screen.value
+        if (current.sessionBootstrap?.project != bootstrap?.project || !hasAttachmentDraft(action.draftId)) return
+        val draftFiles = current.sessionBootstrap?.attachments ?: current.attachments
+        if (draftFiles.any { it.catalogSnapshotId == action.id }) return
+        // Different versions of the same original need distinct composer keys.
+        addAttachment(action.draftId, file.copy(id = action.id, catalogSnapshotId = action.id))
+        save()
     }
 
     private fun addAttachment(draftId: String, file: File) {

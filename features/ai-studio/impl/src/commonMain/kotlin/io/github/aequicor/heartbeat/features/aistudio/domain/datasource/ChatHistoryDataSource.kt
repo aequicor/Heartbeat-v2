@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.domain.datasource
 import io.github.aequicor.heartbeat.features.aistudio.domain.exception.StudioRepositoryException
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatAttachment
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.ChatHistoryEntry
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.SentMessageAttachment
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -19,6 +20,9 @@ internal interface ChatHistoryDataSource {
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun files(sessionId: String): List<ChatAttachment>
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun catalogAttachment(sessionId: String, snapshotId: String): SentMessageAttachment?
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun file(id: String): ChatAttachment

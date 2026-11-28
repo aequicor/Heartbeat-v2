@@ -301,7 +301,7 @@ internal class RemoteChatTurns(
 
 internal fun File.forTurn() = ChatAttachment(
     id, name, kind, content, date?.let { ChatAttachment.Date(it.year, it.month, it.day, it.time) },
-    storedAttachmentId, storedSizeBytes, image?.let { ChatAttachment.Image(it.mimeType, it.thumbnail) },
+    catalogSnapshotId, storedSizeBytes, image?.let { ChatAttachment.Image(it.mimeType, it.thumbnail) },
     mimeType, base64Encoded,
     source = attachmentLocation()?.let {
         AttachmentFile(id, name, it, description, mimeType, sourceSizeBytes ?: storedSizeBytes)

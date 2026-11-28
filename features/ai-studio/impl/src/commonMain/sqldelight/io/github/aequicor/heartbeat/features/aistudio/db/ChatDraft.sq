@@ -11,10 +11,12 @@ CREATE TABLE draft_attachment (
     file_id TEXT NOT NULL CHECK (length(file_id) > 0),
     attachment_id TEXT NOT NULL REFERENCES attachment(id),
     transfer_mode TEXT NOT NULL CHECK (transfer_mode IN ('resource', 'resource_link')),
+    snapshot_id TEXT REFERENCES sent_attachment(id),
     PRIMARY KEY (session_id, position)
 );
 
 CREATE INDEX draft_attachment_file ON draft_attachment(attachment_id);
+CREATE INDEX draft_attachment_snapshot ON draft_attachment(snapshot_id);
 
 selectDraft:
 SELECT revision, body, message_body FROM chat_draft WHERE session_id = :session_id;
@@ -34,8 +36,10 @@ WHERE session_id = :session_id AND revision = :revision
     );
 
 selectDraftFiles:
-SELECT d.attachment_id, d.file_id, d.transfer_mode, a.presentation, a.original_uri, a.managed_path
+SELECT d.attachment_id, d.file_id, d.snapshot_id, d.transfer_mode, a.presentation, a.original_uri, a.managed_path,
+       coalesce(s.size_bytes, a.size_bytes) AS snapshot_size
 FROM draft_attachment d JOIN attachment a ON d.attachment_id = a.id
+LEFT JOIN sent_attachment s ON s.id = d.snapshot_id
 WHERE d.session_id = :session_id ORDER BY d.position;
 
 insertDraftFile:
@@ -44,3 +48,8 @@ VALUES (:session_id, :position, :file_id, :attachment_id, :transfer_mode);
 
 deleteDraftFiles:
 DELETE FROM draft_attachment WHERE session_id = :session_id;
+
+insertCatalogDraftFile:
+INSERT INTO draft_attachment(session_id, position, file_id, attachment_id, transfer_mode, snapshot_id)
+SELECT :session_id, :position, :file_id, attachment_id, :transfer_mode, id
+FROM sent_attachment WHERE id = :snapshot_id;

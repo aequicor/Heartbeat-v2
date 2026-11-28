@@ -40,9 +40,10 @@ internal fun AuroraAttachmentFileMenu(
     touch: Boolean,
     onAction: (AiStudioAction) -> Unit,
     modifier: Modifier = Modifier,
+    onAttach: (() -> Unit)? = null,
     content: @Composable (Modifier, () -> Unit) -> Unit,
 ) {
-    if (touch) {
+    if (touch && onAttach == null) {
         content(modifier) {}
         return
     }
@@ -52,7 +53,7 @@ internal fun AuroraAttachmentFileMenu(
     HbMenu(
         expanded = expanded,
         onDismissRequest = { expanded = false },
-        actions = attachmentFileActions(
+        actions = listOfNotNull(onAttach?.let { HbMenuAction("Прикрепить к сообщению", it) }) + attachmentFileActions(
             onCopy = { onAction(AiStudioAction.CopyFile(id)) },
             onSave = { onAction(AiStudioAction.SaveFile(id)) },
         ),

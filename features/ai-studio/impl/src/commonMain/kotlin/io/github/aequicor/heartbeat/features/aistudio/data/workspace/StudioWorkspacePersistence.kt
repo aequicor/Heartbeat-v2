@@ -11,6 +11,7 @@ import io.github.aequicor.heartbeat.di.AppScope
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.ChatDraftOwnership
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.accessStudioDatabase
 import io.github.aequicor.heartbeat.features.aistudio.data.dao.readFileCatalog
+import io.github.aequicor.heartbeat.features.aistudio.data.dao.readProjectFileCatalog
 import io.github.aequicor.heartbeat.features.aistudio.data.datasource.toDomain
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatDraftQueries
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
@@ -66,8 +67,17 @@ internal class StudioWorkspacePersistence(
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     override suspend fun listFiles(sessionId: String): List<File> = withContext(ioDispatcher) {
-        workspaceOperation("Read session file catalog") {
+        workspaceOperation("Read file catalog") {
             ChatQueries(connection.driver).readFileCatalog(sessionId).map { record ->
+                record.toDomain().display().copy(catalogUri = record.uri)
+            }
+        }
+    }
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    override suspend fun listProjectFiles(projectId: String): List<File> = withContext(ioDispatcher) {
+        workspaceOperation("Read project file catalog") {
+            ChatQueries(connection.driver).readProjectFileCatalog(projectId).map { record ->
                 record.toDomain().display().copy(catalogUri = record.uri)
             }
         }

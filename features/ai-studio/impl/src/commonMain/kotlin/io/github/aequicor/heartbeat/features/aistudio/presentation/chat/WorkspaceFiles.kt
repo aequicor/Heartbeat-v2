@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 internal class WorkspaceFiles {
 
     private var stored: List<File>? = null
+    private var projectCatalog = false
     private val removedFileIds = mutableSetOf<String>()
     private val removedFileKeys = mutableSetOf<String>()
     private var files = listOf<File>()
@@ -24,6 +25,7 @@ internal class WorkspaceFiles {
 
     fun selectSession() {
         stored = null
+        projectCatalog = false
         removedFileIds.clear()
         removedFileKeys.clear()
     }
@@ -47,7 +49,10 @@ internal class WorkspaceFiles {
     ) {
         val id = screen.value.chat?.id
         if (id != null && storage != null) {
-            stored = screen.readStored { storage.listFiles(id) } ?: return
+            val loaded = screen.readStored { storage.listFiles(id) } ?: return
+            if (screen.value.chat?.id != id) return
+            stored = loaded
+            projectCatalog = screen.value.chat?.isUngrouped == false
             refresh(listOfNotNull(screen.value.live) + screen.value.messages)
         }
         screen.update {
@@ -67,7 +72,7 @@ internal class WorkspaceFiles {
                 it.storedAttachmentId == null && it.id !in removedFileIds && it.catalogKey !in removedFileKeys
             }
         }
-        val next = listed.groupBy(File::catalogKey).values.map { versions ->
+        val next = if (projectCatalog) listed.distinctBy(File::openId) else listed.groupBy(File::catalogKey).values.map { versions ->
             val newest = versions.first()
             val firstDate = versions.asSequence().mapNotNull(File::date).minWithOrNull(FileDateOrder)
             if (firstDate == newest.date) newest else newest.copy(date = firstDate)
@@ -91,6 +96,10 @@ internal class WorkspaceFiles {
             storage.removeUnavailableAttachment(sessionId, snapshotId)
         } catch (_: StudioRepositoryException) {
             screen.update { it.copy(storageError = "Не удалось удалить запись о вложении") }
+            return
+        }
+        if (projectCatalog) {
+            refreshCatalog(screen, storage)
             return
         }
         removedFileKeys += file.catalogKey

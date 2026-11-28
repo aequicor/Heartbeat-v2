@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.data.datasource
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentCopyTarget
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentFile
 import io.github.aequicor.heartbeat.features.aistudio.domain.model.AttachmentLocation
+import io.github.aequicor.heartbeat.features.aistudio.domain.model.ProjectId
 import okio.Buffer
 import okio.ByteString.Companion.toByteString
 import okio.FileSystem
@@ -26,8 +27,12 @@ internal class ManagedAttachmentFiles(private val root: Path, private val fileSy
         openSource: () -> Source,
     ): AttachmentFile {
         require(target.projectId.matches(StorageKey) && target.scopeId.matches(StorageKey))
-        val scope = if (target.isDraft) "drafts" else "sessions"
-        val parent = root / target.projectId / scope / target.scopeId
+        val project = root / target.projectId
+        val parent = when {
+            target.isDraft -> project / "drafts" / target.scopeId
+            target.projectId == ProjectId.Ungrouped.value.toString() -> project / "sessions" / target.scopeId
+            else -> project / "files"
+        }
         fileSystem.createDirectories(parent)
         val id = Uuid.random().toString()
         val directory = if (target.generatedImage) reserveClipboardImage(parent) else (parent / id).also {
@@ -126,8 +131,11 @@ internal class ManagedAttachmentFiles(private val root: Path, private val fileSy
     private fun resolve(location: AttachmentLocation.ManagedCopy): Path {
         val relative = location.relativePath.toPath()
         val segments = relative.segments
-        require(!relative.isAbsolute && segments.size == 5 && segments.none { it == ".." || it == "." })
-        require(segments[1] == "drafts" || segments[1] == "sessions")
+        require(!relative.isAbsolute && segments.none { it == ".." || it == "." })
+        require(
+            (segments.size == 4 && segments[1] == "files") ||
+                (segments.size == 5 && (segments[1] == "drafts" || segments[1] == "sessions")),
+        )
         return root / relative
     }
 

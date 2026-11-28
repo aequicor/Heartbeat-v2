@@ -88,15 +88,31 @@ internal class ChatHistoryDaoImpl(
     override suspend fun files(sessionId: String): List<ChatEntryRecord.Attachment> = read { readFileCatalog(sessionId) }
 
     @Throwable(DaoException::class, CancellationException::class)
+    override suspend fun catalogAttachment(
+        sessionId: String,
+        snapshotId: String,
+    ): Pair<ChatEntryRecord.Attachment, SentAttachmentRecord>? = read {
+        transactionWithResult {
+            if (!catalogContainsAttachment(sessionId, snapshotId).executeAsOne()) return@transactionWithResult null
+            fileHeader(snapshotId) to selectSentAttachment(snapshotId).executeAsOne().toRecord()
+        }
+    }
+
+    @Throwable(DaoException::class, CancellationException::class)
     override suspend fun file(id: String): ChatEntryRecord.Attachment = read { fullAttachment(id) }
 
     @Throwable(DaoException::class, CancellationException::class)
     override suspend fun removeUnavailableAttachment(sessionId: String, snapshotId: String): Unit = withContext(ioDispatcher) {
         writeLock.withLock {
-            accessStudioDatabase("Remove attachment from session catalog") {
+            accessStudioDatabase("Remove attachment from catalog") {
                 val history = ChatQueries(connection.driver)
                 val chatId = history.chatForSession(sessionId).executeAsOne()
-                history.removeCatalogAttachment(chatId, snapshotId)
+                history.transaction {
+                    val projectId = history.catalogProjectForChat(chatId).executeAsOneOrNull()
+                    if (projectId == null) history.removeCatalogAttachment(chatId, snapshotId)
+                    else history.removeProjectCatalogAttachment(projectId, snapshotId)
+                    history.clearUnreferencedHistory()
+                }
             }
         }
     }

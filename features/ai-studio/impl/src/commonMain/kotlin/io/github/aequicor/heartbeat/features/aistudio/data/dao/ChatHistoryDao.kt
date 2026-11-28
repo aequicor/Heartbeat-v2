@@ -3,6 +3,7 @@ package io.github.aequicor.heartbeat.features.aistudio.data.dao
 import io.github.aequicor.heartbeat.features.aistudio.data.exception.DaoException
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatInterruptionLabels
+import io.github.aequicor.heartbeat.features.aistudio.data.model.SentAttachmentRecord
 import kotlin.Throws as Throwable
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -19,6 +20,9 @@ internal interface ChatHistoryDao {
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun files(sessionId: String): List<ChatEntryRecord.Attachment>
+
+    @Throwable(DaoException::class, CancellationException::class)
+    suspend fun catalogAttachment(sessionId: String, snapshotId: String): Pair<ChatEntryRecord.Attachment, SentAttachmentRecord>?
 
     @Throwable(DaoException::class, CancellationException::class)
     suspend fun file(id: String): ChatEntryRecord.Attachment

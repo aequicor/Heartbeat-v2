@@ -4,6 +4,7 @@ import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatEntryRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.ChatTurnMessageRecord
 import io.github.aequicor.heartbeat.features.aistudio.data.model.SentAttachmentRecord
 import io.github.aequicor.heartbeat.features.aistudio.db.ChatQueries
+import io.github.aequicor.heartbeat.features.aistudio.db.Sent_attachment
 import kotlin.io.encoding.Base64
 import kotlin.uuid.Uuid
 
@@ -11,7 +12,11 @@ internal fun ChatQueries.writeAttachmentSnapshot(
     file: ChatTurnMessageRecord.Attachment,
     prepared: SentAttachmentRecord?,
 ): String {
-    if (prepared == null && file.existingId != null) return file.existingId
+    if (file.existingId != null) {
+        val existing = selectSentAttachment(file.existingId).executeAsOne()
+        if (prepared == null || existing.toRecord().sameContent(prepared)) return file.existingId
+        return addAttachmentSnapshot(existing.attachment_id, prepared)
+    }
     val fileId = Uuid.random().toString()
     val link = file.linkUri
     val snapshot = prepared ?: SentAttachmentRecord(
@@ -56,6 +61,8 @@ internal fun ChatQueries.fullAttachment(snapshotId: String): ChatEntryRecord.Att
 
 internal fun ChatQueries.readFileCatalog(sessionId: String): List<ChatEntryRecord.Attachment> {
     val chatId = chatForSession(sessionId).executeAsOne()
+    val projectId = catalogProjectForChat(chatId).executeAsOneOrNull()
+    if (projectId != null) return readProjectFileCatalog(projectId)
     val editedCopies = editedImageCopyHeaders(chatId) { id, size, header, mime, mode, uri, original, managed ->
         ChatEntryRecord.Attachment(id, size, header, null, mime, mode, uri, originalUri = original, managedPath = managed)
     }.executeAsList()
@@ -67,3 +74,18 @@ internal fun ChatQueries.readFileCatalog(sessionId: String): List<ChatEntryRecor
     }.executeAsList()
     return editedCopies + messageFiles
 }
+
+internal fun ChatQueries.readProjectFileCatalog(projectId: String): List<ChatEntryRecord.Attachment> =
+    projectFileHeaders(projectId) { id, size, header, mime, mode, uri, original, managed, addedAt ->
+        ChatEntryRecord.Attachment(
+            id, size, header, null, mime, mode, uri,
+            originalUri = original, managedPath = managed, addedAt = addedAt.takeIf(String::isNotEmpty),
+        )
+    }.executeAsList()
+
+internal fun Sent_attachment.toRecord() = SentAttachmentRecord(
+    transfer_mode, uri, name, description, mime_type, size_bytes, content_text, content_blob,
+)
+
+private fun SentAttachmentRecord.sameContent(other: SentAttachmentRecord): Boolean =
+    copy(blob = null) == other.copy(blob = null) && blob.contentEquals(other.blob)

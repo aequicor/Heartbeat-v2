@@ -29,4 +29,7 @@ internal interface StudioWorkspaceMetadata {
 
     @Throwable(StudioRepositoryException::class, CancellationException::class)
     suspend fun listFiles(sessionId: String): List<File>
+
+    @Throwable(StudioRepositoryException::class, CancellationException::class)
+    suspend fun listProjectFiles(projectId: String): List<File>
 }

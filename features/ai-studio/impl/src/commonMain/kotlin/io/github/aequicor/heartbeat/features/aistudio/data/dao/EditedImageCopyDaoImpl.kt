@@ -45,7 +45,9 @@ internal class EditedImageCopyDaoImpl(
                     } else {
                         check(existing.uri == "edited-image:$id")
                     }
-                    queries.registerEditedImageCopy(chatId, id)
+                    val projectId = queries.catalogProjectForChat(chatId).executeAsOneOrNull()
+                    if (projectId == null) queries.registerEditedImageCopy(chatId, id)
+                    else queries.registerProjectImageCopy(projectId, id)
                 }
             }
         }

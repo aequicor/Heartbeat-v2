@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Dp
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraLayout as AuroraLayout
@@ -117,7 +118,17 @@ internal fun AuroraComposerField(
         if (caret != null && focused && quoteDisplay != null) onQuoteCaret(caret)
     }
     fun select(reference: PromptReferences.Entry) {
-        query?.let { onEdit(it.replace(field, reference)) }
+        val selected = query ?: return
+        val snapshotId = reference.snapshotId
+        if (snapshotId == null) {
+            onEdit(selected.replace(field, reference))
+        } else {
+            onAction(AiStudioAction.AttachCatalogFile(referenceDraftId, snapshotId))
+            onEdit(field.copy(
+                text = field.text.removeRange(selected.start, selected.end),
+                selection = TextRange(selected.start),
+            ))
+        }
     }
     val textPress = if (onQuoteTextPress != null) {
         Modifier.pointerInput(Unit) {

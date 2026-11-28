@@ -201,9 +201,10 @@ public data class AiStudioScreenState(
             val uri: String,
             val detail: String?,
             val image: ImageAttachment? = null,
+            val snapshotId: String? = null,
         )
 
-        public enum class Category { SessionFile, ProjectFile, Skill }
+        public enum class Category { CatalogAttachment, SessionFile, ProjectFile, Skill }
     }
 
     public data class LiveText(
@@ -611,8 +612,11 @@ public data class AiStudioScreenState(
         val description: String? = null,
         val deferredReading: Boolean = false,
         @Transient internal val catalogUri: String? = null,
+        @Transient internal val catalogSnapshotId: String? = null,
     ) {
         public val openId: String get() = storedAttachmentId ?: id
+
+        public val isCatalogSelection: Boolean get() = catalogSnapshotId != null
 
         public val sizeLabel: String get() = formatAttachmentSize(
             sourceSizeBytes ?: storedSizeBytes ?: if (base64Encoded) {
@@ -727,6 +731,7 @@ public data class AiStudioScreenState(
         val originalUri: String? = null,
         val managedCopyPath: String? = null,
         val canRemove: Boolean = false,
+        val usesSavedContent: Boolean = false,
     ) {
         val accessibilityLabel: String = listOfNotNull(name, size, date).joinToString(", ")
     }

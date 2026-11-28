@@ -22,6 +22,7 @@ import kotlin.coroutines.cancellation.CancellationException
 internal class PromptReferenceSearch(
     private val find: FindPromptReferencesUseCase,
     private val attachmentReferences: AttachmentReferenceResolver?,
+    private val storage: StudioWorkspaceStorage?,
     private val screen: MutableStateFlow<AiStudioScreenState>,
     scope: CoroutineScope,
     private val defaultDispatcher: CoroutineDispatcher,
@@ -37,9 +38,11 @@ internal class PromptReferenceSearch(
                 withContext(defaultDispatcher) {
                     val drafts = draftEntries(lookup.files, lookup.query)
                     if (drafts.isNotEmpty()) publish(lookup, drafts)
-                    val stored = find(lookup.sessionId, lookup.request.projectId, lookup.query)
+                    val sessionId = lookup.sessionId.takeIf { storage == null }
+                    val references = find(sessionId, lookup.request.projectId, lookup.query)
                         .getOrNull()?.map(PromptReference::display).orEmpty()
-                    publish(lookup, (drafts + stored).distinctBy { it.category to it.uri })
+                    val catalog = catalogEntries(lookup)
+                    publish(lookup, (catalog + drafts + references).distinctBy { it.category to (it.snapshotId ?: it.uri) })
                 }
             }
         }
@@ -55,6 +58,33 @@ internal class PromptReferenceSearch(
                 val uri = resolver.resolve(location) ?: return@mapNotNull null
                 PromptReferences.Entry(PromptReferences.Category.SessionFile, file.name, uri, file.sizeLabel, file.image)
             }.distinctBy(PromptReferences.Entry::uri)
+    }
+
+    @Throwable(CancellationException::class)
+    private suspend fun catalogEntries(lookup: Lookup): List<PromptReferences.Entry> {
+        val files = screen.readStored {
+            val sessionId = lookup.sessionId
+            val projectId = lookup.request.projectId
+            when {
+                sessionId != null -> storage?.listFiles(sessionId).orEmpty()
+                projectId != null -> storage?.listProjectFiles(projectId).orEmpty()
+                else -> emptyList()
+            }
+        }.orEmpty()
+        return files.asSequence()
+            .filter { it.name.contains(lookup.query, ignoreCase = true) }
+            .sortedByDescending { it.name.startsWith(lookup.query, ignoreCase = true) }
+            .mapNotNull { file ->
+                file.storedAttachmentId?.let { id ->
+                    PromptReferences.Entry(
+                        PromptReferences.Category.CatalogAttachment, file.name, "",
+                        file.sizeLabel, file.image, snapshotId = id,
+                    )
+                }
+            }
+            .distinctBy { it.snapshotId }
+            .take(16)
+            .toList()
     }
 
     private fun publish(lookup: Lookup, entries: List<PromptReferences.Entry>) {

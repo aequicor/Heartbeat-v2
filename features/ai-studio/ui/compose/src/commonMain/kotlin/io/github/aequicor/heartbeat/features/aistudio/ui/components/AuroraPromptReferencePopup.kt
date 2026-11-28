@@ -109,7 +109,7 @@ internal fun AuroraPromptReferencePopup(
                         HbTypography.WorkspaceLabel.copy(color = Colors.Muted, fontWeight = FontWeight.Medium),
                     )
                 }
-                items(entries, key = { "${it.category}:${it.uri}" }) { entry ->
+                items(entries, key = { "${it.category}:${it.snapshotId ?: it.uri}" }) { entry ->
                     PromptReferenceRow(entry, entry == current, { onHighlight(entry) }, { onSelect(entry) })
                 }
             }
@@ -166,6 +166,7 @@ private fun PromptReferenceRow(entry: Entry, active: Boolean, onHover: () -> Uni
 }
 
 private fun Category.title(): String = when (this) {
+    Category.CatalogAttachment -> "СОХРАНЁННЫЕ ВЛОЖЕНИЯ"
     Category.SessionFile -> "ФАЙЛЫ СЕССИИ"
     Category.ProjectFile -> "ФАЙЛЫ ПРОЕКТА"
     Category.Skill -> "СКИЛЫ"
