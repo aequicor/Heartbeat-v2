@@ -123,7 +123,7 @@ internal fun AuroraReferenceEditor(
         fun edit(edited: TextFieldValue) {
             val next = when {
                 field.text.length > edited.text.length -> buffer.removeEmptyQuoteRow(edited)
-                else -> preferredQuoteOffset?.let { buffer.insertAtQuoteEdge(field, edited, it) } ?: edited
+                else -> buffer.insertAtQuoteEdge(field, edited, preferredQuoteOffset)
             }
             verticalColumn = null
             if (field.text != next.text) {
@@ -202,7 +202,7 @@ internal fun AuroraReferenceEditor(
                     referenceProjectId = projectId,
                     references = promptReferences,
                     onAction = onAction,
-                    onNavigateReferences = {},
+                    onLineBreak = { edit(field.withLineBreak()) },
                     showPlaceholder = false,
                     modifier = fieldModifier.fillMaxWidth().focusRequester(requester)
                         .onFocusChanged {

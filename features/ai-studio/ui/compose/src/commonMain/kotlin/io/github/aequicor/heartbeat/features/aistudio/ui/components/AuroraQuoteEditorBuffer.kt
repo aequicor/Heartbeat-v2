@@ -1,5 +1,6 @@
 package io.github.aequicor.heartbeat.features.aistudio.ui.components
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
@@ -54,30 +55,41 @@ internal class AuroraQuoteEditorBuffer(val parts: List<Part>) {
         return AuroraReferenceInteraction.Cursor(last, (parts.getOrNull(last) as? Part.Text)?.length ?: 0)
     }
 
-    fun insertAtQuoteEdge(previous: TextFieldValue, next: TextFieldValue, quoteOffset: Int): TextFieldValue {
+    fun insertAtQuoteEdge(previous: TextFieldValue, next: TextFieldValue, quoteOffset: Int?): TextFieldValue {
         val offset = previous.selection.end
         val insertedLength = next.text.length - previous.text.length
         if (!previous.selection.collapsed || insertedLength <= 0) return next
-        val before = offset == quoteOffset
         val insertedEnd = offset + insertedLength
-        val neighbor = if (before) offset - 1 else offset
-        val adjacent = previous.text.getOrNull(neighbor) ?: return next
-        if (adjacent.isLineBreak() || quotes.any { it.offset == neighbor }) return next
-        val separator = if (before) offset else insertedEnd
-        val insertedBreakOnly = !before && insertedLength == next.text.lineBreakLengthAt(offset)
-        if (!insertedBreakOnly && next.text[if (before) offset else insertedEnd - 1].isLineBreak()) return next
+        val lineBreak = insertedLength == next.text.lineBreakLengthAt(offset)
+        val beforeFirstQuote = lineBreak && offset == quotes.firstOrNull()?.offset &&
+            next.selection == TextRange(insertedEnd) && next.composition == null
+        if (quoteOffset == null && !beforeFirstQuote) return next
         if (!previous.text.regionMatches(0, next.text, 0, offset) ||
             !previous.text.regionMatches(offset, next.text, insertedEnd, previous.text.length - offset)
         ) return next
 
+        // The final break in the leading text closes its paragraph against the first card.
+        // Leave the caret on the editable row just before that boundary.
+        if (beforeFirstQuote) {
+            if (offset == 0 || previous.text.lineBreakLengthBefore(offset) > 0) {
+                return next.copy(selection = TextRange(offset))
+            }
+            return next.copy(
+                annotatedString = next.annotatedString.withLineBreak(TextRange(offset)),
+                selection = TextRange(offset + 1),
+            )
+        }
+        val before = offset == quoteOffset
+        val neighbor = if (before) offset - 1 else offset
+        val adjacent = previous.text.getOrNull(neighbor) ?: return next
+        if (adjacent.isLineBreak() || quotes.any { it.offset == neighbor }) return next
+        val separator = if (before) offset else insertedEnd
+        if ((before || !lineBreak) && next.text[if (before) offset else insertedEnd - 1].isLineBreak()) return next
+
         // Keep both the insertion caret and an active IME range on the typed side of the separator.
         val shiftFrom = if (before) separator else separator + 1
         return next.copy(
-            annotatedString = buildAnnotatedString {
-                append(next.annotatedString, 0, separator)
-                append('\n')
-                append(next.annotatedString, separator, next.text.length)
-            },
+            annotatedString = next.annotatedString.withLineBreak(TextRange(separator)),
             selection = next.selection.shiftAfter(shiftFrom),
             composition = next.composition?.shiftAfter(shiftFrom),
         )
@@ -121,11 +133,7 @@ internal class AuroraQuoteEditorBuffer(val parts: List<Part>) {
         ) return next
 
         val after = next.text.lineBreakLengthAt(offset)
-        val before = when (next.text.getOrNull(offset - 1)) {
-            '\n' -> if (next.text.getOrNull(offset - 2) == '\r') 2 else 1
-            '\r' -> 1
-            else -> 0
-        }
+        val before = next.text.lineBreakLengthBefore(offset)
         val range = when {
             after > 0 && (before > 0 || offset == 0) -> TextRange(offset, offset + after)
             before > 0 && offset == next.text.length -> TextRange(offset - before, offset)
@@ -150,9 +158,27 @@ internal class AuroraQuoteEditorBuffer(val parts: List<Part>) {
 
 private fun Char.isLineBreak() = this == '\n' || this == '\r'
 
+internal fun TextFieldValue.withLineBreak(): TextFieldValue = copy(
+    annotatedString = annotatedString.withLineBreak(selection),
+    selection = TextRange(selection.min + 1),
+    composition = null,
+)
+
+private fun AnnotatedString.withLineBreak(range: TextRange): AnnotatedString = buildAnnotatedString {
+    append(this@withLineBreak, 0, range.min)
+    append('\n')
+    append(this@withLineBreak, range.max, this@withLineBreak.length)
+}
+
 internal fun String.lineBreakLengthAt(offset: Int): Int = when (getOrNull(offset)) {
     '\r' -> if (getOrNull(offset + 1) == '\n') 2 else 1
     '\n' -> 1
+    else -> 0
+}
+
+internal fun String.lineBreakLengthBefore(offset: Int): Int = when (getOrNull(offset - 1)) {
+    '\n' -> if (getOrNull(offset - 2) == '\r') 2 else 1
+    '\r' -> 1
     else -> 0
 }
 

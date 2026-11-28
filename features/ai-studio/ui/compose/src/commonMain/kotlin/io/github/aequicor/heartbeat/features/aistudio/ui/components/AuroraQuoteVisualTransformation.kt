@@ -28,12 +28,14 @@ internal class AuroraQuoteVisualTransformation(
         val positions = mutableListOf<Band>()
         rendered = buildAnnotatedString {
             fun appendSource(start: Int, end: Int) {
-                // The quote paragraph already ends the line. Its first explicit break places the
-                // caret on the following row, including when that row has no other content yet.
-                val breakLength = if (positions.isEmpty()) 0 else source.text.lineBreakLengthAt(start)
-                if (breakLength == 0) sourceToDisplay[start] = length
-                repeat(breakLength) { append(CaretAnchor) }
-                append(source, start + breakLength, end)
+                // Each text run already has a paragraph boundary against a quote. Reuse the
+                // preceding quote's boundary, or the following one for the leading text run.
+                val leadingBreak = if (positions.isEmpty()) 0 else source.text.lineBreakLengthAt(start)
+                val trailingBreak = if (positions.isEmpty() && end < source.length) source.text.lineBreakLengthBefore(end) else 0
+                if (leadingBreak == 0) sourceToDisplay[start] = length
+                repeat(leadingBreak) { append(CaretAnchor) }
+                append(source, start + leadingBreak, end - trailingBreak)
+                repeat(trailingBreak) { append(CaretAnchor) }
                 for (i in start + 1..end) {
                     sourceToDisplay[i] = displayToSource.size
                     displayToSource.add(i)

@@ -39,7 +39,7 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
+internal fun Modifier.auroraComposerSurface(): Modifier {
     val shape = RoundedCornerShape(AuroraLayout.DesktopComposerRadius)
     val shell = dropShadow(
         shape,
@@ -53,12 +53,7 @@ internal fun Modifier.auroraComposerSurface(keyboardFocus: Boolean): Modifier {
     val background = Modifier.auroraFloatingBlur(shape).background(AuroraColors.ComposerSurface, shape)
         .background(AuroraColors.ComposerSheen, shape)
         .border(AuroraLayout.Stroke, AuroraColors.ComposerRim, shape)
-    val surface = shell.then(background).padding(AuroraLayout.FrameStroke + AuroraLayout.Stroke)
-    return if (keyboardFocus) {
-        surface.border(
-            AuroraLayout.FrameStroke, AuroraColors.Primary, RoundedCornerShape(AuroraLayout.DesktopComposerInnerRadius),
-        )
-    } else surface
+    return shell.then(background).padding(AuroraLayout.FrameStroke + AuroraLayout.Stroke)
 }
 
 @Composable

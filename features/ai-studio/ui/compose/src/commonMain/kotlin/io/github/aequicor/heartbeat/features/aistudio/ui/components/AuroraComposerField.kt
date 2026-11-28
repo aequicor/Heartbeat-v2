@@ -62,7 +62,7 @@ internal fun AuroraComposerField(
     referenceProjectId: String?,
     references: PromptReferences?,
     onAction: (AiStudioAction) -> Unit,
-    onNavigateReferences: () -> Unit,
+    onLineBreak: () -> Unit,
     showPlaceholder: Boolean = true,
     modifier: Modifier = Modifier,
     readOnly: Boolean = false,
@@ -153,6 +153,12 @@ internal fun AuroraComposerField(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val plain = !event.isShiftPressed && !event.isAltPressed && !event.isCtrlPressed && !event.isMetaPressed
                 val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
+                if (enter && !event.isAltPressed && !event.isMetaPressed &&
+                    (event.isCtrlPressed || event.isShiftPressed) && field.composition == null
+                ) {
+                    if (!readOnly) onLineBreak()
+                    return@onPreviewKeyEvent true
+                }
                 if (query != null && plain) {
                     if (event.key == Key.Escape) {
                         dismissed = query
@@ -167,7 +173,6 @@ internal fun AuroraComposerField(
                         if (step != 0) {
                             val index = choices.indexOfFirst { it == highlighted }
                             highlightedEntry = choices[(index + step).mod(choices.size)]
-                            onNavigateReferences()
                             return@onPreviewKeyEvent true
                         }
                         if (enter) {
@@ -180,7 +185,6 @@ internal fun AuroraComposerField(
                     ((event.key == Key.DirectionDown && field.selection.end == field.text.length) ||
                         (event.key == Key.DirectionUp && field.selection.end == 0))
                 ) {
-                    onNavigateReferences()
                     return@onPreviewKeyEvent true
                 }
                 if (quoteDisplay != null && layout != null && field.composition == null &&
@@ -202,15 +206,16 @@ internal fun AuroraComposerField(
                         return@onPreviewKeyEvent true
                     }
                 }
-                if (touch) return@onPreviewKeyEvent false
-                if (event.key == Key.Tab) {
+                if (enter && plain && field.composition == null) {
+                    if (canSend && !readOnly) onSend()
+                    return@onPreviewKeyEvent true
+                }
+                if (!touch && event.key == Key.Tab) {
                     // The multiline editor otherwise treats Tab as text input.
                     focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)
                     return@onPreviewKeyEvent true
                 }
-                val handled = enter && !event.isShiftPressed && field.composition == null
-                if (handled && canSend) onSend()
-                handled
+                false
             },
         textStyle = style,
         cursorBrush = SolidColor(if (quoteCaretPosition != null) Color.Transparent else AuroraColors.Primary),

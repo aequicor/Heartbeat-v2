@@ -36,7 +36,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Dp
-import io.github.aequicor.heartbeat.designsystem.components.HbFocusIndication
 import io.github.aequicor.heartbeat.designsystem.components.HbIcon
 import io.github.aequicor.heartbeat.designsystem.foundation.HbIconGlyph
 import io.github.aequicor.heartbeat.designsystem.theme.HbAuroraColors as AuroraColors
@@ -111,7 +110,7 @@ internal fun AuroraLowerControls(
             )
         } else {
             AuroraComposer(
-                field = field,
+                currentField = { field },
                 messageReferences = references,
                 maxReferenceHeight = maxReferenceHeight,
                 submitting = submitting,
@@ -162,7 +161,7 @@ internal fun AuroraLowerControls(
 internal fun AuroraReadOnlyComposer(touch: Boolean, modifier: Modifier = Modifier) {
     val surface = if (touch) {
         Modifier.background(AuroraColors.Pearl, RoundedCornerShape(AuroraLayout.ComposerRadius))
-    } else Modifier.auroraComposerSurface(keyboardFocus = false)
+    } else Modifier.auroraComposerSurface()
     BasicTextField(
         value = "",
         onValueChange = {},
@@ -214,7 +213,7 @@ internal fun AuroraBootstrapComposer(
     ) {
         error?.let { AuroraHeaderStorageError(stringResource(it)) }
         AuroraComposer(
-            field, { field = it }, Activity.Idle, bootstrap.attachments, touch, maxTextHeight,
+            { field }, { field = it }, Activity.Idle, bootstrap.attachments, touch, maxTextHeight,
             submitting = submitting,
             onAction = { action ->
                 if (action == AiStudioAction.Send) {
@@ -249,7 +248,7 @@ internal fun AuroraBootstrapComposer(
 
 @Composable
 private fun AuroraComposer(
-    field: TextFieldValue,
+    currentField: () -> TextFieldValue,
     onEdit: (TextFieldValue) -> Unit,
     activity: Activity,
     files: List<File>,
@@ -271,6 +270,7 @@ private fun AuroraComposer(
     onRestoreCaret: (Int) -> Unit = {},
     attach: @Composable () -> Unit,
 ) {
+    val field = currentField()
     val working = activity != Activity.Idle
     val stopping = activity == Activity.Stopping
     val invalidImageName = files.any { it.hasInvalidImageExtension() }
@@ -298,14 +298,15 @@ private fun AuroraComposer(
     val attachmentInput = rememberAttachmentInput(attachmentDraftId, importingAttachment, onAction)
     var editedAttachmentId by remember(referenceDraftId) { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
-    var keepOutlineHidden by remember { mutableStateOf(false) }
-    val keyboardNavigation = HbFocusIndication.keyboardNavigation
-    val showFocusOutline = !touch && focused && !keepOutlineHidden && keyboardNavigation
+    fun editText(value: TextFieldValue) {
+        interaction?.position = AuroraReferenceInteraction.Cursor(0, value.selection.end)
+        onEdit(value)
+    }
     val surface = if (touch) {
         Modifier.background(AuroraColors.Pearl, RoundedCornerShape(AuroraLayout.ComposerRadius))
             .padding(horizontal = AuroraLayout.ControlGap, vertical = AuroraLayout.SmallGap)
     } else {
-        Modifier.auroraComposerSurface(showFocusOutline)
+        Modifier.auroraComposerSurface()
             .padding(AuroraLayout.ControlGap)
     }
 
@@ -342,17 +343,12 @@ private fun AuroraComposer(
                 )
             } else AuroraComposerField(
                 visibleField,
-                {
-                    interaction?.position = AuroraReferenceInteraction.Cursor(0, it.selection.end)
-                    onEdit(it)
-                },
+                ::editText,
                 onSend, touch, sendEnabled && !working, maxTextHeight,
                 modifier = Modifier.weight(1f).focusRequester(requester)
                     .onFocusChanged {
-                        if (it.isFocused && !focused) keepOutlineHidden = !keyboardNavigation
                         focused = it.isFocused
                         if (focused) interaction?.position = AuroraReferenceInteraction.Cursor(0, field.selection.end)
-                        else keepOutlineHidden = false
                     }
                     .then(attachmentInput.pasteModifier),
                 readOnly = submitting,
@@ -361,10 +357,7 @@ private fun AuroraComposer(
                 referenceProjectId = referenceProjectId,
                 references = references,
                 onAction = onAction,
-                onNavigateReferences = {
-                    // An arrow handled by the popup keeps the editor's current focus appearance.
-                    if (!touch && !showFocusOutline) keepOutlineHidden = true
-                },
+                onLineBreak = { editText(currentField().withLineBreak()) },
             )
             AuroraSendControl(working, if (working) !stopping else sendEnabled, touch) {
                 if (working) onAction(AiStudioAction.CancelTurn) else onSend()
